@@ -7,7 +7,7 @@ import { supabaseService } from '../supabase/supabase.service';
 export class FacebookService {
     private readonly defaultPageAccessToken: string;
     private readonly defaultPageId: string;
-    private readonly apiVersion = 'v18.0';
+    private readonly apiVersion = 'v21.0';
 
     constructor(private configService: ConfigService) {
         this.defaultPageAccessToken = this.configService.get<string>('META_PAGE_ACCESS_TOKEN') || '';
@@ -155,13 +155,16 @@ export class FacebookService {
     }
 
     async getUserProfile(userId: string, pageId?: string): Promise<any> {
-        const url = `https://graph.facebook.com/${this.apiVersion}/${userId}`;
-
         try {
-            console.log(`📥 Fetching profile for Facebook user ${userId} (Page: ${pageId || 'Default'})`);
-
             const accessToken = await this.getPageAccessToken(pageId);
+            if (!accessToken) {
+                console.warn('No Page Access Token available for fetching profile');
+                return null;
+            }
 
+            console.log(`📥 Fetching profile for Facebook user ${userId} using ${this.apiVersion} (Page: ${pageId || 'Default'})`);
+
+            const url = `https://graph.facebook.com/${this.apiVersion}/${userId}`;
             const response = await axios.get(url, {
                 params: {
                     fields: 'name,first_name,last_name,profile_pic',
@@ -169,8 +172,11 @@ export class FacebookService {
                 },
             });
 
-            console.log('✅ User profile fetched successfully');
-            return response.data;
+            if (response.data) {
+                console.log('✅ User profile fetched successfully');
+                return response.data;
+            }
+            return null;
         } catch (error) {
             console.error('❌ Error fetching user profile:', error.response?.data || error.message);
             // Don't throw, return null so we can proceed with just ID

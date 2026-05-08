@@ -54,9 +54,16 @@ export class WebhooksController {
                     console.log(`   ✉️ Found ${entry.messaging.length} messaging event(s)`);
                     entry.messaging.forEach((messagingEvent: any) => {
                         console.log('Processing messaging event:', JSON.stringify(messagingEvent, null, 2));
-                        if (messagingEvent.message && !messagingEvent.message.is_echo) {
-                            const senderId = messagingEvent.sender.id;
-                            const pageId = messagingEvent.recipient.id;
+                        // Process both regular messages and echoes (messages sent from other devices)
+                        if (messagingEvent.message) {
+                            const isEcho = messagingEvent.message.is_echo;
+                            const messageId = messagingEvent.message.mid;
+                            
+                            // For echoes, sender is the Page and recipient is the Customer
+                            // For normal messages, sender is the Customer and recipient is the Page
+                            const senderId = isEcho ? messagingEvent.recipient.id : messagingEvent.sender.id;
+                            const pageId = isEcho ? messagingEvent.sender.id : messagingEvent.recipient.id;
+                            const senderRole = isEcho ? 'agent' : 'customer';
 
                             // Handling for messages with attachments (e.g. images, stickers)
                             let text = messagingEvent.message.text;
@@ -81,7 +88,7 @@ export class WebhooksController {
                             // Fallback if still empty
                             if (!text) text = '[Content not supported]';
 
-                            console.log(`[FACEBOOK] Message from ${senderId} to Page ${pageId}: ${text}`);
+                            console.log(`[FACEBOOK] ${isEcho ? 'Echo (Agent Reply)' : 'Message'} from ${senderId} to Page ${pageId}: ${text}`);
 
                             // Save to Supabase (async, don't block)
                             (async () => {
@@ -98,213 +105,129 @@ export class WebhooksController {
                                         customerName: customerName,
                                         platform: 'facebook',
                                         pageId: pageId,
+                                        lastMessage: text,
                                         customerProfilePic: userProfile?.profile_pic
                                     });
 
-                                    // Extract reply context if available
-                                    let replyToMid = messagingEvent.message.reply_to?.mid;
-                                    let replyToText: string | undefined = undefined;
-                                    let replyToSender: string | undefined = undefined;
-
-                                    if (replyToMid) {
-                                        console.log(`🔗 Message is a reply to ${replyToMid}. Attempting to resolve context...`);
-                                        const { data: originalMsg } = await supabaseService.getClient()
-                                            .from('messages')
-                                            .select('text, sender')
-                                            .eq('message_id', replyToMid)
-                                            .single();
-
-                                        if (originalMsg) {
-                                            replyToText = (originalMsg as any).text;
-                                            replyToSender = (originalMsg as any).sender;
-                                            console.log(`✅ Resolved reply context: "${replyToText?.substring(0, 20)}..." by ${replyToSender}`);
-                                        }
-                                    }
-
-                                    // Save message
+                                    // Save message to database
                                     const savedMessage = await supabaseService.saveMessage({
                                         conversationId: conversation.id,
                                         text: text,
-                                        sender: 'customer',
+                                        sender: senderRole,
                                         platform: 'facebook',
-                                        messageId: messagingEvent.message.mid,
+                                        messageId: messageId,
                                         pageId: pageId,
                                         imageUrl: imageUrl,
-                                        fileType: fileType,
-                                        replyToMid,
-                                        replyToText,
-                                        replyToSender
+                                        fileType: fileType
                                     });
 
-                                    console.log('✅ Message saved to Supabase');
+                                    // If this is a regular message (not an echo), handle AutoReply and AI
+                                    if (!isEcho) {
+                                        // --- AUTO-REPLY LOGIC ---
+                                        try {
+                                            const matchingRule = await this.settingsService.findMatchingAutoReply(text);
+                                            if (matchingRule) {
+                                                console.log(`[AutoReply] Match found for "${text}": "${matchingRule.reply_text}"`);
+                                                
+                                                // 1. Send to Facebook
+                                                await this.facebookService.sendMessage(senderId, matchingRule.reply_text, pageId);
 
-                                    // --- AUTO REPLY LOGIC ---
-                                    try {
-                                        const matchingRule = await this.autoReplyService.findMatchingRule(pageId, text);
-                                        if (matchingRule) {
-                                            console.log(`[AutoReply] Match found for "${text}": "${matchingRule.reply_text}"`);
+                                                // 2. Save Agent Reply to DB
+                                                await supabaseService.saveMessage({
+                                                    conversationId: conversation.id,
+                                                    text: matchingRule.reply_text,
+                                                    sender: 'agent',
+                                                    platform: 'facebook',
+                                                    pageId: pageId,
+                                                });
 
-                                            // 1. Send to Facebook
-                                            await this.facebookService.sendMessage(senderId, matchingRule.reply_text, pageId);
+                                                // 3. Broadcast to frontend
+                                                this.messagingGateway.broadcastIncomingMessage('facebook', {
+                                                    text: matchingRule.reply_text,
+                                                    senderId: pageId,
+                                                    recipientId: senderId,
+                                                    pageId: pageId,
+                                                    conversationId: conversation.id,
+                                                    timestamp: Date.now(),
+                                                    isOwnMessage: true,
+                                                    customerName: customerName,
+                                                    customerProfilePic: userProfile?.profile_pic
+                                                });
 
-                                            // 2. Save Agent Reply to DB
-                                            await supabaseService.saveMessage({
-                                                conversationId: conversation.id,
-                                                text: matchingRule.reply_text,
-                                                sender: 'agent',
-                                                platform: 'facebook',
-                                                pageId: pageId,
-                                            });
+                                                console.log('[AutoReply] Reply sent and broadcasted. Skipping AI agent.');
 
-                                            // 3. Broadcast to frontend
-                                            this.messagingGateway.broadcastIncomingMessage('facebook', {
-                                                text: matchingRule.reply_text,
-                                                senderId: pageId,
-                                                recipientId: senderId,
-                                                pageId: pageId,
-                                                conversationId: conversation.id,
-                                                timestamp: Date.now(),
-                                                isOwnMessage: true
-                                            });
-
-                                            console.log('[AutoReply] Reply sent and broadcasted. Skipping AI agent.');
-
-                                            // Broadcast original message to frontend before returning
-                                            this.messagingGateway.broadcastIncomingMessage('facebook', {
-                                                ...savedMessage,
-                                                isOwnMessage: false,
-                                                conversationId: conversation.id,
-                                                customerName: customerName,
-                                                customerProfilePic: userProfile?.profile_pic
-                                            });
-                                            return;
-                                        }
-                                    } catch (arError) {
-                                        console.error('[AutoReply] Error finding/sending reply:', arError);
-                                    }
-
-                                    // --- AI AGENT LOGIC ---
-                                    try {
-                                        // 1. Check Global AI Setting
-                                        const isGlobalEnabled = await this.settingsService.getSetting('is_ai_global_enabled');
-                                        if (isGlobalEnabled !== 'true') {
-                                            console.log('[AI] Global AI is disabled. Skipping.');
-                                            return;
-                                        }
-
-                                        // 2. Check Page Setting
-                                        const page = await supabaseService.getPageByFacebookId(pageId);
-                                        if (!page || !page.is_ai_enabled) {
-                                            console.log(`[AI] AI disabled for Page ${pageId}. Skipping.`);
-                                            return;
-                                        }
-
-                                        // 3. Prepare Context
-                                        console.log('[AI] preparing response...');
-                                        const systemPrompt = page.custom_prompt || "You are a helpful assistant for this business. Reply strictly to the user's question. Be concise and professional.";
-
-                                        // Fetch last few messages for context
-                                        const history = await supabaseService.getMessages(conversation.id, 5);
-                                        const messages = [
-                                            { role: 'system', content: systemPrompt },
-                                            ...history.map(msg => ({
-                                                role: msg.sender === 'customer' ? 'user' : 'assistant',
-                                                content: msg.text
-                                            })),
-                                            { role: 'user', content: text } // Ensure latest is included if not yet in fetch
-                                        ];
-
-                                        // 4. Call AI Provider
-                                        const aiProvider = await this.settingsService.getSetting('ai_provider') || 'openai';
-                                        console.log(`[AI] Provider: ${aiProvider}`);
-                                        let replyText = '';
-
-                                        if (aiProvider === 'openai') {
-                                            const apiKey = await this.settingsService.getSetting('openai_api_key');
-                                            if (!apiKey) {
-                                                console.warn('[AI] No OpenAI API Key found. Skipping.');
+                                                // Broadcast original message to frontend before returning
+                                                this.messagingGateway.broadcastIncomingMessage('facebook', {
+                                                    ...savedMessage,
+                                                    isOwnMessage: false,
+                                                    conversationId: conversation.id,
+                                                    customerName: customerName,
+                                                    customerProfilePic: userProfile?.profile_pic
+                                                });
                                                 return;
                                             }
+                                        } catch (arError) {
+                                            console.error('[AutoReply] Error finding/sending reply:', arError);
+                                        }
 
-                                            const aiResponse = await axios.post(
-                                                'https://api.openai.com/v1/chat/completions',
-                                                {
-                                                    model: 'gpt-4o',
-                                                    messages: messages,
-                                                    max_tokens: 300
-                                                },
-                                                {
-                                                    headers: {
-                                                        'Authorization': `Bearer ${apiKey}`,
-                                                        'Content-Type': 'application/json'
+                                        // --- AI AGENT LOGIC ---
+                                        try {
+                                            const isGlobalEnabled = await this.settingsService.getSetting('is_ai_global_enabled');
+                                            if (isGlobalEnabled === 'true') {
+                                                const page = await supabaseService.getPageByFacebookId(pageId);
+                                                if (page && page.is_ai_enabled) {
+                                                    console.log('[AI] processing...');
+                                                    const history = await supabaseService.getMessages(conversation.id, 5);
+                                                    const systemPrompt = page.custom_prompt || "You are a helpful assistant.";
+                                                    const messages = [
+                                                        { role: 'system', content: systemPrompt },
+                                                        ...history.map(msg => ({ role: msg.sender === 'customer' ? 'user' : 'assistant', content: msg.text })),
+                                                        { role: 'user', content: text }
+                                                    ];
+
+                                                    const aiProvider = await this.settingsService.getSetting('ai_provider') || 'openai';
+                                                    let replyText = '';
+
+                                                    if (aiProvider === 'openai') {
+                                                        const apiKey = await this.settingsService.getSetting('openai_api_key');
+                                                        if (apiKey) {
+                                                            const aiResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
+                                                                model: 'gpt-4o',
+                                                                messages: messages,
+                                                                max_tokens: 300
+                                                            }, { headers: { 'Authorization': `Bearer ${apiKey}` } });
+                                                            replyText = aiResponse.data.choices[0]?.message?.content;
+                                                        }
+                                                    } else if (aiProvider === 'gemini') {
+                                                        const geminiKey = await this.settingsService.getSetting('gemini_api_key');
+                                                        if (geminiKey) {
+                                                            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiKey}`;
+                                                            const aiResponse = await axios.post(url, {
+                                                                contents: messages.map(msg => ({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] })).filter(msg => msg.role !== 'system'),
+                                                                systemInstruction: { parts: [{ text: systemPrompt }] }
+                                                            });
+                                                            replyText = aiResponse.data.candidates?.[0]?.content?.parts?.[0]?.text;
+                                                        }
+                                                    }
+
+                                                    if (replyText) {
+                                                        await this.facebookService.sendMessage(senderId, replyText, pageId);
+                                                        await supabaseService.saveMessage({ conversationId: conversation.id, text: replyText, sender: 'agent', platform: 'facebook', pageId: pageId });
+                                                        this.messagingGateway.broadcastIncomingMessage('facebook', {
+                                                            text: replyText, senderId: pageId, recipientId: senderId, pageId: pageId, conversationId: conversation.id, timestamp: Date.now(), isOwnMessage: true, customerName: customerName, customerProfilePic: userProfile?.profile_pic
+                                                        });
                                                     }
                                                 }
-                                            );
-                                            replyText = aiResponse.data.choices[0]?.message?.content;
-                                        } else if (aiProvider === 'gemini') {
-                                            const geminiKey = await this.settingsService.getSetting('gemini_api_key');
-                                            if (!geminiKey) {
-                                                console.warn('[AI] No Gemini API Key found. Skipping.');
-                                                return;
                                             }
-
-                                            // Convert messages to Gemini format
-                                            const geminiContent = {
-                                                contents: messages.map(msg => ({
-                                                    role: msg.role === 'user' ? 'user' : 'model',
-                                                    parts: [{ text: msg.content }]
-                                                })).filter(msg => msg.role !== 'system'), // Gemini checks system instructions differently or inline
-                                                systemInstruction: {
-                                                    parts: [{ text: systemPrompt }]
-                                                }
-                                            };
-
-                                            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiKey}`;
-                                            const aiResponse = await axios.post(url, geminiContent);
-
-                                            replyText = aiResponse.data.candidates?.[0]?.content?.parts?.[0]?.text;
+                                        } catch (aiError) {
+                                            console.error('[AI] Error:', aiError.message);
                                         }
-
-
-
-                                        if (replyText) {
-                                            console.log(`[AI] Replying: "${replyText}"`);
-
-                                            // 5. Send to Facebook
-                                            await this.facebookService.sendMessage(senderId, replyText, pageId);
-
-                                            // 6. Save Agent Reply to DB
-                                            await supabaseService.saveMessage({
-                                                conversationId: conversation.id,
-                                                text: replyText,
-                                                sender: 'agent', // OR 'ai'? keeping 'agent' for consistency or 'ai' if distinction needed. 'agent' usually implies human or generic system. Let's use 'agent' as per schema enum if strict. existing code has 'customer' | 'agent'.
-                                                platform: 'facebook',
-                                                pageId: pageId,
-                                            });
-
-                                            // Broadcast AI reply to frontend
-                                            console.log('[AI] Broadcasting reply with recipientId:', senderId);
-                                            this.messagingGateway.broadcastIncomingMessage('facebook', {
-                                                text: replyText,
-                                                senderId: pageId, // From ID is the Page
-                                                recipientId: senderId, // To ID is the Customer
-                                                pageId: pageId,
-                                                conversationId: conversation.id,
-                                                timestamp: Date.now(),
-                                                isOwnMessage: true,
-                                                customerName: customerName,
-                                                customerProfilePic: userProfile?.profile_pic
-                                            });
-                                        }
-
-                                    } catch (aiError) {
-                                        console.error('[AI] Error generating/sending reply:', aiError.response?.data || aiError.message);
                                     }
 
-                                    // Broadcast to frontend
+                                    // Broadcast the original message (or echo) to frontend
                                     this.messagingGateway.broadcastIncomingMessage('facebook', {
                                         ...savedMessage,
-                                        isOwnMessage: false,
+                                        isOwnMessage: isEcho, // If it's an echo, it's our own message (agent)
                                         conversationId: conversation.id,
                                         customerName: customerName,
                                         customerProfilePic: userProfile?.profile_pic
@@ -314,7 +237,7 @@ export class WebhooksController {
                                 }
                             })();
                         } else {
-                            console.log('Skipping event: No message or is_echo');
+                            console.log('Skipping event: No message content');
                         }
                     });
                 }
