@@ -54,16 +54,16 @@ export class WebhooksController {
                     console.log(`   ✉️ Found ${entry.messaging.length} messaging event(s)`);
                     entry.messaging.forEach((messagingEvent: any) => {
                         console.log('Processing messaging event:', JSON.stringify(messagingEvent, null, 2));
-                        // Process both regular messages and echoes (messages sent from other devices)
+                        // Process messaging events
                         if (messagingEvent.message) {
+                            const pageId = entry.id; // The ID of the Page receiving the webhook
+                            const isFromPage = messagingEvent.sender.id === pageId;
                             const isEcho = messagingEvent.message.is_echo;
-                            const messageId = messagingEvent.message.mid;
                             
-                            // For echoes, sender is the Page and recipient is the Customer
-                            // For normal messages, sender is the Customer and recipient is the Page
-                            const senderId = isEcho ? messagingEvent.recipient.id : messagingEvent.sender.id;
-                            const pageId = isEcho ? messagingEvent.sender.id : messagingEvent.recipient.id;
-                            const senderRole = isEcho ? 'agent' : 'customer';
+                            // Determine who is the customer and who is the agent
+                            const customerId = isFromPage ? messagingEvent.recipient.id : messagingEvent.sender.id;
+                            const senderRole = isFromPage ? 'agent' : 'customer';
+                            const messageId = messagingEvent.message.mid;
 
                             // Handling for messages with attachments (e.g. images, stickers)
                             let text = messagingEvent.message.text;
@@ -88,20 +88,20 @@ export class WebhooksController {
                             // Fallback if still empty
                             if (!text) text = '[Content not supported]';
 
-                            console.log(`[FACEBOOK] ${isEcho ? 'Echo (Agent Reply)' : 'Message'} from ${senderId} to Page ${pageId}: ${text}`);
+                            console.log(`[FACEBOOK] ${isFromPage ? (isEcho ? 'Echo (Agent Reply)' : 'Agent Message') : 'Customer Message'} | User: ${customerId} | Text: ${text}`);
 
                             // Save to Supabase (async, don't block)
                             (async () => {
                                 try {
-                                    // Fetch user profile from Facebook
-                                    const userProfile = await this.facebookService.getUserProfile(senderId, pageId);
+                                    // Fetch user profile from Facebook (always fetch the customer's profile)
+                                    const userProfile = await this.facebookService.getUserProfile(customerId, pageId);
                                     const customerName = userProfile
                                         ? (userProfile.name || `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim())
-                                        : senderId;
+                                        : customerId;
 
                                     // Get or create conversation
                                     const conversation = await supabaseService.getOrCreateConversation({
-                                        customerId: senderId,
+                                        customerId: customerId,
                                         customerName: customerName,
                                         platform: 'facebook',
                                         pageId: pageId,
@@ -120,8 +120,8 @@ export class WebhooksController {
                                         fileType: fileType
                                     });
 
-                                    // If this is a regular message (not an echo), handle AutoReply and AI
-                                    if (!isEcho) {
+                                    // If this is a regular message from a customer, handle AutoReply and AI
+                                    if (!isFromPage) {
                                         // --- AUTO-REPLY LOGIC ---
                                         try {
                                             const matchingRule = await this.autoReplyService.findMatchingRule(pageId, text);
@@ -129,7 +129,7 @@ export class WebhooksController {
                                                 console.log(`[AutoReply] Match found for "${text}": "${matchingRule.reply_text}"`);
                                                 
                                                 // 1. Send to Facebook
-                                                await this.facebookService.sendMessage(senderId, matchingRule.reply_text, pageId);
+                                                await this.facebookService.sendMessage(customerId, matchingRule.reply_text, pageId);
 
                                                 // 2. Save Agent Reply to DB
                                                 await supabaseService.saveMessage({
@@ -144,7 +144,7 @@ export class WebhooksController {
                                                 this.messagingGateway.broadcastIncomingMessage('facebook', {
                                                     text: matchingRule.reply_text,
                                                     senderId: pageId,
-                                                    recipientId: senderId,
+                                                    recipientId: customerId,
                                                     pageId: pageId,
                                                     conversationId: conversation.id,
                                                     timestamp: Date.now(),
@@ -210,10 +210,10 @@ export class WebhooksController {
                                                     }
 
                                                     if (replyText) {
-                                                        await this.facebookService.sendMessage(senderId, replyText, pageId);
+                                                        await this.facebookService.sendMessage(customerId, replyText, pageId);
                                                         await supabaseService.saveMessage({ conversationId: conversation.id, text: replyText, sender: 'agent', platform: 'facebook', pageId: pageId });
                                                         this.messagingGateway.broadcastIncomingMessage('facebook', {
-                                                            text: replyText, senderId: pageId, recipientId: senderId, pageId: pageId, conversationId: conversation.id, timestamp: Date.now(), isOwnMessage: true, customerName: customerName, customerProfilePic: userProfile?.profile_pic
+                                                            text: replyText, senderId: pageId, recipientId: customerId, pageId: pageId, conversationId: conversation.id, timestamp: Date.now(), isOwnMessage: true, customerName: customerName, customerProfilePic: userProfile?.profile_pic
                                                         });
                                                     }
                                                 }
