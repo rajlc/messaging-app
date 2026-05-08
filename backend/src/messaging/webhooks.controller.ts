@@ -105,7 +105,6 @@ export class WebhooksController {
                                         customerName: customerName,
                                         platform: 'facebook',
                                         pageId: pageId,
-                                        lastMessage: text,
                                         customerProfilePic: userProfile?.profile_pic
                                     });
 
@@ -125,7 +124,7 @@ export class WebhooksController {
                                     if (!isEcho) {
                                         // --- AUTO-REPLY LOGIC ---
                                         try {
-                                            const matchingRule = await this.settingsService.findMatchingAutoReply(text);
+                                            const matchingRule = await this.autoReplyService.findMatchingRule(pageId, text);
                                             if (matchingRule) {
                                                 console.log(`[AutoReply] Match found for "${text}": "${matchingRule.reply_text}"`);
                                                 
