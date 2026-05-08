@@ -174,6 +174,8 @@ export class WebhooksController {
                                                 ...savedMessage,
                                                 isOwnMessage: false,
                                                 conversationId: conversation.id,
+                                                customerName: customerName,
+                                                customerProfilePic: userProfile?.profile_pic
                                             });
                                             return;
                                         }
@@ -289,7 +291,9 @@ export class WebhooksController {
                                                 pageId: pageId,
                                                 conversationId: conversation.id,
                                                 timestamp: Date.now(),
-                                                isOwnMessage: true
+                                                isOwnMessage: true,
+                                                customerName: customerName,
+                                                customerProfilePic: userProfile?.profile_pic
                                             });
                                         }
 
