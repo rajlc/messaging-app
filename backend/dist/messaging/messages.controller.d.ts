@@ -24,12 +24,13 @@ export declare class MessagesController {
         text: string;
         platform: string;
         pageId?: string;
-        imageUrl?: string;
+        imageUrl?: string | string[];
         fileType?: string;
         tag?: string;
         replyToMid?: string;
         replyToText?: string;
         replyToSender?: string;
+        tempId?: string;
     }): Promise<{
         success: boolean;
         message: string;

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, UseGuards, Request, UnauthorizedException, Query } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseGuards, Request, UnauthorizedException, Query, Patch, Delete, Param, ForbiddenException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SettlementsService } from './settlements.service';
 
@@ -21,6 +21,35 @@ export class SettlementsController {
         }
         const actorName = req.user.full_name || req.user.email;
         return this.settlementsService.createSettlement(body.riderId, body.amount, body.date, actorName);
+    }
+
+    @UseGuards(AuthGuard('jwt'))
+    @Patch(':id')
+    async updateSettlement(@Request() req, @Param('id') id: string, @Body() body: { amount: number; date: string }) {
+        const role = req.user.role?.toLowerCase();
+        if (role !== 'admin' && role !== 'editor') {
+            throw new UnauthorizedException('Admin or Editor access required');
+        }
+        const actorName = req.user.full_name || req.user.email;
+        try {
+            return await this.settlementsService.updateSettlement(id, body.amount, body.date, actorName);
+        } catch (error) {
+            throw new ForbiddenException(error.message);
+        }
+    }
+
+    @UseGuards(AuthGuard('jwt'))
+    @Delete(':id')
+    async deleteSettlement(@Request() req, @Param('id') id: string) {
+        const role = req.user.role?.toLowerCase();
+        if (role !== 'admin' && role !== 'editor') {
+            throw new UnauthorizedException('Admin or Editor access required');
+        }
+        try {
+            return await this.settlementsService.deleteSettlement(id);
+        } catch (error) {
+            throw new ForbiddenException(error.message);
+        }
     }
 
     @UseGuards(AuthGuard('jwt'))

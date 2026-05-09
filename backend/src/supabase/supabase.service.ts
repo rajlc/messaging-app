@@ -121,6 +121,7 @@ export class SupabaseService {
         replyToMid?: string;
         replyToText?: string;
         replyToSender?: string;
+        metadata?: any;
     }) {
         // Deduplication: Check if message with same messageId already exists
         if (data.messageId) {
@@ -138,7 +139,7 @@ export class SupabaseService {
 
         const { data: message, error } = await this.getClient()
             .from('messages')
-            .insert({
+            .upsert({
                 conversation_id: data.conversationId,
                 text: data.text,
                 sender: data.sender,
@@ -150,6 +151,10 @@ export class SupabaseService {
                 reply_to_mid: data.replyToMid,
                 reply_to_text: data.replyToText,
                 reply_to_sender: data.replyToSender,
+                metadata: data.metadata || {},
+            }, {
+                onConflict: 'message_id',
+                ignoreDuplicates: true // Keep the first one (usually the one with metadata from webapp)
             })
             .select()
             .single();

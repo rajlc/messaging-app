@@ -85,17 +85,21 @@ let MessagesController = class MessagesController {
                 }
             }
             const imageIds = Array.isArray(body.imageUrl) ? body.imageUrl : (body.imageUrl ? [body.imageUrl] : []);
+            let lastFbMessageId = undefined;
             if (body.platform === 'facebook') {
                 if (imageIds.length > 0) {
                     if (body.text) {
-                        await this.facebookService.sendMessage(actualRecipientId, body.text, body.pageId, undefined, body.tag, body.replyToMid);
+                        const res = await this.facebookService.sendMessage(actualRecipientId, body.text, body.pageId, undefined, body.tag, body.replyToMid);
+                        lastFbMessageId = res?.message_id;
                     }
                     for (const url of imageIds) {
-                        await this.facebookService.sendMessage(actualRecipientId, '', body.pageId, url, body.tag, body.replyToMid);
+                        const res = await this.facebookService.sendMessage(actualRecipientId, '', body.pageId, url, body.tag, body.replyToMid);
+                        lastFbMessageId = res?.message_id;
                     }
                 }
                 else {
-                    await this.facebookService.sendMessage(actualRecipientId, body.text, body.pageId, undefined, body.tag, body.replyToMid);
+                    const res = await this.facebookService.sendMessage(actualRecipientId, body.text, body.pageId, undefined, body.tag, body.replyToMid);
+                    lastFbMessageId = res?.message_id;
                 }
             }
             const conversation = await supabase_service_1.supabaseService.getOrCreateConversation({
@@ -109,12 +113,14 @@ let MessagesController = class MessagesController {
                 text: imageIds.length > 0 ? (body.text || `📷 Sent ${imageIds.length} image(s)`) : body.text,
                 sender: 'agent',
                 platform: body.platform,
+                messageId: lastFbMessageId,
                 pageId: body.pageId,
                 imageUrl: imageIds.length > 0 ? imageIds[0] : undefined,
                 fileType: imageIds.length > 0 ? 'image' : 'text',
                 replyToMid: body.replyToMid,
                 replyToText: body.replyToText,
-                replyToSender: body.replyToSender
+                replyToSender: body.replyToSender,
+                metadata: { source: 'webapp' }
             });
             this.messagingGateway.broadcastIncomingMessage(body.platform, {
                 ...savedMessage,
@@ -122,6 +128,7 @@ let MessagesController = class MessagesController {
                 senderId: body.pageId || 'agent',
                 recipientId: actualRecipientId,
                 conversationId: conversation.id,
+                tempId: body.tempId,
             });
             return {
                 success: true,

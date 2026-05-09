@@ -96,17 +96,17 @@ export default function QuickReplyTemplates() {
     }
 
     return (
-        <div className="flex-1 overflow-y-auto">
-            <div className="mb-6">
-                <h3 className="text-xl font-bold mb-2">Quick Reply Templates</h3>
-                <p className="text-sm text-slate-400">
+        <div className="flex-1 overflow-y-auto transition-colors">
+            <div className="mb-8">
+                <h3 className="text-2xl font-black mb-2 text-slate-900 dark:text-white">Quick Reply Templates</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
                     Create message templates for quick responses to common customer inquiries.
                 </p>
             </div>
 
             <button
                 onClick={handleCreate}
-                className="mb-6 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                className="mb-8 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
             >
                 <Plus size={18} />
                 Add Template
@@ -114,47 +114,47 @@ export default function QuickReplyTemplates() {
 
             {/* Create/Edit Form */}
             {(isCreating || editingId) && (
-                <div className="mb-6 p-4 bg-slate-800 rounded-lg border border-slate-700">
-                    <h4 className="font-semibold mb-4">
+                <div className="mb-8 p-8 bg-white dark:bg-slate-800 rounded-[2rem] border border-gray-200 dark:border-slate-700/50 shadow-xl">
+                    <h4 className="text-lg font-black mb-6 text-slate-900 dark:text-white">
                         {isCreating ? 'Create New Template' : 'Edit Template'}
                     </h4>
-                    <div className="space-y-4">
+                    <div className="space-y-6">
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">
-                                Title
+                            <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
+                                Template Title
                             </label>
                             <input
                                 type="text"
                                 value={formData.title}
                                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                 placeholder="e.g., Thank You"
-                                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-bold"
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">
-                                Message
+                            <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
+                                Message Content
                             </label>
                             <textarea
                                 value={formData.message}
                                 onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                                 placeholder="e.g., Thank you for contacting us! We appreciate your interest."
                                 rows={4}
-                                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none resize-none leading-relaxed font-medium transition-all"
                             />
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-3 pt-2">
                             <button
                                 onClick={handleSave}
                                 disabled={!formData.title || !formData.message}
-                                className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
                             >
                                 <Save size={18} />
-                                Save
+                                Save Template
                             </button>
                             <button
                                 onClick={handleCancel}
-                                className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                                className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all"
                             >
                                 <X size={18} />
                                 Cancel
@@ -165,37 +165,37 @@ export default function QuickReplyTemplates() {
             )}
 
             {/* Templates List */}
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {templates.length === 0 ? (
-                    <div className="p-8 text-center text-slate-500 bg-slate-800 rounded-lg border border-slate-700">
-                        <p>No templates yet. Click "Add Template" to create one.</p>
+                    <div className="col-span-full p-12 text-center text-slate-400 bg-white dark:bg-slate-800/50 rounded-[2rem] border border-dashed border-gray-200 dark:border-slate-700">
+                        <p className="font-medium italic">No templates yet. Click "Add Template" to create one.</p>
                     </div>
                 ) : (
                     templates.map((template) => (
                         <div
                             key={template.id}
-                            className="p-4 bg-slate-800 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors"
+                            className="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700/50 hover:shadow-xl hover:shadow-indigo-500/5 hover:border-indigo-100 dark:hover:border-indigo-900/30 transition-all group"
                         >
-                            <div className="flex justify-between items-start mb-2">
-                                <h4 className="font-semibold text-lg">{template.title}</h4>
-                                <div className="flex gap-2">
+                            <div className="flex justify-between items-start mb-4">
+                                <h4 className="font-black text-lg text-slate-900 dark:text-white leading-tight">{template.title}</h4>
+                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
                                         onClick={() => handleEdit(template)}
-                                        className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                                        className="p-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl hover:bg-indigo-600 hover:text-white transition-all"
                                         title="Edit"
                                     >
                                         <Edit2 size={16} />
                                     </button>
                                     <button
                                         onClick={() => handleDelete(template.id)}
-                                        className="p-2 bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded-lg transition-colors"
+                                        className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-600 hover:text-white transition-all"
                                         title="Delete"
                                     >
                                         <Trash2 size={16} />
                                     </button>
                                 </div>
                             </div>
-                            <p className="text-sm text-slate-400 whitespace-pre-wrap">{template.message}</p>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap leading-relaxed font-medium italic">"{template.message}"</p>
                         </div>
                     ))
                 )}

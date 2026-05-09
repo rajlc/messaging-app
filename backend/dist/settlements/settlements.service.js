@@ -181,6 +181,56 @@ let SettlementsService = SettlementsService_1 = class SettlementsService {
         });
         return Array.from(reportMap.values()).sort((a, b) => b.date.localeCompare(a.date));
     }
+    async updateSettlement(id, amount, date, actorName) {
+        const { data: existing, error: fetchError } = await supabase_service_1.supabaseService.getSupabaseClient()
+            .from('rider_settlements')
+            .select('created_at')
+            .eq('id', id)
+            .single();
+        if (fetchError || !existing)
+            throw new Error('Settlement not found');
+        const created = new Date(existing.created_at);
+        const now = new Date();
+        const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
+        if (diffHours > 24) {
+            throw new Error('Settlements can only be modified within 24 hours of creation');
+        }
+        const { data, error } = await supabase_service_1.supabaseService.getSupabaseClient()
+            .from('rider_settlements')
+            .update({
+            amount: amount,
+            settlement_date: date,
+            updated_by: actorName,
+            updated_at: new Date().toISOString()
+        })
+            .eq('id', id)
+            .select();
+        if (error)
+            throw error;
+        return data[0];
+    }
+    async deleteSettlement(id) {
+        const { data: existing, error: fetchError } = await supabase_service_1.supabaseService.getSupabaseClient()
+            .from('rider_settlements')
+            .select('created_at')
+            .eq('id', id)
+            .single();
+        if (fetchError || !existing)
+            throw new Error('Settlement not found');
+        const created = new Date(existing.created_at);
+        const now = new Date();
+        const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
+        if (diffHours > 24) {
+            throw new Error('Settlements can only be deleted within 24 hours of creation');
+        }
+        const { error } = await supabase_service_1.supabaseService.getSupabaseClient()
+            .from('rider_settlements')
+            .delete()
+            .eq('id', id);
+        if (error)
+            throw error;
+        return { success: true };
+    }
 };
 exports.SettlementsService = SettlementsService;
 exports.SettlementsService = SettlementsService = SettlementsService_1 = __decorate([

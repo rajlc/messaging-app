@@ -62,9 +62,13 @@ let WebhooksController = class WebhooksController {
                     console.log(`   ✉️ Found ${entry.messaging.length} messaging event(s)`);
                     entry.messaging.forEach((messagingEvent) => {
                         console.log('Processing messaging event:', JSON.stringify(messagingEvent, null, 2));
-                        if (messagingEvent.message && !messagingEvent.message.is_echo) {
-                            const senderId = messagingEvent.sender.id;
-                            const pageId = messagingEvent.recipient.id;
+                        if (messagingEvent.message) {
+                            const pageId = entry.id;
+                            const isFromPage = messagingEvent.sender.id === pageId;
+                            const isEcho = messagingEvent.message.is_echo;
+                            const customerId = isFromPage ? messagingEvent.recipient.id : messagingEvent.sender.id;
+                            const senderRole = isFromPage ? 'agent' : 'customer';
+                            const messageId = messagingEvent.message.mid;
                             let text = messagingEvent.message.text;
                             let imageUrl = undefined;
                             let fileType = 'text';
@@ -85,173 +89,122 @@ let WebhooksController = class WebhooksController {
                             }
                             if (!text)
                                 text = '[Content not supported]';
-                            console.log(`[FACEBOOK] Message from ${senderId} to Page ${pageId}: ${text}`);
+                            console.log(`[FACEBOOK] ${isFromPage ? (isEcho ? 'Echo (Agent Reply)' : 'Agent Message') : 'Customer Message'} | User: ${customerId} | Text: ${text}`);
                             (async () => {
                                 try {
-                                    const userProfile = await this.facebookService.getUserProfile(senderId, pageId);
+                                    const userProfile = await this.facebookService.getUserProfile(customerId, pageId);
                                     const customerName = userProfile
                                         ? (userProfile.name || `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim())
-                                        : senderId;
+                                        : customerId;
                                     const conversation = await supabase_service_1.supabaseService.getOrCreateConversation({
-                                        customerId: senderId,
+                                        customerId: customerId,
                                         customerName: customerName,
                                         platform: 'facebook',
                                         pageId: pageId,
                                         customerProfilePic: userProfile?.profile_pic
                                     });
-                                    let replyToMid = messagingEvent.message.reply_to?.mid;
-                                    let replyToText = undefined;
-                                    let replyToSender = undefined;
-                                    if (replyToMid) {
-                                        console.log(`🔗 Message is a reply to ${replyToMid}. Attempting to resolve context...`);
-                                        const { data: originalMsg } = await supabase_service_1.supabaseService.getClient()
-                                            .from('messages')
-                                            .select('text, sender')
-                                            .eq('message_id', replyToMid)
-                                            .single();
-                                        if (originalMsg) {
-                                            replyToText = originalMsg.text;
-                                            replyToSender = originalMsg.sender;
-                                            console.log(`✅ Resolved reply context: "${replyToText?.substring(0, 20)}..." by ${replyToSender}`);
-                                        }
-                                    }
                                     const savedMessage = await supabase_service_1.supabaseService.saveMessage({
                                         conversationId: conversation.id,
                                         text: text,
-                                        sender: 'customer',
+                                        sender: senderRole,
                                         platform: 'facebook',
-                                        messageId: messagingEvent.message.mid,
+                                        messageId: messageId,
                                         pageId: pageId,
                                         imageUrl: imageUrl,
-                                        fileType: fileType,
-                                        replyToMid,
-                                        replyToText,
-                                        replyToSender
+                                        fileType: fileType
                                     });
-                                    console.log('✅ Message saved to Supabase');
-                                    try {
-                                        const matchingRule = await this.autoReplyService.findMatchingRule(pageId, text);
-                                        if (matchingRule) {
-                                            console.log(`[AutoReply] Match found for "${text}": "${matchingRule.reply_text}"`);
-                                            await this.facebookService.sendMessage(senderId, matchingRule.reply_text, pageId);
-                                            await supabase_service_1.supabaseService.saveMessage({
-                                                conversationId: conversation.id,
-                                                text: matchingRule.reply_text,
-                                                sender: 'agent',
-                                                platform: 'facebook',
-                                                pageId: pageId,
-                                            });
-                                            this.messagingGateway.broadcastIncomingMessage('facebook', {
-                                                text: matchingRule.reply_text,
-                                                senderId: pageId,
-                                                recipientId: senderId,
-                                                pageId: pageId,
-                                                conversationId: conversation.id,
-                                                timestamp: Date.now(),
-                                                isOwnMessage: true
-                                            });
-                                            console.log('[AutoReply] Reply sent and broadcasted. Skipping AI agent.');
-                                            this.messagingGateway.broadcastIncomingMessage('facebook', {
-                                                ...savedMessage,
-                                                isOwnMessage: false,
-                                                conversationId: conversation.id,
-                                            });
-                                            return;
-                                        }
-                                    }
-                                    catch (arError) {
-                                        console.error('[AutoReply] Error finding/sending reply:', arError);
-                                    }
-                                    try {
-                                        const isGlobalEnabled = await this.settingsService.getSetting('is_ai_global_enabled');
-                                        if (isGlobalEnabled !== 'true') {
-                                            console.log('[AI] Global AI is disabled. Skipping.');
-                                            return;
-                                        }
-                                        const page = await supabase_service_1.supabaseService.getPageByFacebookId(pageId);
-                                        if (!page || !page.is_ai_enabled) {
-                                            console.log(`[AI] AI disabled for Page ${pageId}. Skipping.`);
-                                            return;
-                                        }
-                                        console.log('[AI] preparing response...');
-                                        const systemPrompt = page.custom_prompt || "You are a helpful assistant for this business. Reply strictly to the user's question. Be concise and professional.";
-                                        const history = await supabase_service_1.supabaseService.getMessages(conversation.id, 5);
-                                        const messages = [
-                                            { role: 'system', content: systemPrompt },
-                                            ...history.map(msg => ({
-                                                role: msg.sender === 'customer' ? 'user' : 'assistant',
-                                                content: msg.text
-                                            })),
-                                            { role: 'user', content: text }
-                                        ];
-                                        const aiProvider = await this.settingsService.getSetting('ai_provider') || 'openai';
-                                        console.log(`[AI] Provider: ${aiProvider}`);
-                                        let replyText = '';
-                                        if (aiProvider === 'openai') {
-                                            const apiKey = await this.settingsService.getSetting('openai_api_key');
-                                            if (!apiKey) {
-                                                console.warn('[AI] No OpenAI API Key found. Skipping.');
+                                    if (!isFromPage) {
+                                        try {
+                                            const matchingRule = await this.autoReplyService.findMatchingRule(pageId, text);
+                                            if (matchingRule) {
+                                                console.log(`[AutoReply] Match found for "${text}": "${matchingRule.reply_text}"`);
+                                                await this.facebookService.sendMessage(customerId, matchingRule.reply_text, pageId);
+                                                await supabase_service_1.supabaseService.saveMessage({
+                                                    conversationId: conversation.id,
+                                                    text: matchingRule.reply_text,
+                                                    sender: 'agent',
+                                                    platform: 'facebook',
+                                                    pageId: pageId,
+                                                });
+                                                this.messagingGateway.broadcastIncomingMessage('facebook', {
+                                                    text: matchingRule.reply_text,
+                                                    senderId: pageId,
+                                                    recipientId: customerId,
+                                                    pageId: pageId,
+                                                    conversationId: conversation.id,
+                                                    timestamp: Date.now(),
+                                                    isOwnMessage: true,
+                                                    customerName: customerName,
+                                                    customerProfilePic: userProfile?.profile_pic
+                                                });
+                                                console.log('[AutoReply] Reply sent and broadcasted. Skipping AI agent.');
+                                                this.messagingGateway.broadcastIncomingMessage('facebook', {
+                                                    ...savedMessage,
+                                                    isOwnMessage: false,
+                                                    conversationId: conversation.id,
+                                                    customerName: customerName,
+                                                    customerProfilePic: userProfile?.profile_pic
+                                                });
                                                 return;
                                             }
-                                            const aiResponse = await axios_1.default.post('https://api.openai.com/v1/chat/completions', {
-                                                model: 'gpt-4o',
-                                                messages: messages,
-                                                max_tokens: 300
-                                            }, {
-                                                headers: {
-                                                    'Authorization': `Bearer ${apiKey}`,
-                                                    'Content-Type': 'application/json'
-                                                }
-                                            });
-                                            replyText = aiResponse.data.choices[0]?.message?.content;
                                         }
-                                        else if (aiProvider === 'gemini') {
-                                            const geminiKey = await this.settingsService.getSetting('gemini_api_key');
-                                            if (!geminiKey) {
-                                                console.warn('[AI] No Gemini API Key found. Skipping.');
-                                                return;
+                                        catch (arError) {
+                                            console.error('[AutoReply] Error finding/sending reply:', arError);
+                                        }
+                                        try {
+                                            const isGlobalEnabled = await this.settingsService.getSetting('is_ai_global_enabled');
+                                            if (isGlobalEnabled === 'true') {
+                                                const page = await supabase_service_1.supabaseService.getPageByFacebookId(pageId);
+                                                if (page && page.is_ai_enabled) {
+                                                    console.log('[AI] processing...');
+                                                    const history = await supabase_service_1.supabaseService.getMessages(conversation.id, 5);
+                                                    const systemPrompt = page.custom_prompt || "You are a helpful assistant.";
+                                                    const messages = [
+                                                        { role: 'system', content: systemPrompt },
+                                                        ...history.map(msg => ({ role: msg.sender === 'customer' ? 'user' : 'assistant', content: msg.text })),
+                                                        { role: 'user', content: text }
+                                                    ];
+                                                    const aiProvider = await this.settingsService.getSetting('ai_provider') || 'openai';
+                                                    let replyText = '';
+                                                    if (aiProvider === 'openai') {
+                                                        const apiKey = await this.settingsService.getSetting('openai_api_key');
+                                                        if (apiKey) {
+                                                            const aiResponse = await axios_1.default.post('https://api.openai.com/v1/chat/completions', {
+                                                                model: 'gpt-4o',
+                                                                messages: messages,
+                                                                max_tokens: 300
+                                                            }, { headers: { 'Authorization': `Bearer ${apiKey}` } });
+                                                            replyText = aiResponse.data.choices[0]?.message?.content;
+                                                        }
+                                                    }
+                                                    else if (aiProvider === 'gemini') {
+                                                        const geminiKey = await this.settingsService.getSetting('gemini_api_key');
+                                                        if (geminiKey) {
+                                                            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiKey}`;
+                                                            const aiResponse = await axios_1.default.post(url, {
+                                                                contents: messages.map(msg => ({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] })).filter(msg => msg.role !== 'system'),
+                                                                systemInstruction: { parts: [{ text: systemPrompt }] }
+                                                            });
+                                                            replyText = aiResponse.data.candidates?.[0]?.content?.parts?.[0]?.text;
+                                                        }
+                                                    }
+                                                    if (replyText) {
+                                                        await this.facebookService.sendMessage(customerId, replyText, pageId);
+                                                        await supabase_service_1.supabaseService.saveMessage({ conversationId: conversation.id, text: replyText, sender: 'agent', platform: 'facebook', pageId: pageId });
+                                                        this.messagingGateway.broadcastIncomingMessage('facebook', {
+                                                            text: replyText, senderId: pageId, recipientId: customerId, pageId: pageId, conversationId: conversation.id, timestamp: Date.now(), isOwnMessage: true, customerName: customerName, customerProfilePic: userProfile?.profile_pic
+                                                        });
+                                                    }
+                                                }
                                             }
-                                            const geminiContent = {
-                                                contents: messages.map(msg => ({
-                                                    role: msg.role === 'user' ? 'user' : 'model',
-                                                    parts: [{ text: msg.content }]
-                                                })).filter(msg => msg.role !== 'system'),
-                                                systemInstruction: {
-                                                    parts: [{ text: systemPrompt }]
-                                                }
-                                            };
-                                            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiKey}`;
-                                            const aiResponse = await axios_1.default.post(url, geminiContent);
-                                            replyText = aiResponse.data.candidates?.[0]?.content?.parts?.[0]?.text;
                                         }
-                                        if (replyText) {
-                                            console.log(`[AI] Replying: "${replyText}"`);
-                                            await this.facebookService.sendMessage(senderId, replyText, pageId);
-                                            await supabase_service_1.supabaseService.saveMessage({
-                                                conversationId: conversation.id,
-                                                text: replyText,
-                                                sender: 'agent',
-                                                platform: 'facebook',
-                                                pageId: pageId,
-                                            });
-                                            console.log('[AI] Broadcasting reply with recipientId:', senderId);
-                                            this.messagingGateway.broadcastIncomingMessage('facebook', {
-                                                text: replyText,
-                                                senderId: pageId,
-                                                recipientId: senderId,
-                                                pageId: pageId,
-                                                conversationId: conversation.id,
-                                                timestamp: Date.now(),
-                                                isOwnMessage: true
-                                            });
+                                        catch (aiError) {
+                                            console.error('[AI] Error:', aiError.message);
                                         }
-                                    }
-                                    catch (aiError) {
-                                        console.error('[AI] Error generating/sending reply:', aiError.response?.data || aiError.message);
                                     }
                                     this.messagingGateway.broadcastIncomingMessage('facebook', {
                                         ...savedMessage,
-                                        isOwnMessage: false,
+                                        isOwnMessage: isEcho,
                                         conversationId: conversation.id,
                                         customerName: customerName,
                                         customerProfilePic: userProfile?.profile_pic
@@ -263,7 +216,7 @@ let WebhooksController = class WebhooksController {
                             })();
                         }
                         else {
-                            console.log('Skipping event: No message or is_echo');
+                            console.log('Skipping event: No message content');
                         }
                     });
                 }

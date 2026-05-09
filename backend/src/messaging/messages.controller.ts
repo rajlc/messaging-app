@@ -55,12 +55,13 @@ export class MessagesController {
         text: string;
         platform: string;
         pageId?: string;
-        imageUrl?: string;
+        imageUrl?: string | string[];
         fileType?: string;
         tag?: string;  // e.g. 'POST_PURCHASE_UPDATE' to bypass 24hr window
         replyToMid?: string;
         replyToText?: string;
         replyToSender?: string;
+        tempId?: string;
     }) {
         try {
             console.log('📤 Send message request:', body);
@@ -99,19 +100,23 @@ export class MessagesController {
 
             // 2. Send message via platform (Facebook)
             const imageIds = Array.isArray(body.imageUrl) ? body.imageUrl : (body.imageUrl ? [body.imageUrl] : []);
+            let lastFbMessageId: string | undefined = undefined;
 
             if (body.platform === 'facebook') {
                 if (imageIds.length > 0) {
                     // Send text first if provided
                     if (body.text) {
-                        await this.facebookService.sendMessage(actualRecipientId, body.text, body.pageId, undefined, body.tag, body.replyToMid);
+                        const res = await this.facebookService.sendMessage(actualRecipientId, body.text, body.pageId, undefined, body.tag, body.replyToMid);
+                        lastFbMessageId = res?.message_id;
                     }
                     // Then send images
                     for (const url of imageIds) {
-                        await this.facebookService.sendMessage(actualRecipientId, '', body.pageId, url, body.tag, body.replyToMid);
+                        const res = await this.facebookService.sendMessage(actualRecipientId, '', body.pageId, url, body.tag, body.replyToMid);
+                        lastFbMessageId = res?.message_id;
                     }
                 } else {
-                    await this.facebookService.sendMessage(actualRecipientId, body.text, body.pageId, undefined, body.tag, body.replyToMid);
+                    const res = await this.facebookService.sendMessage(actualRecipientId, body.text, body.pageId, undefined, body.tag, body.replyToMid);
+                    lastFbMessageId = res?.message_id;
                 }
             }
 
@@ -130,12 +135,14 @@ export class MessagesController {
                 text: imageIds.length > 0 ? (body.text || `📷 Sent ${imageIds.length} image(s)`) : body.text,
                 sender: 'agent',
                 platform: body.platform,
+                messageId: lastFbMessageId, // CORRECTED TO messageId (camelCase)
                 pageId: body.pageId,
                 imageUrl: imageIds.length > 0 ? imageIds[0] : undefined, // Store first image URL as primary
                 fileType: imageIds.length > 0 ? 'image' : 'text',
                 replyToMid: body.replyToMid,
                 replyToText: body.replyToText,
-                replyToSender: body.replyToSender
+                replyToSender: body.replyToSender,
+                metadata: { source: 'webapp' }
             });
 
             // 4. Broadcast to frontend via Socket.io
@@ -145,6 +152,7 @@ export class MessagesController {
                 senderId: body.pageId || 'agent', // Page ID is the sender for outgoing
                 recipientId: actualRecipientId,
                 conversationId: conversation.id,
+                tempId: body.tempId, // Include tempId for frontend deduplication
             });
 
             return {

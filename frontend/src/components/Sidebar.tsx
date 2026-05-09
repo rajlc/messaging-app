@@ -1,44 +1,80 @@
 "use client";
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { MessageCircle, MessageSquare, User, ShoppingBag, Settings, LogOut, BarChart3, Truck } from 'lucide-react';
+import { MessageCircle, MessageSquare, User, ShoppingBag, Settings, LogOut, BarChart3, Truck, Home } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 interface SidebarProps {
-    activeView?: 'messages' | 'orders' | 'settings' | 'profile' | 'finance' | 'delivery';
+    activeView?: string;
 }
 
 export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { user, logout } = useAuth();
 
-    const navigateTo = (view: string) => {
-        router.push(`/?view=${view}`);
+    const activeType = searchParams.get('type') || 'messages';
+
+    const navigateTo = (view: string, type?: string) => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('view', view);
+        if (type) {
+            params.set('type', type);
+        } else {
+            params.delete('type');
+        }
+        router.push(`/?${params.toString()}`);
     };
 
     return (
         <div className="w-20 bg-white dark:bg-slate-800 flex flex-col items-center py-6 border-r border-gray-200 dark:border-slate-700 h-screen flex-shrink-0 z-50 shadow-sm">
-            <div className="flex flex-col gap-4 mb-8">
-                {/* Messages Nav */}
-                <div
-                    onClick={() => navigateTo('messages')}
-                    title="Messages"
-                    className={`p-3 rounded-2xl cursor-pointer hover:scale-110 transition-transform border shadow-sm ${activeView === 'messages'
-                        ? 'bg-indigo-600 border-indigo-500 shadow-indigo-500/30 text-white'
-                        : 'bg-gray-100 dark:bg-slate-900 border-gray-200 dark:border-slate-600 text-slate-500 dark:text-slate-400'
-                        }`}
-                >
-                    <MessageCircle className={`${activeView === 'messages' ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
-                </div>
-
-                {/* Comments Nav */}
-                <div
-                    onClick={() => navigateTo('messages')}
-                    title="Comments"
-                    className="p-3 rounded-2xl cursor-pointer hover:scale-110 transition-transform border shadow-sm bg-gray-100 dark:bg-slate-900 border-gray-200 dark:border-slate-600 text-slate-500 dark:text-slate-400"
-                >
-                    <MessageSquare className="text-slate-500 dark:text-slate-400" />
-                </div>
+            <div className="flex flex-col gap-2 w-full px-2 mb-4">
+                <NavButton
+                    label="Home"
+                    icon={<Home size={18} />}
+                    active={activeView === 'home'}
+                    onClick={() => navigateTo('home')}
+                />
+                <NavButton
+                    label="Messages"
+                    icon={<MessageCircle size={18} />}
+                    active={activeView === 'messages' && activeType === 'messages'}
+                    onClick={() => navigateTo('messages', 'messages')}
+                />
+                <NavButton
+                    label="Comments"
+                    icon={<MessageSquare size={18} />}
+                    active={activeView === 'messages' && activeType === 'comments'}
+                    onClick={() => navigateTo('messages', 'comments')}
+                />
+                <NavButton
+                    label="Orders"
+                    icon={<ShoppingBag size={18} />}
+                    active={activeView === 'orders'}
+                    onClick={() => navigateTo('orders')}
+                />
+                <NavButton
+                    label="Delivery"
+                    icon={<Truck size={18} />}
+                    active={activeView === 'delivery'}
+                    onClick={() => navigateTo('delivery')}
+                />
+                {(user?.role === 'admin' || user?.role === 'editor') && (
+                    <NavButton
+                        label="Finance"
+                        icon={<BarChart3 size={18} />}
+                        active={activeView === 'finance'}
+                        onClick={() => navigateTo('finance')}
+                    />
+                )}
+                {(user?.role === 'admin' || user?.role === 'editor') && (
+                    <NavButton
+                        label="Settings"
+                        icon={<Settings size={18} />}
+                        active={activeView === 'settings'}
+                        onClick={() => navigateTo('settings')}
+                    />
+                )}
             </div>
 
             <div className="flex-1"></div>
@@ -50,45 +86,17 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
                     active={activeView === 'profile'}
                     onClick={() => navigateTo('profile')}
                 />
-                <NavButton
-                    label="Orders"
-                    icon={<ShoppingBag size={18} />}
-                    active={activeView === 'orders'}
-                    onClick={() => navigateTo('orders')}
-                />
-                {(user?.role === 'admin' || user?.role === 'editor') && (
-                    <NavButton
-                        label="Finance"
-                        icon={<BarChart3 size={18} />}
-                        active={activeView === 'finance'}
-                        onClick={() => navigateTo('finance')}
-                    />
-                )}
-                <NavButton
-                    label="Delivery"
-                    icon={<Truck size={18} />}
-                    active={activeView === 'delivery'}
-                    onClick={() => navigateTo('delivery')}
-                />
-                {(user?.role === 'admin' || user?.role === 'editor') && (
-                    <NavButton
-                        label="Settings"
-                        icon={<Settings size={18} />}
-                        active={activeView === 'settings'}
-                        onClick={() => navigateTo('settings')}
-                    />
-                )}
 
                 {/* Divider */}
                 <div className="border-t border-gray-100 dark:border-slate-700 my-1" />
 
-                {/* User avatar */}
+                {/* User display */}
                 <div className="flex flex-col items-center gap-1 p-2">
                     <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-bold">
                         {(user?.full_name || user?.email || 'U').charAt(0).toUpperCase()}
                     </div>
                     <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-full px-1 text-center leading-tight">
-                        {user?.full_name?.split(' ')[0] || 'User'}
+                        {user?.full_name || 'User'}
                     </span>
                 </div>
 

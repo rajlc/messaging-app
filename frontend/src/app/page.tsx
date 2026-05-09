@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, Suspense, useCallback, Fragment } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
-import { Send, Instagram, Facebook, MessageCircle, ShoppingCart, ShoppingBag, Settings, Eye, Zap, Truck, Package, User, Image as ImageIcon, Paperclip, X, Camera, Reply } from 'lucide-react';
+import { Send, Instagram, Facebook, MessageCircle, ShoppingCart, ShoppingBag, Settings, Eye, Zap, Truck, Package, User, Image as ImageIcon, Paperclip, X, Camera, Reply, Edit2, Calendar, MapPin, Phone, Info, ClipboardList } from 'lucide-react';
 import OrderModal from '@/components/OrderModal';
 import ViewOrderModal from '@/components/ViewOrderModal';
 import QuickReplyModal from '@/components/QuickReplyModal';
@@ -60,6 +60,7 @@ type Message = {
   replyToMid?: string;
   replyToText?: string;
   replyToSender?: string;
+  metadata?: any;
 };
 
 type Conversation = {
@@ -259,7 +260,9 @@ function UnifiedInboxContent() {
     startResizing();
   };
 
-  // Refactored Order State
+  // Consolidated Order Detail Sidebar State
+  const [sidebarView, setSidebarView] = useState<'details' | 'order'>('details');
+  const [selectedSidebarOrder, setSelectedSidebarOrder] = useState<any>(null);
   const [sidebarWidth, setSidebarWidth] = useState(360);
   const [customerOrders, setCustomerOrders] = useState<any[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
@@ -316,6 +319,16 @@ function UnifiedInboxContent() {
 
   // Derived state from URL
   const activeView = (searchParams.get('view') as 'messages' | 'orders' | 'settings' | 'profile' | 'report' | 'daily-report' | 'inventory-report' | 'finance' | 'delivery') || 'messages';
+
+  // Sync conversationType with URL 'type' parameter
+  useEffect(() => {
+    const type = searchParams.get('type') as 'messages' | 'comments';
+    if (type === 'messages' || type === 'comments') {
+      setConversationType(type);
+    } else {
+      setConversationType('messages');
+    }
+  }, [searchParams]);
 
   const setActiveView = (view: 'messages' | 'orders' | 'settings' | 'profile' | 'report' | 'daily-report' | 'inventory-report' | 'finance' | 'delivery') => {
     const params = new URLSearchParams(searchParams.toString());
@@ -472,7 +485,8 @@ function UnifiedInboxContent() {
               pageId: msg.page_id,
               senderId: msg.sender === 'customer' ? firstConv.customerId : 'agent',
               conversationId: msg.conversation_id,
-              timestamp: new Date(msg.created_at)
+              timestamp: new Date(msg.created_at),
+              metadata: msg.metadata
             }));
 
             setMessages(loadedMessages);
@@ -521,6 +535,7 @@ function UnifiedInboxContent() {
 
       const newMessage: Message = {
         id: message.id || Date.now().toString(),
+        tempId: message.tempId,
         text: message.text,
         sender: senderRole,
         platform: message.platform || 'facebook',
@@ -528,7 +543,8 @@ function UnifiedInboxContent() {
         senderId: message.senderId,
         recipientId: message.recipientId,
         conversationId: message.conversationId,
-        timestamp: new Date(message.timestamp || Date.now())
+        timestamp: new Date(message.timestamp || Date.now()),
+        metadata: message.metadata,
       };
 
       const active = activeConversationRef.current;
@@ -708,8 +724,10 @@ function UnifiedInboxContent() {
       }
     }
 
+    const tempId = Date.now().toString();
     const newMessage: Message = {
-      id: Date.now().toString(),
+      id: tempId,
+      tempId: tempId,
       text: currentText || (uploadedUrls.length > 0 ? `📷 Sent ${uploadedUrls.length} image(s)` : ''),
       sender: 'agent',
       platform: activeConversation?.platform as any || 'facebook',
@@ -719,7 +737,8 @@ function UnifiedInboxContent() {
       isOptimistic: true,
       replyToMid: currentReplyingTo?.messageId || currentReplyingTo?.id,
       replyToText: currentReplyingTo?.text,
-      replyToSender: currentReplyingTo?.sender
+      replyToSender: currentReplyingTo?.sender,
+      metadata: { source: 'webapp' }
     };
 
     setMessages(prev => [...prev, newMessage]);
@@ -750,7 +769,8 @@ function UnifiedInboxContent() {
           ...(hasOrder && { tag: 'POST_PURCHASE_UPDATE' }),
           replyToMid: currentReplyingTo?.messageId || currentReplyingTo?.id,
           replyToText: currentReplyingTo?.text,
-          replyToSender: currentReplyingTo?.sender
+          replyToSender: currentReplyingTo?.sender,
+          tempId: tempId
         }),
       });
     } catch (error) {
@@ -854,6 +874,8 @@ function UnifiedInboxContent() {
     const uniqueId = conv.id || conv.customerId;
     setActiveConversationId(uniqueId);
     setCurrentCustomerId(conv.customerId);
+    setSidebarView('details');
+    setSelectedSidebarOrder(null);
 
     // Reset unread count locally and in database
     setConversations(prev => prev.map(c =>
@@ -899,7 +921,8 @@ function UnifiedInboxContent() {
           pageId: msg.page_id,
           senderId: msg.sender === 'customer' ? conv.customerId : 'agent', // Use the confirmed customerId
           conversationId: msg.conversation_id,
-          timestamp: new Date(msg.created_at)
+          timestamp: new Date(msg.created_at),
+          metadata: msg.metadata
         }));
 
         // Load comments for this customer
@@ -982,20 +1005,46 @@ function UnifiedInboxContent() {
   };
 
   // EXTRACTING HELPER: Status color — light mode: soft colored bg + dark text; dark mode: dark tones
+  // EXTRACTING HELPER: Status color — high contrast and vibrant for better visual tracking
   const getStatusColor = (status: string) => {
-    if (!status) return 'bg-gray-100 dark:bg-slate-700 text-slate-800 dark:text-slate-300 border-gray-200 dark:border-slate-600';
-    if (status === 'New Order') return 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700/50';
-    if (status === 'Confirmed Order') return 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200 border-indigo-200 dark:border-indigo-700/50';
-    if (status === 'Ready to Ship') return 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-700/50';
-    if (status === 'Shipped') return 'bg-cyan-100 dark:bg-cyan-900/50 text-cyan-800 dark:text-cyan-200 border-cyan-200 dark:border-cyan-700/50';
-    if (status === 'Delivery Process') return 'bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-700/50';
-    if (status === 'Delivered') return 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700/50';
-    if (status === 'Delivery Failed') return 'bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700/50';
-    if (status === 'Hold') return 'bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-700/50';
-    if (status === 'Return Process') return 'bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-700/50';
-    if (status === 'Return Delivered') return 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-600/50';
-    if (status === 'Cancelled') return 'bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700/50';
-    return 'bg-gray-100 dark:bg-slate-700 text-slate-800 dark:text-slate-300 border-gray-200 dark:border-slate-600';
+    if (!status) return 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700';
+    
+    const normalized = status.toLowerCase();
+    
+    if (normalized.includes('new')) 
+      return 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50';
+    
+    if (normalized.includes('confirmed')) 
+      return 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50';
+    
+    if (normalized.includes('ready')) 
+      return 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50';
+    
+    if (normalized.includes('shipped')) 
+      return 'bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800/50';
+    
+    if (normalized.includes('delivery process')) 
+      return 'bg-fuchsia-50 dark:bg-fuchsia-900/30 text-fuchsia-600 dark:text-fuchsia-400 border border-fuchsia-200 dark:border-fuchsia-800/50';
+    
+    if (normalized.includes('delivered') && !normalized.includes('return')) 
+      return 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50';
+    
+    if (normalized.includes('failed')) 
+      return 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/50';
+    
+    if (normalized.includes('hold')) 
+      return 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800/50';
+    
+    if (normalized.includes('return process')) 
+      return 'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/50';
+    
+    if (normalized.includes('return delivered')) 
+      return 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600';
+    
+    if (normalized.includes('cancel')) 
+      return 'bg-gray-100 dark:bg-gray-900/50 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-700';
+
+    return 'bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800';
   };
 
   // Filter conversations based on conversation type (messages vs comments) + platform + order status
@@ -1301,12 +1350,7 @@ function UnifiedInboxContent() {
               </div>
             </div>
             <div className="flex gap-2">
-              {activeConversation?.hasOrders && (
-                <button onClick={() => setIsViewOrderModalOpen(true)} className="bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-white border border-gray-200 dark:border-slate-600 px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2">
-                  <Eye size={16} /> View Orders
-                </button>
-              )}
-              <button onClick={() => setIsOrderModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all">
+              <button onClick={() => { setOrderModalMode('create'); setIsOrderModalOpen(true); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all">
                 Create Order
               </button>
             </div>
@@ -1365,9 +1409,16 @@ function UnifiedInboxContent() {
                     {msg.text && (
                       <p className="text-[16px] whitespace-pre-wrap break-words leading-relaxed">{msg.text}</p>
                     )}
-                    <p className={`text-[11px] mt-1.5 opacity-80 font-medium ${msg.sender === 'agent' ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'}`}>
-                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1.5 opacity-80">
+                      <p className={`text-[11px] font-medium ${msg.sender === 'agent' ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                      {msg.metadata?.source === 'webapp' && (
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full uppercase font-black tracking-wider ${msg.sender === 'agent' ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-slate-700 text-slate-500'}`}>
+                          Web
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 {msg.sender !== 'agent' && (
@@ -1402,56 +1453,255 @@ function UnifiedInboxContent() {
 
         {/* Right Panel */}
         <div className="w-[28rem] bg-white dark:bg-slate-800 border-l border-gray-200 dark:border-slate-700 p-6 flex flex-col gap-4 overflow-y-auto">
-          <div className="flex items-center gap-3 mb-4 pb-4 border-b border-gray-100 dark:border-slate-700">
-            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-lg font-bold shadow-inner overflow-hidden">
-              {activeConversation?.customerProfilePic ? (
-                <img src={activeConversation.customerProfilePic} alt={customerName} className="w-full h-full object-cover" />
-              ) : (
-                customerName.charAt(0).toUpperCase()
-              )}
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white truncate">{customerName}</h2>
-              <span className="text-[13px] text-slate-500 dark:text-slate-400">Customer Details</span>
-            </div>
-          </div>
+          {sidebarView === 'details' ? (
+            <Fragment>
+              <div className="flex items-center gap-3 mb-4 pb-4 border-b border-gray-100 dark:border-slate-700">
+                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-lg font-bold shadow-inner overflow-hidden">
+                  {activeConversation?.customerProfilePic ? (
+                    <img src={activeConversation.customerProfilePic} alt={customerName} className="w-full h-full object-cover" />
+                  ) : (
+                    customerName.charAt(0).toUpperCase()
+                  )}
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white truncate">{customerName}</h2>
+                  <span className="text-[13px] text-slate-500 dark:text-slate-400">Customer Details</span>
+                </div>
+              </div>
 
-          <div className="flex gap-2 mb-4">
-            <button onClick={() => { setOrderModalMode('create'); setIsOrderModalOpen(true); }} className="flex-1 bg-indigo-600 text-white rounded-lg py-2 flex items-center justify-center gap-2 text-[15px]">
-              <ShoppingBag size={15} /> Create Order
-            </button>
-            <button onClick={() => setIsQuickReplyModalOpen(true)} className="flex-1 bg-gray-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg py-2 border border-gray-200 dark:border-slate-600 flex items-center justify-center gap-2 text-[15px]">
-              <MessageCircle size={15} /> Quick Reply
-            </button>
-          </div>
+              <div className="flex gap-2 mb-4">
+                <button onClick={() => { setOrderModalMode('create'); setIsOrderModalOpen(true); }} className="flex-1 bg-indigo-600 text-white rounded-lg py-2 flex items-center justify-center gap-2 text-[15px] font-semibold hover:bg-indigo-700 transition-colors">
+                  <ShoppingBag size={15} /> Create Order
+                </button>
+                <button onClick={() => setIsQuickReplyModalOpen(true)} className="flex-1 bg-gray-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg py-2 border border-gray-200 dark:border-slate-600 flex items-center justify-center gap-2 text-[15px] font-semibold hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors">
+                  <MessageCircle size={15} /> Quick Reply
+                </button>
+              </div>
 
-          <div className="flex-1 overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[15px] font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <ShoppingBag size={16} className="text-indigo-500" /> Recent Orders
-              </h3>
-            </div>
-            <div className="flex-1 overflow-y-auto space-y-2">
-              {customerOrders.length > 0 ? (
-                customerOrders.map(order => (
-                  <div key={order.id} className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl p-3 shadow-sm">
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="text-[13px] text-indigo-600 dark:text-indigo-400 font-bold">{order.order_number}</span>
-                      <span className={`text-[11px] px-2 py-0.5 rounded-full ${getStatusColor(order.order_status)}`}>{order.order_status}</span>
+              <div className="flex-1 overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-[15px] font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <ShoppingBag size={16} className="text-indigo-500" /> Recent Orders
+                  </h3>
+                </div>
+                <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
+                  {customerOrders.length > 0 ? (
+                    customerOrders.map(order => (
+                      <div key={order.id} className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-start mb-3">
+                          <span className="text-[14px] text-indigo-600 dark:text-indigo-400 font-extrabold">{order.order_number}</span>
+                          <span className={`text-[11px] px-2.5 py-1 rounded-full font-bold shadow-sm ${getStatusColor(order.order_status)}`}>{order.order_status}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm text-slate-900 dark:text-white mb-4">
+                          <span className="text-slate-500 dark:text-slate-400 font-medium">{order.items?.length || 0} Items</span>
+                          <span className="font-black text-[15px]">Rs. {order.total_amount?.toLocaleString()}</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedSidebarOrder(order);
+                            setSidebarView('order');
+                          }}
+                          className="w-full py-2 bg-gray-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 text-sm font-bold rounded-xl border border-gray-100 dark:border-slate-700 transition-all flex items-center justify-center gap-2"
+                        >
+                          <Eye size={16} /> View Details
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-12 bg-gray-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-gray-200 dark:border-slate-700">
+                      <ShoppingBag size={32} className="mx-auto text-slate-300 mb-2 opacity-50" />
+                      <p className="text-slate-500 text-sm font-medium">No recent orders found</p>
                     </div>
-                    <div className="flex justify-between items-center text-xs text-slate-900 dark:text-white">
-                      <span>{order.items?.length || 0} Items</span>
-                      <span className="font-bold text-[13px]">Rs. {order.total_amount?.toLocaleString()}</span>
+                  )}
+                </div>
+              </div>
+            </Fragment>
+          ) : (
+            <Fragment>
+              {/* Sidebar Header */}
+              <div className="flex items-center gap-3 mb-4 pb-4 border-b border-gray-100 dark:border-slate-700">
+                <button
+                  onClick={() => setSidebarView('details')}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-all text-slate-400 hover:text-indigo-600"
+                >
+                  <X size={20} />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-[20px] font-black text-slate-900 dark:text-white leading-tight tracking-tight truncate">
+                    Order <span className="text-indigo-600 dark:text-indigo-400">#{selectedSidebarOrder?.order_number}</span>
+                  </h2>
+                  <div className="flex items-center gap-1.5 text-[12px] text-slate-400 font-bold uppercase tracking-widest">
+                    <Calendar size={13} />
+                    <span>Placed {new Date(selectedSidebarOrder?.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+                <span className={`px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-tighter shadow-sm border ${getStatusColor(selectedSidebarOrder?.order_status)}`}>
+                  {selectedSidebarOrder?.order_status}
+                </span>
+              </div>
+
+              <div className="flex-1 space-y-6 custom-scrollbar pb-6 pr-1">
+                {/* Customer Info Card */}
+                <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 rounded-3xl p-5 shadow-sm space-y-4">
+                  <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 mb-1">
+                    <User size={18} />
+                    <h4 className="text-[11px] font-black uppercase tracking-[0.2em]">Customer Info</h4>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="flex items-start gap-4">
+                      <div className="mt-0.5 p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl text-indigo-500">
+                        <User size={16} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Recipient Name</p>
+                        <p className="text-[16px] font-bold text-slate-900 dark:text-white leading-none">{selectedSidebarOrder?.customer_name}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-4">
+                      <div className="mt-0.5 p-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl text-emerald-500">
+                        <Phone size={16} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Contact Number</p>
+                        <p className="text-[16px] font-bold text-slate-900 dark:text-white leading-none tracking-tight">{selectedSidebarOrder?.phone_number}</p>
+                        {selectedSidebarOrder?.alternative_phone && (
+                          <p className="text-xs text-slate-500 font-bold mt-1 bg-gray-100 dark:bg-slate-800 px-2 py-0.5 rounded-md inline-block">{selectedSidebarOrder.alternative_phone}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-4">
+                      <div className="mt-0.5 p-2 bg-amber-50 dark:bg-amber-900/20 rounded-xl text-amber-500">
+                        <MapPin size={16} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Shipping Address</p>
+                        <p className="text-[15px] font-bold text-slate-800 dark:text-slate-200 leading-relaxed">{selectedSidebarOrder?.address}</p>
+                      </div>
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-8 bg-gray-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-gray-200 dark:border-slate-700">
-                  <p className="text-slate-500 text-xs italic">No recent orders found.</p>
                 </div>
-              )}
-            </div>
-          </div>
+
+                {/* Logistics Info Card */}
+                {(selectedSidebarOrder?.logistic_name || selectedSidebarOrder?.courier_provider) && (
+                  <div className="bg-gradient-to-br from-indigo-50/50 to-blue-50/50 dark:from-indigo-900/10 dark:to-blue-900/10 border border-indigo-100/50 dark:border-indigo-800/30 rounded-3xl p-5 shadow-sm">
+                    <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 mb-4">
+                      <Truck size={18} />
+                      <h4 className="text-[11px] font-black uppercase tracking-[0.2em]">Delivery Details</h4>
+                    </div>
+                    <div className="grid grid-cols-2 gap-y-5 gap-x-4">
+                      <div className="col-span-1">
+                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Provider</p>
+                        <p className="text-[14px] font-black text-slate-900 dark:text-white truncate">
+                          {selectedSidebarOrder?.logistic_name || (selectedSidebarOrder?.courier_provider === 'self' ? 'Self Delivery' : selectedSidebarOrder?.courier_provider?.toUpperCase())}
+                        </p>
+                      </div>
+                      {selectedSidebarOrder?.courier_consignment_id && (
+                        <div className="col-span-1">
+                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Consignment</p>
+                          <p className="text-[13px] font-mono font-black text-indigo-600 dark:text-indigo-400 bg-indigo-100/50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-lg border border-indigo-200/50 inline-block">#{selectedSidebarOrder.courier_consignment_id}</p>
+                        </div>
+                      )}
+                      <div className="col-span-1">
+                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Destination</p>
+                        <p className="text-[14px] font-bold text-slate-900 dark:text-white truncate leading-tight">
+                          {selectedSidebarOrder?.city_name || selectedSidebarOrder?.delivery_branch || 'N/A'}
+                        </p>
+                      </div>
+                      <div className="col-span-1">
+                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Est. Shipping</p>
+                        <p className="text-[16px] font-black text-emerald-600 dark:text-emerald-400 tracking-tighter">Rs. {selectedSidebarOrder?.courier_delivery_fee || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Package Description Card */}
+                {selectedSidebarOrder?.package_description && (
+                  <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-100 dark:border-slate-800/30 rounded-2xl p-4 shadow-sm">
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 mb-2">
+                      <Package size={16} />
+                      <h4 className="text-[10px] font-black uppercase tracking-widest">Package Description</h4>
+                    </div>
+                    <p className="text-[14px] font-bold text-slate-900 dark:text-white leading-relaxed">
+                      {selectedSidebarOrder.package_description}
+                    </p>
+                  </div>
+                )}
+
+                {/* Remarks Card */}
+                {selectedSidebarOrder?.remarks && (
+                  <div className="bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30 rounded-2xl p-4 shadow-sm">
+                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 mb-2">
+                      <ClipboardList size={16} />
+                      <h4 className="text-xs font-black uppercase tracking-widest">Order Remarks</h4>
+                    </div>
+                    <p className="text-sm text-slate-700 dark:text-slate-300 italic leading-relaxed">"{selectedSidebarOrder.remarks}"</p>
+                  </div>
+                )}
+
+                {/* Items List */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-2 text-slate-500">
+                      <Package size={16} />
+                      <h4 className="text-[11px] font-black uppercase tracking-widest">Order Items ({selectedSidebarOrder?.items?.length || 0})</h4>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {selectedSidebarOrder?.items?.map((item: any, idx: number) => (
+                      <div key={idx} className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 p-3.5 rounded-2xl shadow-sm flex items-center justify-between gap-4 group hover:border-indigo-200 transition-colors">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-bold text-slate-900 dark:text-white truncate">{item.product_name}</p>
+                          <p className="text-[11px] text-slate-500 font-bold">{item.qty} UNIT{item.qty > 1 ? 'S' : ''} <span className="mx-1 opacity-30">|</span> Rs. {item.amount?.toLocaleString()}</p>
+                        </div>
+                        <p className="text-[14px] font-black text-slate-900 dark:text-white whitespace-nowrap">Rs. {item.total_amount?.toLocaleString()}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Financial Summary */}
+                <div className="bg-slate-900 dark:bg-black text-white p-6 rounded-3xl shadow-xl shadow-slate-900/20 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16" />
+                  <div className="relative z-10 space-y-3">
+                    <div className="flex justify-between items-center opacity-60 text-[10px] font-black uppercase tracking-widest">
+                      <span>Subtotal</span>
+                      <span className="font-mono">Rs. {(selectedSidebarOrder?.total_amount - (selectedSidebarOrder?.delivery_charge || 0)).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center opacity-60 text-[10px] font-black uppercase tracking-widest">
+                      <span>Delivery Charge</span>
+                      <span className="font-mono">Rs. {(selectedSidebarOrder?.delivery_charge || 0).toLocaleString()}</span>
+                    </div>
+                    <div className="h-px bg-white/10 my-2" />
+                    <div className="flex justify-between items-end">
+                      <span className="text-[11px] font-black uppercase tracking-widest opacity-80 mb-1">Total Payable</span>
+                      <span className="text-2xl font-black text-indigo-400 font-mono tracking-tighter">Rs. {selectedSidebarOrder?.total_amount?.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Actions */}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => {
+                      setSelectedOrder(selectedSidebarOrder);
+                      setOrderModalMode('edit');
+                      setIsOrderModalOpen(true);
+                    }}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-indigo-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                  >
+                    <Edit2 size={16} /> Edit Order
+                  </button>
+                  <button
+                    onClick={() => setSidebarView('details')}
+                    className="px-6 bg-gray-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-3.5 rounded-2xl font-bold text-sm hover:bg-gray-200 dark:hover:bg-slate-700 transition-all"
+                  >
+                    Back
+                  </button>
+                </div>
+              </div>
+            </Fragment>
+          )}
         </div>
       </div>
     </Fragment>

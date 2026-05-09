@@ -315,17 +315,27 @@ export default function AutoReplySettings() {
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button
-                                                        onClick={() => handleToggleStatus(rule)}
-                                                        className={`p-2 rounded-lg transition-colors ${rule.is_active ? 'text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20' : 'text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700'}`}
-                                                        title={rule.is_active ? 'Deactivate' : 'Activate'}
-                                                    >
-                                                        {rule.is_active ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                                                    </button>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex flex-col items-end gap-1">
+                                                        <span className={`text-[9px] font-black uppercase tracking-tighter ${rule.is_active ? 'text-emerald-500' : 'text-slate-400'}`}>
+                                                            {rule.is_active ? 'Active' : 'Paused'}
+                                                        </span>
+                                                        <button
+                                                            onClick={() => handleToggleStatus(rule)}
+                                                            className={`relative w-12 h-6 rounded-full transition-all duration-300 outline-none ${
+                                                                rule.is_active 
+                                                                ? 'bg-emerald-500 shadow-lg shadow-emerald-500/20' 
+                                                                : 'bg-slate-200 dark:bg-slate-700'
+                                                            }`}
+                                                        >
+                                                            <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-300 transform ${
+                                                                rule.is_active ? 'translate-x-6' : 'translate-x-0'
+                                                            }`} />
+                                                        </button>
+                                                    </div>
                                                     <button
                                                         onClick={() => handleDeleteRule(rule.id)}
-                                                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                        className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all opacity-0 group-hover:opacity-100"
                                                         title="Delete Rule"
                                                     >
                                                         <Trash2 size={18} />

@@ -23,6 +23,7 @@ export declare class SupabaseService {
         replyToMid?: string;
         replyToText?: string;
         replyToSender?: string;
+        metadata?: any;
     }): Promise<any>;
     getConversations(limit?: number, offset?: number, customerId?: string, user?: any): Promise<any[]>;
     getMessages(conversationId: string, limit?: number, offset?: number): Promise<any[]>;

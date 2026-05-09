@@ -97,16 +97,16 @@ export default function MessageTemplates() {
     };
 
     return (
-        <div className="flex h-full bg-slate-900 text-slate-100 rounded-xl overflow-hidden border border-slate-700">
+        <div className="flex h-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-2xl overflow-hidden border border-gray-200 dark:border-slate-700 shadow-sm transition-colors">
             {/* Sidebar - Status List */}
-            <div className="w-64 bg-slate-800 border-r border-slate-700 flex flex-col">
-                <div className="p-4 border-b border-slate-700">
-                    <h3 className="font-bold text-slate-300 flex items-center gap-2">
-                        <MessageSquare size={18} />
+            <div className="w-64 bg-slate-50 dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 flex flex-col">
+                <div className="p-6 border-b border-gray-200 dark:border-slate-700">
+                    <h3 className="font-black text-slate-900 dark:text-slate-100 flex items-center gap-2 uppercase tracking-widest text-xs">
+                        <MessageSquare size={16} className="text-indigo-500" />
                         Templates
                     </h3>
                 </div>
-                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                <div className="flex-1 overflow-y-auto p-4 space-y-2">
                     {TEMPLATE_STATUSES.map(status => (
                         <button
                             key={status}
@@ -114,9 +114,9 @@ export default function MessageTemplates() {
                                 setSelectedStatus(status);
                                 setStatusMessage(null);
                             }}
-                            className={`w-full text-left px-4 py-3 rounded-lg text-sm transition-colors ${selectedStatus === status
-                                ? 'bg-indigo-600 text-white font-semibold'
-                                : 'text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                            className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all ${selectedStatus === status
+                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
+                                : 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700/50 hover:text-slate-900 dark:hover:text-white'
                                 }`}
                         >
                             {status}
@@ -126,20 +126,20 @@ export default function MessageTemplates() {
             </div>
 
             {/* Main Content - Editor */}
-            <div className="flex-1 flex flex-col">
-                <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+            <div className="flex-1 flex flex-col bg-white dark:bg-slate-900/50">
+                <div className="p-8 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center bg-white dark:bg-slate-800/20">
                     <div>
-                        <h2 className="text-xl font-bold">{selectedStatus}</h2>
-                        <p className="text-xs text-slate-400 mt-1">Customize the message sent for this status</p>
+                        <h2 className="text-2xl font-black text-slate-900 dark:text-white">{selectedStatus}</h2>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Customize the message sent for this status</p>
                     </div>
 
-                    <div className="flex items-center gap-3 bg-slate-700/50 p-1.5 rounded-lg border border-slate-600">
+                    <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl border border-gray-200 dark:border-slate-700">
                         <button
                             onClick={() => handleSave({ isActive: true })}
                             disabled={saving}
-                            className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${activeStatuses[selectedStatus] !== false
-                                ? 'bg-green-600 text-white shadow-lg shadow-green-900/20'
-                                : 'text-slate-400 hover:text-slate-200'
+                            className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${activeStatuses[selectedStatus] !== false
+                                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20'
+                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                                 }`}
                         >
                             Active
@@ -147,50 +147,54 @@ export default function MessageTemplates() {
                         <button
                             onClick={() => handleSave({ isActive: false })}
                             disabled={saving}
-                            className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${activeStatuses[selectedStatus] === false
-                                ? 'bg-red-600 text-white shadow-lg shadow-red-900/20'
-                                : 'text-slate-400 hover:text-slate-200'
+                            className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${activeStatuses[selectedStatus] === false
+                                ? 'bg-red-600 text-white shadow-lg shadow-red-500/20'
+                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                                 }`}
                         >
-                            Deactive
+                            Inactive
                         </button>
                     </div>
                 </div>
 
-                <div className="flex-1 p-6 relative">
+                <div className="flex-1 p-8 relative flex flex-col">
                     {loading ? (
-                        <div className="absolute inset-0 flex items-center justify-center bg-slate-900/50 z-10">
+                        <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-slate-900/50 z-10 backdrop-blur-sm">
                             <Loader className="animate-spin text-indigo-500" size={32} />
                         </div>
                     ) : (
-                        <div className="h-full flex flex-col gap-4">
+                        <div className="h-full flex flex-col gap-6">
                             <div className="flex-1 relative">
                                 <textarea
                                     value={templates[selectedStatus] || ''}
                                     onChange={(e) => handleTemplateChange(e.target.value)}
                                     disabled={activeStatuses[selectedStatus] === false}
                                     placeholder={activeStatuses[selectedStatus] === false ? "Enable this template to edit the message..." : `Enter your template message for ${selectedStatus}...`}
-                                    className={`w-full h-full bg-slate-800 border border-slate-700 rounded-xl p-4 text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none resize-none font-sans leading-relaxed ${activeStatuses[selectedStatus] === false ? 'opacity-50 cursor-not-allowed bg-slate-900/50' : ''}`}
+                                    className={`w-full h-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-[2rem] p-8 text-slate-800 dark:text-slate-100 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none resize-none font-medium leading-relaxed text-lg transition-all ${activeStatuses[selectedStatus] === false ? 'opacity-40 grayscale cursor-not-allowed' : ''}`}
                                 ></textarea>
                                 {activeStatuses[selectedStatus] === false && (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/10 rounded-xl pointer-events-none">
-                                        <div className="bg-slate-800/90 px-4 py-2 rounded-lg border border-slate-600 shadow-xl flex items-center gap-2 text-slate-400">
-                                            <Save size={16} className="text-slate-500" />
+                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md px-6 py-3 rounded-2xl border border-gray-200 dark:border-slate-600 shadow-2xl flex items-center gap-3 text-slate-500 dark:text-slate-400 font-bold">
+                                            <AlertCircle size={20} className="text-amber-500" />
                                             <span>Template is Locked & Inactive</span>
                                         </div>
                                     </div>
                                 )}
-                                <div className="absolute bottom-4 right-4 text-xs text-slate-500 bg-slate-900/80 px-2 py-1 rounded">
-                                    Variables: {'{{customer_name}}'}, {'{{order_number}}'}, {'{{total_amount}}'}
+                                <div className="absolute bottom-6 right-6 flex gap-2">
+                                    {['{{customer_name}}', '{{order_number}}', '{{total_amount}}'].map(v => (
+                                        <span key={v} className="text-[10px] font-black font-mono text-indigo-500 dark:text-indigo-400 bg-white/80 dark:bg-slate-900/80 px-2.5 py-1 rounded-lg border border-indigo-100 dark:border-indigo-500/20 shadow-sm">
+                                            {v}
+                                        </span>
+                                    ))}
                                 </div>
                             </div>
 
                             <div className="flex justify-between items-center">
-                                <div>
+                                <div className="min-h-[24px]">
                                     {statusMessage && (
-                                        <div className={`flex items-center gap-2 text-sm ${statusMessage.type === 'success' ? 'text-green-400' : 'text-red-400'
+                                        <div className={`flex items-center gap-2 text-sm font-bold animate-in fade-in slide-in-from-left-2 duration-300 ${statusMessage.type === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
                                             }`}>
-                                            {statusMessage.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+                                            {statusMessage.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
                                             {statusMessage.text}
                                         </div>
                                     )}
@@ -198,7 +202,7 @@ export default function MessageTemplates() {
                                 <button
                                     onClick={() => handleSave()}
                                     disabled={saving || activeStatuses[selectedStatus] === false}
-                                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-lg font-semibold transition-all shadow-lg shadow-indigo-500/20"
+                                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-10 py-3.5 rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-indigo-600/20 active:scale-95"
                                 >
                                     {saving ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}
                                     Save Template

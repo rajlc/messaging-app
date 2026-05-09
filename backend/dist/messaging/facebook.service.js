@@ -21,7 +21,7 @@ let FacebookService = class FacebookService {
     configService;
     defaultPageAccessToken;
     defaultPageId;
-    apiVersion = 'v18.0';
+    apiVersion = 'v21.0';
     constructor(configService) {
         this.configService = configService;
         this.defaultPageAccessToken = this.configService.get('META_PAGE_ACCESS_TOKEN') || '';
@@ -153,18 +153,25 @@ let FacebookService = class FacebookService {
         }
     }
     async getUserProfile(userId, pageId) {
-        const url = `https://graph.facebook.com/${this.apiVersion}/${userId}`;
         try {
-            console.log(`📥 Fetching profile for Facebook user ${userId} (Page: ${pageId || 'Default'})`);
             const accessToken = await this.getPageAccessToken(pageId);
+            if (!accessToken) {
+                console.warn('No Page Access Token available for fetching profile');
+                return null;
+            }
+            console.log(`📥 Fetching profile for Facebook user ${userId} using ${this.apiVersion} (Page: ${pageId || 'Default'})`);
+            const url = `https://graph.facebook.com/${this.apiVersion}/${userId}`;
             const response = await axios_1.default.get(url, {
                 params: {
                     fields: 'name,first_name,last_name,profile_pic',
                     access_token: accessToken,
                 },
             });
-            console.log('✅ User profile fetched successfully');
-            return response.data;
+            if (response.data) {
+                console.log('✅ User profile fetched successfully');
+                return response.data;
+            }
+            return null;
         }
         catch (error) {
             console.error('❌ Error fetching user profile:', error.response?.data || error.message);

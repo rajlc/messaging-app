@@ -12,6 +12,13 @@ export declare class SettlementsController {
         amount: number;
         date: string;
     }): Promise<any>;
+    updateSettlement(req: any, id: string, body: {
+        amount: number;
+        date: string;
+    }): Promise<any>;
+    deleteSettlement(req: any, id: string): Promise<{
+        success: boolean;
+    }>;
     getAllSettlements(): Promise<any[]>;
     getPendingSummary(req: any): Promise<{
         rider_id: any;

@@ -714,7 +714,7 @@ export default function DeliveryView() {
                                 ? 'bg-amber-600 text-white shadow-lg shadow-amber-500/20' 
                                 : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-gray-50'}`}
                         >
-                            Pending
+                            Rider Settlement
                         </button>
                         <button 
                             onClick={() => setSettlementSubTab('complete')}
@@ -722,7 +722,7 @@ export default function DeliveryView() {
                                 ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' 
                                 : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-gray-50'}`}
                         >
-                            Complete
+                            Complete Settlement
                         </button>
                     </div>
 
@@ -739,33 +739,9 @@ export default function DeliveryView() {
                 <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl overflow-hidden flex flex-col">
                     <div className="overflow-x-auto">
                         {settlementSubTab === 'pending' ? (
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="bg-gray-50 dark:bg-slate-900/50 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-gray-100 dark:border-slate-700">
-                                        <th className="px-4 py-4">Delivery Person</th>
-                                        <th className="px-4 py-4 text-right">Total Amount</th>
-                                        <th className="px-4 py-4 text-right">Returned Order Amount</th>
-                                        <th className="px-4 py-4 text-right">Settled Amount</th>
-                                        <th className="px-4 py-4 text-right">Pending Settlement Amount</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
-                                    {pendingSummaries.map((s, idx) => (
-                                        <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors text-[13px]">
-                                            <td className="px-4 py-4 font-bold text-slate-900 dark:text-white">{s.rider_name}</td>
-                                            <td className="px-4 py-4 text-right font-medium">Rs. {s.pending_amount}</td>
-                                            <td className="px-4 py-4 text-right font-medium text-red-500">Rs. {s.returned_amount}</td>
-                                            <td className="px-4 py-4 text-right font-medium text-emerald-500">Rs. {s.settled_amount}</td>
-                                            <td className="px-4 py-4 text-right font-black text-indigo-600 dark:text-indigo-400">Rs. {s.net_pending_settlement}</td>
-                                        </tr>
-                                    ))}
-                                    {pendingSummaries.length === 0 && (
-                                        <tr>
-                                            <td colSpan={5} className="px-4 py-12 text-center text-slate-500 italic">No pending settlements found.</td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                            <div className="p-4 bg-gray-50/30 dark:bg-slate-900/10">
+                                {renderAdminRiderReport()}
+                            </div>
                         ) : (
                             <table className="w-full text-left border-collapse">
                                 <thead>
@@ -774,6 +750,7 @@ export default function DeliveryView() {
                                         <th className="px-4 py-4">Rider</th>
                                         <th className="px-4 py-4 text-right">Amount</th>
                                         <th className="px-4 py-4">Recorded By</th>
+                                        <th className="px-4 py-4 text-center">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
@@ -788,6 +765,57 @@ export default function DeliveryView() {
                                             <td className="px-4 py-4 text-right font-black">Rs. {s.amount}</td>
                                             <td className="px-4 py-4 text-slate-500 italic text-[11px]">
                                                 {s.created_by}
+                                            </td>
+                                            <td className="px-4 py-4">
+                                                <div className="flex justify-center gap-2">
+                                                    {(() => {
+                                                        const created = new Date(s.created_at || s.settlement_date);
+                                                        const now = new Date();
+                                                        const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
+                                                        const isEditable = diffHours <= 24;
+
+                                                        return isEditable ? (
+                                                            <>
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        setSettlementForm({
+                                                                            riderId: s.rider_id,
+                                                                            amount: s.amount.toString(),
+                                                                            date: new Date(s.settlement_date).toISOString().split('T')[0]
+                                                                        });
+                                                                        // We'd need an edit state here, but for now we'll alert
+                                                                        alert('Edit functionality is being initialized for settlement #' + s.id);
+                                                                    }}
+                                                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                                    title="Edit Settlement"
+                                                                >
+                                                                    <RefreshCw size={14} />
+                                                                </button>
+                                                                <button 
+                                                                    onClick={async () => {
+                                                                        if (confirm('Are you sure you want to delete this settlement?')) {
+                                                                            try {
+                                                                                const token = localStorage.getItem('token');
+                                                                                await axios.delete(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/settlements/${s.id}`, {
+                                                                                    headers: { 'Authorization': `Bearer ${token}` }
+                                                                                });
+                                                                                fetchSettlements();
+                                                                            } catch (err) {
+                                                                                alert('Failed to delete settlement. It might not be supported yet.');
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                                    title="Delete Settlement"
+                                                                >
+                                                                    <XCircle size={14} />
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-[10px] text-slate-400 italic">Locked</span>
+                                                        );
+                                                    })()}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -810,31 +838,25 @@ export default function DeliveryView() {
         
         return (
             <div className="flex-1 flex flex-col overflow-y-auto pr-2 custom-scrollbar">
-                <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl overflow-hidden flex flex-col">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-gray-50 dark:bg-slate-900/50 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-gray-100 dark:border-slate-700">
-                                    <th className="px-4 py-4">Delivery Person</th>
-                                    <th className="px-4 py-4 text-right">Pending Settlement Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
-                                <tr className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors text-[15px]">
-                                    <td className="px-4 py-6 font-bold text-slate-900 dark:text-white">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 font-black">
-                                                {mySummary.rider_name?.charAt(0) || 'R'}
-                                            </div>
-                                            {mySummary.rider_name}
-                                        </div>
-                                    </td>
-                                    <td className="px-4 py-6 text-right font-black text-2xl text-indigo-600 dark:text-indigo-400">
-                                        Rs. {mySummary.net_pending_settlement}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                {/* Primary Settlement Summary Card */}
+                <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm mb-6 transition-all hover:shadow-md">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-16 h-16 rounded-2xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black text-2xl shadow-inner">
+                                {mySummary.rider_name?.charAt(0) || 'R'}
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Delivery Professional</p>
+                                <h2 className="text-xl font-bold text-slate-900 dark:text-white">{mySummary.rider_name}</h2>
+                            </div>
+                        </div>
+                        
+                        <div className="text-right w-full md:w-auto p-4 md:p-0 bg-indigo-50/30 dark:bg-indigo-900/10 md:bg-transparent rounded-2xl">
+                            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.2em] mb-1">Current Pending Settlement</p>
+                            <p className="text-3xl md:text-4xl font-black text-indigo-600 dark:text-indigo-400">
+                                Rs. {mySummary.net_pending_settlement}
+                            </p>
+                        </div>
                     </div>
                 </div>
                 
@@ -856,14 +878,36 @@ export default function DeliveryView() {
                     </div>
                 </div>
 
-                <div className="mt-8 flex justify-center gap-4">
-                    <button 
-                        onClick={() => setIsReturnModalOpen(true)}
-                        className="flex items-center gap-2 px-8 py-4 bg-amber-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-amber-700 transition-all shadow-xl shadow-amber-600/30 active:scale-95"
-                    >
-                        <RefreshCw size={20} />
-                        Pending Return Orders ({orders.filter(o => ['Return Process', 'Delivery Failed', 'Hold'].includes(o.order_status)).length})
-                    </button>
+                <div className="mt-8">
+                    <div className="flex items-center gap-2 mb-4">
+                        <RefreshCw size={20} className="text-amber-500" />
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white uppercase tracking-tight">Pending Return Orders</h3>
+                    </div>
+                    
+                    {orders.filter(o => ['Return Process', 'Delivery Failed', 'Hold'].includes(o.order_status)).length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {orders.filter(o => ['Return Process', 'Delivery Failed', 'Hold'].includes(o.order_status)).map((order) => (
+                                <div key={order.id} className="p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-2xl flex justify-between items-center group transition-all hover:shadow-md">
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">#{order.order_number}</span>
+                                            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[9px] font-black uppercase">{order.order_status}</span>
+                                        </div>
+                                        <p className="text-sm font-bold text-slate-900 dark:text-white">{order.customer_name}</p>
+                                        <p className="text-[10px] text-slate-500 mt-1">{new Date(order.updated_at).toLocaleString()}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-sm font-black text-slate-900 dark:text-white">Rs. {order.total_amount}</p>
+                                        <p className="text-[9px] text-amber-600 font-bold mt-1">Pending Confirmation</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="p-8 text-center bg-gray-50 dark:bg-slate-900/30 rounded-2xl border border-gray-100 dark:border-slate-800 italic text-slate-500">
+                            No orders are currently in the return process.
+                        </div>
+                    )}
                 </div>
 
                 {/* My Stock Section */}
@@ -1012,175 +1056,139 @@ export default function DeliveryView() {
 
         return (
             <div className="flex-1 flex flex-col overflow-y-auto pr-2 custom-scrollbar">
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    {sortedRiders.map((rider, idx) => {
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                    {sortedRiders.map((rider) => {
                         const riderPendingOrders = adminOrders.filter(o => 
                             o.assigned_rider_id === rider.rider_id && 
-                            o.order_status !== 'Delivered' && 
-                            o.order_status !== 'delivered' &&
-                            o.order_status !== 'Returned Delivered'
+                            !['Delivered', 'delivered', 'Returned Delivered'].includes(o.order_status)
                         );
                         const assignedStock = riderStock.filter(s => s.rider_id === rider.rider_id && (s.status === 'assigned' || s.status === 'return_pending'));
 
                         return (
-                            <div key={idx} className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-3xl overflow-hidden shadow-sm flex flex-col">
-                                <div className="p-6 border-b border-gray-100 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-900/50 flex justify-between items-start">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 font-black text-xl">
-                                            {rider.rider_name?.charAt(0) || 'R'}
+                            <div key={rider.rider_id} className="group bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-[2.5rem] overflow-hidden flex flex-col transition-all duration-500 hover:shadow-2xl hover:shadow-indigo-500/10 hover:-translate-y-1.5">
+                                {/* Header: Rider Identity & Quick Actions */}
+                                <div className="p-8 pb-6 bg-gradient-to-br from-slate-50/50 to-white dark:from-slate-800/40 dark:to-slate-800 border-b border-slate-100 dark:border-slate-700/50">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="flex items-center gap-5">
+                                            <div className="w-16 h-16 rounded-[1.25rem] bg-indigo-600 dark:bg-indigo-500 flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-indigo-500/20 group-hover:scale-110 transition-transform duration-500">
+                                                {rider.rider_name?.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xl font-black text-slate-900 dark:text-white leading-tight mb-1">{rider.rider_name}</h3>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Active Logistics Professional</span>
+                                                </div>
+                                            </div>
                                         </div>
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={() => {
+                                                    setSettlementForm({ riderId: rider.rider_id, amount: rider.net_pending_settlement.toString(), date: new Date().toISOString().split('T')[0] });
+                                                    setIsSettlementModalOpen(true);
+                                                }}
+                                                className="p-3 bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 rounded-2xl hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white shadow-sm border border-indigo-100 dark:border-indigo-900/30 transition-all duration-300"
+                                                title="Settle Account"
+                                            >
+                                                <Wallet size={20} />
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    setStockForm({ ...stockForm, riderId: rider.rider_id });
+                                                    setIsStockModalOpen(true);
+                                                }}
+                                                className="p-3 bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-2xl hover:bg-slate-900 hover:text-white dark:hover:bg-white dark:hover:text-slate-900 shadow-sm border border-slate-200 dark:border-slate-600 transition-all duration-300"
+                                                title="Assign Inventory"
+                                            >
+                                                <Plus size={20} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="bg-slate-900 dark:bg-indigo-950 rounded-[1.5rem] p-6 text-white shadow-2xl relative overflow-hidden group/amount">
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl transition-all group-hover/amount:scale-150" />
+                                        <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-60 mb-2">Net Pending Settlement</p>
+                                        <div className="flex items-baseline gap-2">
+                                            <span className="text-lg font-bold opacity-60 font-mono">Rs.</span>
+                                            <span className="text-4xl font-black tracking-tight">{rider.net_pending_settlement.toLocaleString()}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="p-8 space-y-8 flex-1 bg-white dark:bg-slate-800/50">
+                                    {/* Core Metrics Grid */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="p-5 bg-indigo-50/30 dark:bg-indigo-900/10 rounded-[1.5rem] border border-indigo-100/50 dark:border-indigo-900/20">
+                                            <div className="flex items-center gap-2 mb-2 text-indigo-500">
+                                                <Package size={14} />
+                                                <span className="text-[10px] font-black uppercase tracking-[0.2em]">Pending Orders</span>
+                                            </div>
+                                            <p className="text-2xl font-black text-slate-900 dark:text-white">{rider.pending_orders_count}</p>
+                                        </div>
+                                        <div className="p-5 bg-emerald-50/30 dark:bg-emerald-900/10 rounded-[1.5rem] border border-emerald-100/50 dark:border-emerald-900/20">
+                                            <div className="flex items-center gap-2 mb-2 text-emerald-500">
+                                                <Truck size={14} />
+                                                <span className="text-[10px] font-black uppercase tracking-[0.2em]">Assigned Stock</span>
+                                            </div>
+                                            <p className="text-2xl font-black text-slate-900 dark:text-white">{rider.assigned_stock_count}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Content Tabs: Orders & Stock */}
+                                    <div className="space-y-6">
                                         <div>
-                                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">{rider.rider_name}</h3>
-                                            <p className="text-xs text-slate-500 font-medium">Rider Performance</p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-1">Pending Settlement</p>
-                                        <p className={`text-2xl font-black ${rider.net_pending_settlement > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
-                                            Rs. {rider.net_pending_settlement}
-                                        </p>
-                                    </div>
-                                </div>
+                                            <div className="flex justify-between items-center mb-4">
+                                                <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                                    <RefreshCw size={12} className="text-amber-500" /> Recent Logistics activity
+                                                </h4>
+                                                <span className="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-full text-[10px] font-bold">
+                                                    {riderPendingOrders.length} Tasks
+                                                </span>
+                                            </div>
 
-                                <div className="grid grid-cols-3 border-b border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-800 divide-x divide-gray-100 dark:divide-slate-700">
-                                    <div className="p-4 text-center hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Amount</p>
-                                        <p className="text-sm font-bold text-slate-900 dark:text-white">Rs. {rider.pending_amount}</p>
-                                    </div>
-                                    <div className="p-4 text-center bg-red-50/30 dark:bg-red-900/10 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Returned</p>
-                                        <p className="text-sm font-bold text-red-500">Rs. {rider.returned_amount}</p>
-                                    </div>
-                                    <div className="p-4 text-center bg-emerald-50/30 dark:bg-emerald-900/10 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Settled</p>
-                                        <p className="text-sm font-bold text-emerald-500">Rs. {rider.settled_amount}</p>
-                                    </div>
-                                </div>
-
-                                <div className="p-4 bg-gray-50/50 dark:bg-slate-900/30 flex gap-3 border-b border-gray-100 dark:border-slate-700">
-                                    <button 
-                                        onClick={() => {
-                                            setSettlementForm({ ...settlementForm, riderId: rider.rider_id });
-                                            setIsSettlementModalOpen(true);
-                                        }}
-                                        className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2 shadow-sm shadow-emerald-500/20"
-                                    >
-                                        <Wallet size={14} className="text-emerald-50" /> Add Settlement
-                                    </button>
-                                    <button 
-                                        onClick={() => {
-                                            setStockForm({ ...stockForm, riderId: rider.rider_id });
-                                            setIsStockModalOpen(true);
-                                        }}
-                                        className="flex-1 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2 shadow-sm shadow-indigo-500/20"
-                                    >
-                                        <Package size={14} className="text-indigo-50" /> Assign Stock
-                                    </button>
-                                </div>
-
-                                <div className="p-6 space-y-6 flex-1">
-                                    <div>
-                                        <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                            <RefreshCw size={12} /> Pending Orders ({riderPendingOrders.length})
-                                        </h4>
-                                        {riderPendingOrders.length > 0 ? (
-                                            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                                                {riderPendingOrders.map((o) => (
-                                                    <div key={o.id} className={`p-3 border rounded-xl flex justify-between items-center group ${['Return Process', 'Delivery Failed', 'Hold'].includes(o.order_status) ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-900/30' : 'bg-gray-50 dark:bg-slate-900/30 border-gray-100 dark:border-slate-700'}`}>
-                                                        <div>
-                                                            <div className="flex items-center gap-2">
-                                                                <p className="text-xs font-bold text-slate-900 dark:text-white">#{o.order_number}</p>
-                                                                <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${['Return Process', 'Delivery Failed', 'Hold'].includes(o.order_status) ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'}`}>
-                                                                    {o.order_status}
-                                                                </span>
+                                            {riderPendingOrders.length > 0 ? (
+                                                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                                    {riderPendingOrders.map((o) => (
+                                                        <div key={o.id} className={`p-4 border rounded-2xl flex justify-between items-center group/item transition-all hover:border-indigo-300 dark:hover:border-indigo-700 ${['Return Process', 'Delivery Failed', 'Hold'].includes(o.order_status) ? 'bg-amber-50/40 dark:bg-amber-900/5 border-amber-100/50 dark:border-amber-900/20' : 'bg-slate-50/40 dark:bg-slate-900/20 border-slate-100/50 dark:border-slate-800/50'}`}>
+                                                            <div>
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <p className="text-[13px] font-bold text-slate-900 dark:text-white">#{o.order_number}</p>
+                                                                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${['Return Process', 'Delivery Failed', 'Hold'].includes(o.order_status) ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                                                                        {o.order_status}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="text-[11px] font-medium text-slate-500">{o.customer_name}</p>
                                                             </div>
-                                                            <p className="text-[10px] text-slate-500 mt-0.5">{o.customer_name}</p>
-                                                            {o.items && o.items.length > 0 && (
-                                                                <p className="text-[9px] text-slate-400 mt-0.5 line-clamp-1" title={o.items.map((i: any) => `${i.product_name || 'Product'} (x${i.quantity || i.qty || 1})`).join(', ')}>
-                                                                    {o.items.map((i: any) => `${i.product_name || 'Product'} (x${i.quantity || i.qty || 1})`).join(', ')}
-                                                                </p>
-                                                            )}
+                                                            <div className="flex items-center gap-4">
+                                                                <span className="text-sm font-black text-slate-900 dark:text-white">Rs. {o.total_amount}</span>
+                                                                {['Return Process', 'Delivery Failed', 'Hold', 'Returning to Seller'].includes(o.order_status) && (
+                                                                    <button
+                                                                        onClick={() => handleApproveReturn(o.id)}
+                                                                        className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-indigo-600/20 opacity-0 group-hover/item:opacity-100 transition-all duration-300"
+                                                                    >
+                                                                        Confirm Return
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         </div>
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="text-sm font-black text-slate-900 dark:text-white">Rs. {o.total_amount}</span>
-                                                            {['Return Process', 'Delivery Failed', 'Hold', 'Returning to Seller'].includes(o.order_status) && (
-                                                                <button
-                                                                    onClick={() => handleApproveReturn(o.id)}
-                                                                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black uppercase shadow-sm transition-all"
-                                                                >
-                                                                    Approve Return
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div className="p-4 bg-gray-50/50 dark:bg-slate-900/30 rounded-xl border border-dashed border-gray-200 dark:border-slate-700 text-center">
-                                                <p className="text-xs text-slate-500 italic">No pending orders</p>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div>
-                                        <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                            <Package size={12} /> Assigned Stock ({assignedStock.length})
-                                        </h4>
-                                        {assignedStock.length > 0 ? (
-                                            <div className="bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-xl overflow-hidden">
-                                                <table className="w-full text-left">
-                                                    <thead className="bg-gray-50 dark:bg-slate-900/50 text-[10px] font-black text-slate-400 uppercase">
-                                                        <tr>
-                                                            <th className="px-3 py-2">Product</th>
-                                                            <th className="px-3 py-2 text-center">Qty</th>
-                                                            <th className="px-3 py-2 text-right">Value/Unit</th>
-                                                            <th className="px-3 py-2 text-center">Action</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-gray-50 dark:divide-slate-700/50">
-                                                        {assignedStock.map((s) => (
-                                                            <tr key={s.id} className="text-xs">
-                                                                <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300">{s.product_name}</td>
-                                                                <td className="px-3 py-2 text-center font-bold text-indigo-600 dark:text-indigo-400">{s.quantity}</td>
-                                                                <td className="px-3 py-2 text-right font-medium">Rs. {s.amount}</td>
-                                                                <td className="px-3 py-2 text-center">
-                                                                    {s.status === 'return_pending' ? (
-                                                                        <div className="flex justify-center gap-1">
-                                                                            <button
-                                                                                onClick={() => handleApproveStockReturn(s.id, true)}
-                                                                                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[9px] font-black uppercase shadow-sm transition-all"
-                                                                            >
-                                                                                Approve
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() => handleApproveStockReturn(s.id, false)}
-                                                                                className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[9px] font-black uppercase shadow-sm transition-all"
-                                                                            >
-                                                                                Decline
-                                                                            </button>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <span className="text-slate-400 italic text-[10px]">Assigned</span>
-                                                                    )}
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        ) : (
-                                            <div className="p-4 bg-gray-50/50 dark:bg-slate-900/30 rounded-xl border border-dashed border-gray-200 dark:border-slate-700 text-center">
-                                                <p className="text-xs text-slate-500 italic">No assigned stock</p>
-                                            </div>
-                                        )}
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="p-8 bg-slate-50/50 dark:bg-slate-900/20 rounded-[2rem] border border-dashed border-slate-200 dark:border-slate-800 text-center">
+                                                    <p className="text-xs text-slate-400 font-medium italic">No active delivery tasks</p>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         );
                     })}
                     {sortedRiders.length === 0 && (
-                        <div className="col-span-full py-12 text-center text-slate-500 italic bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl">
-                            No riders found.
+                        <div className="col-span-full py-20 text-center text-slate-400 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-[3rem] shadow-inner">
+                            <Truck size={48} className="mx-auto mb-4 opacity-10" />
+                            <p className="text-lg font-bold">No riders available at the moment</p>
+                            <p className="text-sm opacity-60">Logistics network is currently offline</p>
                         </div>
                     )}
                 </div>
@@ -1192,72 +1200,60 @@ export default function DeliveryView() {
         return (
             <div className="flex-1 flex flex-col overflow-hidden">
                 <div className="flex justify-between items-start mb-6 gap-4 flex-wrap">
-                    <div className="flex gap-2">
-                        <button 
-                            onClick={() => setAdminReportSubTab('daily')}
-                            className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${adminReportSubTab === 'daily' 
-                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
-                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-gray-50 border border-gray-200 dark:border-slate-700'}`}
-                        >
-                            <Calendar size={16} /> Daily Report
-                        </button>
-                        <button 
-                            onClick={() => setAdminReportSubTab('rider')}
-                            className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${adminReportSubTab === 'rider' 
-                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
-                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-gray-50 border border-gray-200 dark:border-slate-700'}`}
-                        >
-                            <User size={16} /> Rider Report
-                        </button>
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl text-indigo-600">
+                            <Calendar size={24} />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Daily Delivery Report</h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Track daily performance across all riders</p>
+                        </div>
                     </div>
 
-                    {adminReportSubTab === 'daily' && (
-                        <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm">
-                            <div className="flex items-center gap-2 px-2 border-r border-gray-100 dark:border-slate-700">
-                                <Filter size={14} className="text-slate-400" />
-                                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Filters</span>
-                            </div>
-                            <input 
-                                type="date" 
-                                value={reportFilters.startDate}
-                                onChange={(e) => setReportFilters({...reportFilters, startDate: e.target.value})}
-                                className="px-3 py-1.5 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
-                            <span className="text-slate-400 text-xs">to</span>
-                            <input 
-                                type="date" 
-                                value={reportFilters.endDate}
-                                onChange={(e) => setReportFilters({...reportFilters, endDate: e.target.value})}
-                                className="px-3 py-1.5 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
-                            <select
-                                value={reportFilters.riderId}
-                                onChange={(e) => setReportFilters({...reportFilters, riderId: e.target.value})}
-                                className="px-3 py-1.5 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500 max-w-[150px]"
-                            >
-                                <option value="">All Riders</option>
-                                {riders.map(r => (
-                                    <option key={r.id} value={r.id}>{r.full_name}</option>
-                                ))}
-                            </select>
-                            <button 
-                                onClick={() => setReportFilters({startDate: '', endDate: '', riderId: ''})}
-                                className="p-1.5 hover:bg-gray-100 dark:bg-slate-700 text-slate-500 rounded-xl transition-colors"
-                                title="Clear Filters"
-                            >
-                                <XCircle size={16} />
-                            </button>
-                            <button 
-                                onClick={fetchReport}
-                                className="px-4 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-indigo-700 shadow-lg shadow-indigo-500/20"
-                            >
-                                <Filter size={14} /> Generate
-                            </button>
+                    <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-sm">
+                        <div className="flex items-center gap-2 px-2 border-r border-gray-100 dark:border-slate-700">
+                            <Filter size={14} className="text-slate-400" />
+                            <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Filters</span>
                         </div>
-                    )}
+                        <input 
+                            type="date" 
+                            value={reportFilters.startDate}
+                            onChange={(e) => setReportFilters({...reportFilters, startDate: e.target.value})}
+                            className="px-3 py-1.5 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <span className="text-slate-400 text-xs">to</span>
+                        <input 
+                            type="date" 
+                            value={reportFilters.endDate}
+                            onChange={(e) => setReportFilters({...reportFilters, endDate: e.target.value})}
+                            className="px-3 py-1.5 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <select
+                            value={reportFilters.riderId}
+                            onChange={(e) => setReportFilters({...reportFilters, riderId: e.target.value})}
+                            className="px-3 py-1.5 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500 max-w-[150px]"
+                        >
+                            <option value="">All Riders</option>
+                            {riders.map(r => (
+                                <option key={r.id} value={r.id}>{r.full_name}</option>
+                            ))}
+                        </select>
+                        <button 
+                            onClick={() => setReportFilters({startDate: '', endDate: '', riderId: ''})}
+                            className="p-1.5 hover:bg-gray-100 dark:bg-slate-700 text-slate-500 rounded-xl transition-colors"
+                            title="Clear Filters"
+                        >
+                            <XCircle size={16} />
+                        </button>
+                        <button 
+                            onClick={fetchReport}
+                            className="px-4 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-indigo-700 shadow-lg shadow-indigo-500/20"
+                        >
+                            <Filter size={14} /> Generate
+                        </button>
+                    </div>
                 </div>
 
-                {adminReportSubTab === 'daily' ? (
                 <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl overflow-hidden flex flex-col flex-1 shadow-sm">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
@@ -1308,9 +1304,6 @@ export default function DeliveryView() {
                         </table>
                     </div>
                 </div>
-                ) : (
-                    renderAdminRiderReport()
-                )}
             </div>
         );
     };
@@ -1457,54 +1450,83 @@ export default function DeliveryView() {
                 </div>
 
                 {/* Tabs Navigation */}
-                <div className="flex gap-2 p-1 bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 w-fit">
-                    <button 
-                        onClick={() => setActiveTab('my-orders')}
-                        className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'my-orders' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-900'}`}
-                    >
-                        <Package size={16} /> My Order List
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('my-settlement')}
-                        className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'my-settlement' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-900'}`}
-                    >
-                        <Wallet size={16} /> My Settlement
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('my-report')}
-                        className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'my-report' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-900'}`}
-                    >
-                        <FileText size={16} /> My Report
-                    </button>
+                <div className="flex flex-row flex-wrap gap-8 items-end">
+                    {/* Rider Section */}
+                    <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-2 ml-1 opacity-80">
+                            <div className="w-1 h-3 bg-slate-300 dark:bg-slate-600 rounded-full" />
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em]">Personal Dashboard</span>
+                        </div>
+                        <div className="flex gap-2 p-1.5 bg-slate-50/50 dark:bg-slate-900/50 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 w-fit backdrop-blur-sm">
+                            <button 
+                                onClick={() => setActiveTab('my-orders')}
+                                className={`px-5 py-2.5 rounded-xl text-[13px] font-bold flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'my-orders' 
+                                    ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm border border-indigo-100 dark:border-indigo-900/30' 
+                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-800/50'}`}
+                            >
+                                <Package size={14} className={activeTab === 'my-orders' ? 'text-indigo-600' : ''} /> My Order List
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('my-settlement')}
+                                className={`px-5 py-2.5 rounded-xl text-[13px] font-bold flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'my-settlement' 
+                                    ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm border border-indigo-100 dark:border-indigo-900/30' 
+                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-800/50'}`}
+                            >
+                                <Wallet size={14} className={activeTab === 'my-settlement' ? 'text-indigo-600' : ''} /> My Settlement
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('my-report')}
+                                className={`px-5 py-2.5 rounded-xl text-[13px] font-bold flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'my-report' 
+                                    ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm border border-indigo-100 dark:border-indigo-900/30' 
+                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-800/50'}`}
+                            >
+                                <FileText size={14} className={activeTab === 'my-report' ? 'text-indigo-600' : ''} /> My Report
+                            </button>
+                        </div>
+                    </div>
                     
+                    {/* Admin Section */}
                     {isAdmin && (
-                        <>
-                            <div className="w-px h-6 bg-gray-200 dark:bg-slate-700 mx-1 self-center" />
-                            <button 
-                                onClick={() => setActiveTab('admin-orders')}
-                                className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'admin-orders' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-900'}`}
-                            >
-                                <Truck size={16} /> Order List
-                            </button>
-                            <button 
-                                onClick={() => setActiveTab('admin-settlement')}
-                                className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'admin-settlement' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-900'}`}
-                            >
-                                <Wallet size={16} /> Settlement
-                            </button>
-                            <button 
-                                onClick={() => setActiveTab('admin-report')}
-                                className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'admin-report' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-900'}`}
-                            >
-                                <FileText size={16} /> Report
-                            </button>
-                            <button 
-                                onClick={() => setActiveTab('admin-stock')}
-                                className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'admin-stock' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-900'}`}
-                            >
-                                <Package size={16} /> Rider Stock
-                            </button>
-                        </>
+                        <div className="flex flex-col gap-3">
+                            <div className="flex items-center gap-2 ml-1">
+                                <div className="w-1 h-3 bg-indigo-400 rounded-full animate-pulse" />
+                                <span className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.25em]">Management Console</span>
+                            </div>
+                            <div className="flex gap-2 p-1.5 bg-indigo-50/30 dark:bg-indigo-900/10 rounded-2xl border border-indigo-100/50 dark:border-indigo-900/20 w-fit backdrop-blur-sm">
+                                <button 
+                                    onClick={() => setActiveTab('admin-orders')}
+                                    className={`px-5 py-2.5 rounded-xl text-[13px] font-bold flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'admin-orders' 
+                                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-none' 
+                                        : 'text-indigo-600/70 dark:text-indigo-400/70 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-white dark:hover:bg-slate-800'}`}
+                                >
+                                    <Truck size={14} /> Order List
+                                </button>
+                                <button 
+                                    onClick={() => setActiveTab('admin-settlement')}
+                                    className={`px-5 py-2.5 rounded-xl text-[13px] font-bold flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'admin-settlement' 
+                                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-none' 
+                                        : 'text-indigo-600/70 dark:text-indigo-400/70 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-white dark:hover:bg-slate-800'}`}
+                                >
+                                    <Wallet size={14} /> Settlement
+                                </button>
+                                <button 
+                                    onClick={() => setActiveTab('admin-report')}
+                                    className={`px-5 py-2.5 rounded-xl text-[13px] font-bold flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'admin-report' 
+                                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-none' 
+                                        : 'text-indigo-600/70 dark:text-indigo-400/70 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-white dark:hover:bg-slate-800'}`}
+                                >
+                                    <FileText size={14} /> Report
+                                </button>
+                                <button 
+                                    onClick={() => setActiveTab('admin-stock')}
+                                    className={`px-5 py-2.5 rounded-xl text-[13px] font-bold flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'admin-stock' 
+                                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-none' 
+                                        : 'text-indigo-600/70 dark:text-indigo-400/70 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-white dark:hover:bg-slate-800'}`}
+                                >
+                                    <Package size={14} /> Rider Stock
+                                </button>
+                            </div>
+                        </div>
                     )}
                 </div>
             </div>

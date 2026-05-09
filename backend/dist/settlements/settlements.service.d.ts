@@ -26,4 +26,8 @@ export declare class SettlementsService {
         net_pending_settlement: number;
     }>;
     getDeliveryReport(startDate?: string, endDate?: string, riderId?: string): Promise<any[]>;
+    updateSettlement(id: string, amount: number, date: string, actorName: string): Promise<any>;
+    deleteSettlement(id: string): Promise<{
+        success: boolean;
+    }>;
 }

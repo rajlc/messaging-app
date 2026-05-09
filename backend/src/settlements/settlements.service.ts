@@ -216,4 +216,64 @@ export class SettlementsService {
         // Convert map to array and sort by date desc
         return Array.from(reportMap.values()).sort((a, b) => b.date.localeCompare(a.date));
     }
+
+    async updateSettlement(id: string, amount: number, date: string, actorName: string) {
+        // 1. Check if it exists and is within 24 hours
+        const { data: existing, error: fetchError } = await supabaseService.getSupabaseClient()
+            .from('rider_settlements')
+            .select('created_at')
+            .eq('id', id)
+            .single();
+        
+        if (fetchError || !existing) throw new Error('Settlement not found');
+        
+        const created = new Date(existing.created_at);
+        const now = new Date();
+        const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
+        
+        if (diffHours > 24) {
+            throw new Error('Settlements can only be modified within 24 hours of creation');
+        }
+
+        const { data, error } = await supabaseService.getSupabaseClient()
+            .from('rider_settlements')
+            .update({
+                amount: amount,
+                settlement_date: date,
+                updated_by: actorName,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id)
+            .select();
+        
+        if (error) throw error;
+        return data[0];
+    }
+
+    async deleteSettlement(id: string) {
+        // 1. Check if it exists and is within 24 hours
+        const { data: existing, error: fetchError } = await supabaseService.getSupabaseClient()
+            .from('rider_settlements')
+            .select('created_at')
+            .eq('id', id)
+            .single();
+        
+        if (fetchError || !existing) throw new Error('Settlement not found');
+        
+        const created = new Date(existing.created_at);
+        const now = new Date();
+        const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
+        
+        if (diffHours > 24) {
+            throw new Error('Settlements can only be deleted within 24 hours of creation');
+        }
+
+        const { error } = await supabaseService.getSupabaseClient()
+            .from('rider_settlements')
+            .delete()
+            .eq('id', id);
+        
+        if (error) throw error;
+        return { success: true };
+    }
 }

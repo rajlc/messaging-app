@@ -32,6 +32,31 @@ let SettlementsController = class SettlementsController {
         const actorName = req.user.full_name || req.user.email;
         return this.settlementsService.createSettlement(body.riderId, body.amount, body.date, actorName);
     }
+    async updateSettlement(req, id, body) {
+        const role = req.user.role?.toLowerCase();
+        if (role !== 'admin' && role !== 'editor') {
+            throw new common_1.UnauthorizedException('Admin or Editor access required');
+        }
+        const actorName = req.user.full_name || req.user.email;
+        try {
+            return await this.settlementsService.updateSettlement(id, body.amount, body.date, actorName);
+        }
+        catch (error) {
+            throw new common_1.ForbiddenException(error.message);
+        }
+    }
+    async deleteSettlement(req, id) {
+        const role = req.user.role?.toLowerCase();
+        if (role !== 'admin' && role !== 'editor') {
+            throw new common_1.UnauthorizedException('Admin or Editor access required');
+        }
+        try {
+            return await this.settlementsService.deleteSettlement(id);
+        }
+        catch (error) {
+            throw new common_1.ForbiddenException(error.message);
+        }
+    }
     async getAllSettlements() {
         return this.settlementsService.getAllSettlements();
     }
@@ -74,6 +99,25 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], SettlementsController.prototype, "createSettlement", null);
+__decorate([
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
+    (0, common_1.Patch)(':id'),
+    __param(0, (0, common_1.Request)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Object]),
+    __metadata("design:returntype", Promise)
+], SettlementsController.prototype, "updateSettlement", null);
+__decorate([
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
+    (0, common_1.Delete)(':id'),
+    __param(0, (0, common_1.Request)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], SettlementsController.prototype, "deleteSettlement", null);
 __decorate([
     (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.Get)(),

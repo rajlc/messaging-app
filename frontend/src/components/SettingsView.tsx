@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { Settings, MessageSquare, CreditCard, Users, Bell, Database, Package, Zap, Truck, Globe, Bot } from 'lucide-react';
+import { Settings, MessageSquare, CreditCard, Users, Bell, Database, Package, Zap, Truck, Globe, Bot, ArrowLeft } from 'lucide-react';
 import MessageTemplates from './settings/MessageTemplates';
 import QuickReplyTemplates from './settings/QuickReplyTemplates';
 import InventorySettings from './settings/InventorySettings';
@@ -28,13 +28,8 @@ export default function SettingsView() {
     };
 
     const allSections = [
-        { id: 'templates', label: 'Message Templates', icon: MessageSquare, description: 'Customize auto-replies for order statuses' },
-        { id: 'quick-reply', label: 'Quick Reply Templates', icon: Zap, description: 'Create quick response templates for common inquiries' },
-        { id: 'pages', label: 'Connected Pages', icon: Globe, description: 'Manage Facebook/Instagram page connections' },
-        { id: 'ai-agent', label: 'AI Agent', icon: Bot, description: 'Configure AI auto-replies' },
-        { id: 'auto-reply', label: 'Auto Reply', icon: MessageSquare, description: 'Set up automatic responses for keywords and phone numbers' },
-        { id: 'inventory', label: 'Inventory Integration', icon: Database, description: 'Connect to external inventory system' },
-        { id: 'logistics', label: 'Logistic Integration', icon: Truck, description: 'Configure Pathao and Pick & Drop credentials' },
+        { id: 'ai-messages', label: 'AI & Messages', icon: Bot, description: 'Manage AI Agent, Message Templates, Quick Replies, and Auto Reply' },
+        { id: 'integrations', label: 'Integrations', icon: Globe, description: 'Manage Social Media, Inventory, and Logistic Integrations' },
         { id: 'products', label: 'Inventory Products', icon: Package, description: 'View synced products from Inventory App' },
         { id: 'team', label: 'Staff Management', icon: Users, description: 'Manage access and permissions' },
         { id: 'general', label: 'General Settings', icon: Settings, description: 'App preferences and defaults' },
@@ -46,14 +41,14 @@ export default function SettingsView() {
     const allowedSectionIds = (() => {
         if (!user) return [];
         if (user.role === 'admin') return allSections.map(s => s.id);
-        if (user.role === 'editor') return ['templates', 'quick-reply', 'products', 'ai-agent', 'auto-reply'];
+        if (user.role === 'editor') return ['ai-messages', 'integrations', 'products'];
         return [];
     })();
 
     const sections = allSections.filter(s => allowedSectionIds.includes(s.id));
 
     const isImplemented = (id: string) =>
-        ['templates', 'quick-reply', 'inventory', 'products', 'logistics', 'pages', 'team', 'ai-agent', 'auto-reply'].includes(id);
+        ['ai-messages', 'integrations', 'products', 'team'].includes(id);
 
     // Breadcrumb helper
     const Breadcrumb = ({ label }: { label: string }) => (
@@ -72,59 +67,145 @@ export default function SettingsView() {
     return (
         <div className="flex-1 flex flex-col bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 h-full overflow-hidden transition-colors duration-200">
             {/* Header */}
-            <div className="h-16 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 flex items-center px-6 flex-shrink-0 shadow-sm">
-                <h2 className="text-xl font-bold flex items-center gap-2 text-slate-900 dark:text-white">
-                    <Settings className="text-indigo-500 dark:text-slate-400" size={22} />
-                    Settings
-                </h2>
+            <div className="h-16 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-6 flex-shrink-0 shadow-sm">
+                <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+                        {activeSection === 'gallery' ? (
+                            <>
+                                <Settings className="text-indigo-500 dark:text-slate-400" size={22} />
+                                Settings
+                            </>
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                <span 
+                                    onClick={() => setActiveSection('gallery')}
+                                    className="text-slate-400 hover:text-indigo-600 cursor-pointer transition-colors"
+                                >
+                                    Settings
+                                </span>
+                                <span className="text-slate-300 dark:text-slate-600">/</span>
+                                <span className="text-slate-900 dark:text-white">
+                                    {sections.find(s => s.id === activeSection)?.label}
+                                </span>
+                            </div>
+                        )}
+                    </h2>
+                </div>
+
+                {activeSection !== 'gallery' && (
+                    <button 
+                        onClick={() => setActiveSection('gallery')}
+                        className="px-4 py-2 bg-slate-50 dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-xl transition-all flex items-center gap-2 group border border-gray-100 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-indigo-500/30 shadow-sm"
+                    >
+                        <ArrowLeft size={18} className="transition-transform group-hover:-translate-x-1" />
+                        <span className="text-xs font-black uppercase tracking-widest">Back</span>
+                    </button>
+                )}
             </div>
 
             <div className="flex-1 overflow-hidden flex">
 
                 {/* Main Content Area */}
-                {activeSection === 'templates' ? (
-                    <div className="flex-1 p-6 h-full overflow-hidden flex flex-col">
-                        <Breadcrumb label="Message Templates" />
-                        <MessageTemplates />
+                {activeSection === 'ai-messages' ? (
+                    <div className="flex-1 flex flex-col h-full overflow-hidden">
+                        <div className="flex-1 flex overflow-hidden">
+                            {/* Sub Sidebar */}
+                            <div className="w-64 border-r border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 flex flex-col p-4 gap-2">
+                                {[
+                                    { id: 'ai-agent', label: 'AI Agent', icon: Bot },
+                                    { id: 'quick-reply', label: 'Quick Reply Templates', icon: Zap },
+                                    { id: 'auto-reply', label: 'Auto Reply', icon: MessageSquare },
+                                    { id: 'templates', label: 'Message Templates', icon: MessageSquare }
+                                ].map((sub) => {
+                                    const subActive = (searchParams.get('sub') || 'ai-agent') === sub.id;
+                                    return (
+                                        <button
+                                            key={sub.id}
+                                            onClick={() => {
+                                                const params = new URLSearchParams(searchParams.toString());
+                                                params.set('sub', sub.id);
+                                                router.push(`${pathname}?${params.toString()}`);
+                                            }}
+                                            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
+                                                subActive 
+                                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
+                                                : 'text-slate-500 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                                            }`}
+                                        >
+                                            <sub.icon size={18} />
+                                            {sub.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                                {/* Sub Content Area */}
+                                <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
+                                    {(() => {
+                                        const sub = searchParams.get('sub') || 'ai-agent';
+                                        switch (sub) {
+                                            case 'ai-agent': return <AIAgentSettings />;
+                                            case 'quick-reply': return <QuickReplyTemplates />;
+                                            case 'auto-reply': return <AutoReplySettings />;
+                                            case 'templates': return <MessageTemplates />;
+                                            default: return <AIAgentSettings />;
+                                        }
+                                    })()}
+                                </div>
+                        </div>
                     </div>
-                ) : activeSection === 'quick-reply' ? (
-                    <div className="flex-1 p-6 h-full overflow-hidden flex flex-col">
-                        <Breadcrumb label="Quick Reply Templates" />
-                        <QuickReplyTemplates />
-                    </div>
-                ) : activeSection === 'pages' ? (
-                    <div className="flex-1 p-6 h-full overflow-hidden flex flex-col">
-                        <Breadcrumb label="Connected Pages" />
-                        <PagesSettings />
-                    </div>
-                ) : activeSection === 'ai-agent' ? (
-                    <div className="flex-1 p-6 h-full overflow-y-auto flex flex-col">
-                        <Breadcrumb label="AI Agent Configuration" />
-                        <AIAgentSettings />
-                    </div>
-                ) : activeSection === 'auto-reply' ? (
-                    <div className="flex-1 p-6 h-full overflow-hidden flex flex-col">
-                        <Breadcrumb label="Auto Reply Rules" />
-                        <AutoReplySettings />
-                    </div>
-                ) : activeSection === 'inventory' ? (
-                    <div className="flex-1 p-6 h-full overflow-hidden flex flex-col">
-                        <Breadcrumb label="Inventory Integration" />
-                        <InventorySettings />
+                ) : activeSection === 'integrations' ? (
+                    <div className="flex-1 flex flex-col h-full overflow-hidden">
+                        <div className="flex-1 flex overflow-hidden">
+                            {/* Integrations Sub Sidebar */}
+                            <div className="w-64 border-r border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 flex flex-col p-4 gap-2">
+                                {[
+                                    { id: 'social', label: 'Social Media', icon: Globe },
+                                    { id: 'inventory', label: 'Inventory Integration', icon: Database },
+                                    { id: 'logistics', label: 'Logistic Integration', icon: Truck }
+                                ].map((sub) => {
+                                    const subActive = (searchParams.get('sub') || 'social') === sub.id;
+                                    return (
+                                        <button
+                                            key={sub.id}
+                                            onClick={() => {
+                                                const params = new URLSearchParams(searchParams.toString());
+                                                params.set('sub', sub.id);
+                                                router.push(`${pathname}?${params.toString()}`);
+                                            }}
+                                            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
+                                                subActive 
+                                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
+                                                : 'text-slate-500 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                                            }`}
+                                        >
+                                            <sub.icon size={18} />
+                                            {sub.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Integrations Content Area */}
+                            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
+                                {(() => {
+                                    const sub = searchParams.get('sub') || 'social';
+                                    switch (sub) {
+                                        case 'social': return <PagesSettings />;
+                                        case 'inventory': return <InventorySettings />;
+                                        case 'logistics': return <LogisticIntegration />;
+                                        default: return <PagesSettings />;
+                                    }
+                                })()}
+                            </div>
+                        </div>
                     </div>
                 ) : activeSection === 'products' ? (
                     <div className="flex-1 p-6 h-full overflow-hidden flex flex-col">
-                        <Breadcrumb label="Inventory Products" />
                         <InventoryProducts />
-                    </div>
-                ) : activeSection === 'logistics' ? (
-                    <div className="flex-1 p-6 h-full overflow-y-auto flex flex-col">
-                        <Breadcrumb label="Logistic Integration" />
-                        <LogisticIntegration />
                     </div>
                 ) : activeSection === 'team' ? (
                     <div className="flex-1 p-6 h-full overflow-hidden flex flex-col">
-                        <Breadcrumb label="Staff Management" />
                         <StaffSettings />
                     </div>
                 ) : (

@@ -122,7 +122,7 @@ export default function LogisticIntegration() {
     ];
 
     return (
-        <div className="flex flex-col max-w-5xl mx-auto pb-10">
+        <div className="flex flex-col pb-10">
             {/* Header Area */}
             <div className="mb-6">
                 <div className="flex items-center gap-3 mb-2">
@@ -161,249 +161,222 @@ export default function LogisticIntegration() {
                 </div>
             ) : (
                 <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-8 shadow-sm">
-                    <form onSubmit={handleSave} className="space-y-8">
+                        <form onSubmit={handleSave} className="space-y-10">
 
                         {/* ──── Pathao Parcel Fields ──── */}
                         {activeProvider === 'pathao' && (
-                            <>
-                                <div className="mb-6 flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-indigo-500/10 rounded-lg flex items-center justify-center">
-                                        <Truck className="text-indigo-600 dark:text-indigo-400" size={20} />
+                            <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                                <div className="mb-8 flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl flex items-center justify-center border border-indigo-100 dark:border-indigo-500/20">
+                                        <Truck className="text-indigo-600 dark:text-indigo-400" size={24} />
                                     </div>
                                     <div>
-                                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Pathao Parcel Configuration</h2>
-                                        <p className="text-xs text-slate-500 font-mono italic">Courier Integration</p>
+                                        <h2 className="text-2xl font-black text-slate-900 dark:text-white">Pathao Parcel</h2>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">Main Courier Integration</p>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Base URL</label>
+                                        <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Base URL</label>
                                         <input
                                             type="text"
                                             value={pathaoConfig.base_url}
                                             onChange={(e) => setPathaoConfig({ ...pathaoConfig, base_url: e.target.value })}
                                             placeholder="https://api-hermes.pathao.com"
-                                            className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                            className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-medium"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Client ID</label>
+                                        <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Client ID</label>
                                         <input
                                             type="text"
                                             value={pathaoConfig.client_id}
                                             onChange={(e) => setPathaoConfig({ ...pathaoConfig, client_id: e.target.value })}
-                                            className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                            className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-mono"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Client Secret</label>
+                                        <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Client Secret</label>
                                         <input
                                             type="password"
                                             value={pathaoConfig.client_secret}
                                             onChange={(e) => setPathaoConfig({ ...pathaoConfig, client_secret: e.target.value })}
-                                            className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                            className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-mono"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Username (Email)</label>
+                                        <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Username (Email)</label>
                                         <input
                                             type="email"
                                             value={pathaoConfig.username}
                                             onChange={(e) => setPathaoConfig({ ...pathaoConfig, username: e.target.value })}
-                                            className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                            className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-medium"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Password</label>
+                                        <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Password</label>
                                         <input
                                             type="password"
                                             value={pathaoConfig.password}
                                             onChange={(e) => setPathaoConfig({ ...pathaoConfig, password: e.target.value })}
-                                            className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                            className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-mono"
                                         />
                                     </div>
                                 </div>
 
-                                <div className="pt-6 border-t border-gray-200 dark:border-slate-700">
-                                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Merchant Information</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="mt-10 pt-10 border-t border-gray-100 dark:border-slate-700">
+                                    <h3 className="text-lg font-black text-slate-900 dark:text-white mb-6 uppercase tracking-widest text-[10px]">Merchant Information</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Contact Name</label>
+                                            <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Contact Name</label>
                                             <input
                                                 type="text"
                                                 value={pathaoConfig.contact_name}
                                                 onChange={(e) => setPathaoConfig({ ...pathaoConfig, contact_name: e.target.value })}
-                                                className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-medium"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Contact Number</label>
+                                            <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Contact Number</label>
                                             <input
                                                 type="text"
                                                 value={pathaoConfig.contact_number}
                                                 onChange={(e) => setPathaoConfig({ ...pathaoConfig, contact_number: e.target.value })}
-                                                className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Secondary Contact (Optional)</label>
-                                            <input
-                                                type="text"
-                                                value={pathaoConfig.secondary_contact}
-                                                onChange={(e) => setPathaoConfig({ ...pathaoConfig, secondary_contact: e.target.value })}
-                                                className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">OTP Number (Optional)</label>
-                                            <input
-                                                type="text"
-                                                value={pathaoConfig.otp_number}
-                                                onChange={(e) => setPathaoConfig({ ...pathaoConfig, otp_number: e.target.value })}
-                                                className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-mono"
                                             />
                                         </div>
                                         <div className="md:col-span-2">
-                                            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Pickup Address</label>
+                                            <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Pickup Address</label>
                                             <input
                                                 type="text"
                                                 value={pathaoConfig.address}
                                                 onChange={(e) => setPathaoConfig({ ...pathaoConfig, address: e.target.value })}
-                                                className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-medium"
                                             />
                                         </div>
                                     </div>
                                 </div>
-                            </>
+                            </div>
                         )}
 
                         {/* ──── Pick & Drop Fields ──── */}
                         {activeProvider === 'pickdrop' && (
-                            <>
-                                <div className="mb-6 flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-orange-500/10 rounded-lg flex items-center justify-center">
-                                        <Truck className="text-orange-600 dark:text-orange-400" size={20} />
+                            <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                                <div className="mb-8 flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-orange-50 dark:bg-orange-900/20 rounded-2xl flex items-center justify-center border border-orange-100 dark:border-orange-500/20">
+                                        <Truck className="text-orange-600 dark:text-orange-400" size={24} />
                                     </div>
                                     <div>
-                                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Pick & Drop Configuration</h2>
-                                        <p className="text-xs text-slate-500 font-mono italic">Courier Integration</p>
+                                        <h2 className="text-2xl font-black text-slate-900 dark:text-white">Pick & Drop</h2>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">Courier Integration</p>
                                     </div>
                                 </div>
-                                <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-500/30 rounded-xl p-5 mb-2">
-                                    <p className="text-indigo-700 dark:text-indigo-300 text-sm leading-relaxed">
+                                <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/30 rounded-2xl p-6 mb-8 flex items-start gap-4">
+                                    <div className="p-2 bg-indigo-500/10 rounded-lg">
+                                        <AlertCircle className="text-indigo-600 dark:text-indigo-400" size={20} />
+                                    </div>
+                                    <p className="text-indigo-700 dark:text-indigo-300 text-sm font-medium leading-relaxed">
                                         <strong>Authentication:</strong> Pick & Drop uses token-based authentication.
                                         Enter your <strong>API Key</strong> and <strong>API Secret</strong> from the Pick & Drop vendor dashboard to enable this integration.
                                     </p>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Base URL</label>
+                                        <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Base URL</label>
                                         <input
                                             type="text"
                                             value={pickdropConfig.base_url}
                                             onChange={(e) => setPickdropConfig({ ...pickdropConfig, base_url: e.target.value })}
                                             placeholder="https://pickndropnepal.com"
-                                            className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                            className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-medium"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">API Key</label>
+                                        <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">API Key</label>
                                         <input
                                             type="text"
                                             value={pickdropConfig.client_id}
                                             onChange={(e) => setPickdropConfig({ ...pickdropConfig, client_id: e.target.value })}
                                             placeholder="e.g. bf1a7ce75dacf51"
-                                            className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-mono"
+                                            className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-mono"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">API Secret</label>
+                                        <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">API Secret</label>
                                         <input
                                             type="password"
                                             value={pickdropConfig.client_secret}
                                             onChange={(e) => setPickdropConfig({ ...pickdropConfig, client_secret: e.target.value })}
                                             placeholder="e.g. 63b8931e70aee27"
-                                            className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-mono"
+                                            className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-mono"
                                         />
                                     </div>
                                 </div>
-
-                                <div className="pt-6 border-t border-gray-200 dark:border-slate-700">
-                                    <div className="p-4 bg-gray-50 dark:bg-slate-900/50 rounded-lg border border-gray-200 dark:border-slate-700/50">
-                                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                                            Webhook endpoint for Pick & Drop: <code className="bg-white dark:bg-slate-800 px-2 py-1 rounded text-indigo-600 dark:text-indigo-400 font-mono ml-1">/api/logistics/pickdrop/webhook</code>
-                                        </p>
-                                    </div>
-                                </div>
-                            </>
+                            </div>
                         )}
 
                         {/* ──── NCM (Nepal Can Move) Fields ──── */}
                         {activeProvider === 'ncm' && (
-                            <>
-                                <div className="mb-6 flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center">
-                                        <Truck className="text-green-600 dark:text-green-400" size={20} />
+                            <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                                <div className="mb-8 flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl flex items-center justify-center border border-emerald-100 dark:border-emerald-500/20">
+                                        <Truck className="text-emerald-600 dark:text-emerald-400" size={24} />
                                     </div>
                                     <div>
-                                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">NCM Configuration</h2>
-                                        <p className="text-xs text-slate-500 font-mono italic">Courier Integration</p>
+                                        <h2 className="text-2xl font-black text-slate-900 dark:text-white">Nepal Can Move (NCM)</h2>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest">Courier Integration</p>
                                     </div>
                                 </div>
-                                <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-500/30 rounded-xl p-5 mb-2">
-                                    <p className="text-indigo-700 dark:text-indigo-300 text-sm leading-relaxed">
+                                <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/30 rounded-2xl p-6 mb-8 flex items-start gap-4">
+                                    <div className="p-2 bg-indigo-500/10 rounded-lg">
+                                        <AlertCircle className="text-indigo-600 dark:text-indigo-400" size={20} />
+                                    </div>
+                                    <p className="text-indigo-700 dark:text-indigo-300 text-sm font-medium leading-relaxed">
                                         <strong>Authentication:</strong> Nepal Can Move uses an API Token.
                                         Enter your <strong>API Token</strong> and <strong>Base URL</strong> provided by NCM to enable this integration.
                                     </p>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Base URL</label>
+                                        <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Base URL</label>
                                         <input
                                             type="text"
                                             value={ncmConfig.base_url}
                                             onChange={(e) => setNcmConfig({ ...ncmConfig, base_url: e.target.value })}
                                             placeholder="https://portal.nepalcanmove.com"
-                                            className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                            className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-medium"
                                         />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">API Token</label>
+                                        <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">API Token</label>
                                         <input
                                             type="password"
                                             value={ncmConfig.client_secret}
                                             onChange={(e) => setNcmConfig({ ...ncmConfig, client_secret: e.target.value, client_id: e.target.value })}
                                             placeholder="Enter your NCM API Token Key"
-                                            className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-mono"
+                                            className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-mono"
                                         />
                                     </div>
                                 </div>
-
-                                <div className="pt-6 border-t border-gray-200 dark:border-slate-700">
-                                    <div className="p-4 bg-gray-50 dark:bg-slate-900/50 rounded-lg border border-gray-200 dark:border-slate-700/50">
-                                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                                            Webhook endpoint for NCM: <code className="bg-white dark:bg-slate-800 px-2 py-1 rounded text-indigo-600 dark:text-indigo-400 font-mono ml-1">/api/logistics/ncm/webhook</code>
-                                        </p>
-                                    </div>
-                                </div>
-                            </>
+                            </div>
                         )}
-                        <div className="pt-8 border-t border-gray-200 dark:border-slate-700 flex items-center justify-between gap-4">
+
+                        <div className="pt-10 border-t border-gray-100 dark:border-slate-700 flex items-center justify-between gap-4">
                             <div className="flex-1">
                                 {statusMessage && (
-                                    <div className={`flex items-center gap-2 p-3 rounded-lg border animate-in fade-in slide-in-from-top-1 ${statusMessage.type === 'success'
-                                        ? 'bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/30 text-green-700 dark:text-green-400'
-                                        : 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-400'
+                                    <div className={`flex items-center gap-3 p-4 rounded-xl border animate-in fade-in slide-in-from-top-2 ${statusMessage.type === 'success'
+                                        ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400'
+                                        : 'bg-red-50 dark:bg-red-500/10 border-red-100 dark:border-red-500/30 text-red-700 dark:text-red-400'
                                         }`}>
-                                        {statusMessage.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
-                                        <span className="text-sm font-medium">{statusMessage.text}</span>
+                                        {statusMessage.type === 'success' ? <CheckCircle size={20} className="text-emerald-500" /> : <AlertCircle size={20} className="text-red-500" />}
+                                        <span className="text-sm font-bold uppercase tracking-wide">{statusMessage.text}</span>
                                     </div>
                                 )}
                             </div>
                             <button
                                 type="submit"
                                 disabled={loading || saving}
-                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3.5 rounded-xl font-bold flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-600/20 active:scale-95"
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-12 py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-2xl shadow-indigo-600/30 active:scale-95"
                             >
                                 {saving ? <Loader size={20} className="animate-spin" /> : <Save size={20} />}
                                 Save Configuration

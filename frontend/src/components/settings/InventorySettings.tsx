@@ -91,20 +91,21 @@ export default function InventorySettings() {
     };
 
     return (
-        <div className="h-full flex flex-col max-w-4xl mx-auto">
+        <div className="h-full flex flex-col transition-colors">
             <div className="flex items-center justify-between mb-8">
                 <div>
-                    <h2 className="text-2xl font-bold mb-2">Inventory Integration</h2>
-                    <p className="text-slate-400">Configure connection to the main Inventory Management System.</p>
+                    <h2 className="text-2xl font-black mb-1 text-slate-900 dark:text-white">Inventory Integration</h2>
+                    <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Configure connection to the main Inventory Management System.</p>
                 </div>
-                <div className={`flex items-center gap-2 px-4 py-2 rounded-full border ${connectionStatus === 'connected' ? 'bg-green-900/30 border-green-500/50 text-green-400' :
-                    connectionStatus === 'failed' ? 'bg-red-900/30 border-red-500/50 text-red-400' :
-                        'bg-slate-800 border-slate-700 text-slate-400'
-                    }`}>
+                <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all shadow-sm ${
+                    connectionStatus === 'connected' ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/50 text-emerald-600 dark:text-emerald-400' :
+                    connectionStatus === 'failed' ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400' :
+                    'bg-slate-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
+                }`}>
                     {connectionStatus === 'connected' ? <CheckCircle size={16} /> :
                         connectionStatus === 'failed' ? <XCircle size={16} /> :
                             <Database size={16} />}
-                    <span className="text-sm font-semibold">
+                    <span className="text-[10px] font-black uppercase tracking-widest">
                         {connectionStatus === 'connected' ? 'System Connected' :
                             connectionStatus === 'failed' ? 'Connection Failed' :
                                 'Not Tested'}
@@ -112,55 +113,57 @@ export default function InventorySettings() {
                 </div>
             </div>
 
-            <div className="bg-slate-800 border border-slate-700 rounded-xl p-8 shadow-sm">
-                <form onSubmit={handleSave} className="space-y-6">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">
-                            Inventory App URL
-                        </label>
-                        <input
-                            type="text"
-                            value={config.INV_APP_URL}
-                            onChange={(e) => setConfig({ ...config, INV_APP_URL: e.target.value })}
-                            placeholder="e.g. https://inventory-app.vercel.app"
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-                        />
-                        <p className="mt-2 text-xs text-slate-500">
-                            The base URL where your Inventory System is hosted.
-                        </p>
+            <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl p-10 shadow-xl shadow-indigo-500/5">
+                <form onSubmit={handleSave} className="space-y-8">
+                    <div className="space-y-6">
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                                Inventory App URL
+                            </label>
+                            <input
+                                type="text"
+                                value={config.INV_APP_URL}
+                                onChange={(e) => setConfig({ ...config, INV_APP_URL: e.target.value })}
+                                placeholder="e.g. https://inventory-app.vercel.app"
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-medium"
+                            />
+                            <p className="mt-2 text-[10px] text-slate-400 ml-1">
+                                The base URL where your Inventory System is hosted.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                                API Key
+                            </label>
+                            <input
+                                type="password"
+                                value={config.INV_APP_API_KEY}
+                                onChange={(e) => setConfig({ ...config, INV_APP_API_KEY: e.target.value })}
+                                placeholder="Enter the secure API key generated in Inventory App"
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3.5 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-mono"
+                            />
+                            <p className="mt-2 text-[10px] text-slate-400 ml-1">
+                                You can find this key in your Inventory App's .env file or settings.
+                            </p>
+                        </div>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">
-                            API Key
-                        </label>
-                        <input
-                            type="password"
-                            value={config.INV_APP_API_KEY}
-                            onChange={(e) => setConfig({ ...config, INV_APP_API_KEY: e.target.value })}
-                            placeholder="Enter the secure API key generated in Inventory App"
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-mono"
-                        />
-                        <p className="mt-2 text-xs text-slate-500">
-                            You can find this key in your Inventory App's .env file or settings.
-                        </p>
-                    </div>
-
-                    <div className="pt-6 border-t border-slate-700 flex items-center justify-between">
+                    <div className="pt-8 border-t border-gray-100 dark:border-slate-700 flex items-center justify-between">
                         <button
                             type="button"
                             onClick={testConnection}
                             disabled={loading || saving}
-                            className="flex items-center gap-2 px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                            className="flex items-center gap-2 px-5 py-2.5 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-white hover:bg-indigo-50 dark:hover:bg-slate-700 rounded-xl font-bold text-xs uppercase tracking-widest transition-all"
                         >
-                            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                            <RefreshCw size={16} className={loading ? 'animate-spin text-indigo-500' : ''} />
                             Test Connection
                         </button>
 
                         <button
                             type="submit"
                             disabled={loading || saving}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-semibold flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-3.5 rounded-xl font-black uppercase tracking-widest text-xs flex items-center gap-2 transition-all shadow-xl shadow-indigo-600/20 active:scale-95 disabled:opacity-50"
                         >
                             <Save size={18} />
                             {saving ? 'Saving...' : 'Save Configuration'}
@@ -168,9 +171,15 @@ export default function InventorySettings() {
                     </div>
 
                     {status === 'success' && (
-                        <div className="p-4 bg-green-900/20 border border-green-900/50 rounded-lg flex items-center gap-2 text-green-400 animate-in fade-in slide-in-from-bottom-2">
-                            <CheckCircle size={18} />
-                            Settings saved successfully
+                        <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/50 rounded-xl flex items-center gap-3 text-emerald-600 dark:text-emerald-400 font-bold text-sm animate-in fade-in slide-in-from-bottom-2">
+                            <CheckCircle size={18} className="text-emerald-500" />
+                            Configuration Securely Saved
+                        </div>
+                    )}
+                    {status === 'error' && (
+                        <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/50 rounded-xl flex items-center gap-3 text-red-600 dark:text-red-400 font-bold text-sm animate-in fade-in slide-in-from-bottom-2">
+                            <XCircle size={18} className="text-red-500" />
+                            Failed to Save Configuration
                         </div>
                     )}
                 </form>

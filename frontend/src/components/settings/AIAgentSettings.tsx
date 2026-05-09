@@ -139,25 +139,25 @@ export default function AIAgentSettings() {
     };
 
     return (
-        <div className="p-6 text-white max-w-4xl mx-auto">
+        <div className="p-6 text-slate-900 dark:text-white transition-colors">
             <div className="mb-8">
-                <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-                    <Bot className="text-indigo-400" />
+                <h2 className="text-2xl font-black mb-2 flex items-center gap-2">
+                    <Bot className="text-indigo-500" />
                     AI Agent Configuration
                 </h2>
-                <p className="text-slate-400">Configure your automated AI responses for social media messages.</p>
+                <p className="text-slate-500 dark:text-slate-400 font-medium">Configure your automated AI responses for social media messages.</p>
             </div>
 
             {/* Global Settings Card */}
-            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 mb-8">
-                <h3 className="text-lg font-semibold mb-4 text-indigo-300">Global Settings</h3>
+            <div className="bg-white dark:bg-slate-800 rounded-[2rem] border border-gray-200 dark:border-slate-700/50 p-8 mb-8 shadow-sm">
+                <h3 className="text-lg font-black mb-6 text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Global Settings</h3>
 
                 <div className="space-y-6">
                     {/* Master Switch */}
-                    <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-lg border border-slate-700">
+                    <div className="flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700/50">
                         <div>
-                            <h4 className="font-medium text-white">Enable AI Agent</h4>
-                            <p className="text-sm text-slate-400">Master switch to turn AI responses on/off globally</p>
+                            <h4 className="font-bold text-slate-900 dark:text-white">Enable AI Agent</h4>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Master switch to turn AI responses on/off globally</p>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
                             <input
@@ -172,36 +172,36 @@ export default function AIAgentSettings() {
 
                     {/* AI Provider Selection */}
                     <div>
-                        <label className="block text-sm font-medium mb-1 text-slate-300">AI Provider</label>
-                        <div className="flex gap-4">
-                            <label className="flex items-center gap-2 cursor-pointer">
+                        <label className="block text-xs font-black uppercase tracking-widest mb-3 text-slate-400">AI Provider</label>
+                        <div className="flex gap-6">
+                            <label className="flex items-center gap-3 cursor-pointer group">
                                 <input
                                     type="radio"
                                     name="aiProvider"
                                     value="openai"
                                     checked={aiProvider === 'openai'}
                                     onChange={(e) => setAiProvider(e.target.value)}
-                                    className="accent-indigo-500"
+                                    className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
                                 />
-                                <span className="text-white">OpenAI (GPT-4o)</span>
+                                <span className="text-sm font-bold text-slate-700 dark:text-slate-200 group-hover:text-indigo-600 transition-colors">OpenAI (GPT-4o)</span>
                             </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
+                            <label className="flex items-center gap-3 cursor-pointer group">
                                 <input
                                     type="radio"
                                     name="aiProvider"
                                     value="gemini"
                                     checked={aiProvider === 'gemini'}
                                     onChange={(e) => setAiProvider(e.target.value)}
-                                    className="accent-indigo-500"
+                                    className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
                                 />
-                                <span className="text-white">Google Gemini</span>
+                                <span className="text-sm font-bold text-slate-700 dark:text-slate-200 group-hover:text-indigo-600 transition-colors">Google Gemini</span>
                             </label>
                         </div>
                     </div>
 
                     {/* API Key */}
                     <div>
-                        <label className="block text-sm font-medium mb-1 text-slate-300">
+                        <label className="block text-xs font-black uppercase tracking-widest mb-2 text-slate-400">
                             {aiProvider === 'openai' ? 'OpenAI API Key' : 'Gemini API Key'}
                         </label>
                         <div className="relative">
@@ -210,9 +210,9 @@ export default function AIAgentSettings() {
                                 value={aiProvider === 'openai' ? apiKey : geminiApiKey}
                                 onChange={(e) => aiProvider === 'openai' ? setApiKey(e.target.value) : setGeminiApiKey(e.target.value)}
                                 placeholder={aiProvider === 'openai' ? "sk-..." : "AIza..."}
-                                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 pl-10 text-white focus:border-indigo-500 outline-none transition-colors"
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 pl-11 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-mono text-sm"
                             />
-                            <Shield className="absolute left-3 top-2.5 text-slate-500" size={16} />
+                            <Shield className="absolute left-4 top-3.5 text-slate-400" size={18} />
                         </div>
                         <p className="text-xs text-slate-500 mt-1">
                             Your key is stored securely. Used for {aiProvider === 'openai' ? 'GPT-4o' : 'Gemini 1.5 Flash'} access.
@@ -240,8 +240,8 @@ export default function AIAgentSettings() {
 
             {/* Page Configuration */}
             <div>
-                <h3 className="text-lg font-semibold mb-4 text-indigo-300">Page Configuration</h3>
-                <p className="text-sm text-slate-400 mb-4">Customize AI behavior for each connected page. Define unique personas and instructions.</p>
+                <h3 className="text-lg font-black mb-6 text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Page Configuration</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mb-6">Customize AI behavior for each connected page. Define unique personas and instructions.</p>
 
                 {isLoadingPages ? (
                     <div className="flex items-center gap-2 text-slate-400">
@@ -250,22 +250,25 @@ export default function AIAgentSettings() {
                 ) : (
                     <div className="grid grid-cols-1 gap-4">
                         {pages.map(page => (
-                            <div key={page.id} className="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-slate-600 transition-colors">
+                            <div key={page.id} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-2xl p-6 hover:shadow-lg transition-all group">
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <h4 className="font-bold text-lg">{page.page_name}</h4>
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <h4 className="font-black text-lg text-slate-900 dark:text-white">{page.page_name}</h4>
                                             {page.is_ai_enabled ? (
-                                                <span className="px-2 py-0.5 bg-green-900/50 text-green-400 text-xs rounded border border-green-800">AI Active</span>
+                                                <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 text-[10px] font-black uppercase rounded-lg border border-emerald-200 dark:border-emerald-500/20">AI Active</span>
                                             ) : (
-                                                <span className="px-2 py-0.5 bg-slate-700 text-slate-400 text-xs rounded">AI Paused</span>
+                                                <span className="px-2.5 py-1 bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-500 text-[10px] font-black uppercase rounded-lg border border-slate-200 dark:border-slate-800">AI Paused</span>
                                             )}
                                         </div>
-                                        <p className="text-xs text-slate-400 font-mono mb-2">ID: {page.page_id} • {page.platform}</p>
+                                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-4">ID: {page.page_id} • {page.platform}</p>
 
-                                        <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700/50 mt-2 max-w-2xl">
-                                            <p className="text-xs text-slate-500 uppercase font-bold mb-1">Current Instruction:</p>
-                                            <p className="text-sm text-slate-300 italic line-clamp-2">
+                                        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700/50 mt-2 max-w-2xl relative">
+                                            <div className="absolute top-4 right-4 text-indigo-500 opacity-20">
+                                                <Zap size={24} />
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-2">Current Instruction:</p>
+                                            <p className="text-sm text-slate-600 dark:text-slate-300 italic line-clamp-2 leading-relaxed">
                                                 {page.custom_prompt || "Using default system prompt..."}
                                             </p>
                                         </div>
@@ -273,7 +276,7 @@ export default function AIAgentSettings() {
 
                                     <button
                                         onClick={() => openEditModal(page)}
-                                        className="bg-slate-700 hover:bg-indigo-600 text-white p-2 rounded-lg transition-colors"
+                                        className="p-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
                                         title="Edit AI Settings"
                                     >
                                         <Edit2 size={18} />
@@ -283,7 +286,7 @@ export default function AIAgentSettings() {
                         ))}
 
                         {pages.length === 0 && (
-                            <div className="text-center p-8 bg-slate-800/50 rounded-xl border border-dashed border-slate-700 text-slate-500">
+                            <div className="text-center p-8 bg-white dark:bg-slate-800 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-500">
                                 No pages connected. Go to "Connected Pages" settings to add one.
                             </div>
                         )}
@@ -293,21 +296,24 @@ export default function AIAgentSettings() {
 
             {/* Edit Modal */}
             {editingPage && (
-                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-slate-800 rounded-2xl max-w-2xl w-full border border-slate-700 shadow-2xl overflow-hidden">
-                        <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-800">
-                            <h3 className="text-xl font-bold text-white">Configure AI for {editingPage.page_name}</h3>
-                            <button onClick={closeEditModal} className="text-slate-400 hover:text-white transition-colors">
-                                <X size={24} />
+                <div className="fixed inset-0 bg-slate-900/40 dark:bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-all">
+                    <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] max-w-2xl w-full border border-gray-100 dark:border-slate-700 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+                        <div className="p-8 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center">
+                            <div>
+                                <h3 className="text-xl font-black text-slate-900 dark:text-white">Configure AI Personality</h3>
+                                <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest">{editingPage.page_name}</p>
+                            </div>
+                            <button onClick={closeEditModal} className="p-2 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors bg-slate-100 dark:bg-slate-900 rounded-xl">
+                                <X size={20} />
                             </button>
                         </div>
 
-                        <form onSubmit={handleSavePageConfig} className="p-6 space-y-6">
+                        <form onSubmit={handleSavePageConfig} className="p-8 space-y-8">
                             {/* Toggle */}
-                            <div className="flex items-center justify-between p-4 bg-slate-900 rounded-lg border border-slate-700">
+                            <div className="flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-900 rounded-[1.5rem] border border-slate-100 dark:border-slate-700">
                                 <div>
-                                    <h4 className="font-medium text-white">Enable AI for this Page</h4>
-                                    <p className="text-sm text-slate-400">Allow AI to reply to messages on this page</p>
+                                    <h4 className="font-bold text-slate-900 dark:text-white">Enable AI Responses</h4>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Allow AI to autonomously reply on this page</p>
                                 </div>
                                 <label className="relative inline-flex items-center cursor-pointer">
                                     <input
@@ -321,38 +327,38 @@ export default function AIAgentSettings() {
                             </div>
 
                             {/* Prompt Editor */}
-                            <div>
-                                <label className="block text-sm font-medium mb-2 text-slate-300 flex items-center gap-2">
-                                    <Zap size={14} className="text-yellow-400" />
-                                    Custom System Prompt
+                            <div className="space-y-3">
+                                <label className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
+                                    <Zap size={14} className="text-yellow-500" />
+                                    Custom System Instructions
                                 </label>
                                 <textarea
                                     value={editPrompt}
                                     onChange={(e) => setEditPrompt(e.target.value)}
                                     rows={8}
-                                    placeholder="You are a friendly support agent for a shoe store. Your name is 'ShoeBot'. Always be polite and ask for shoe size..."
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none leading-relaxed"
+                                    placeholder="Define your bot's personality here..."
+                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none leading-relaxed text-sm font-medium transition-all"
                                 />
-                                <p className="text-xs text-slate-500 mt-2">
-                                    Define the persona, tone, and specific instructions for the AI. This will be the "System Prompt" passed to the model.
+                                <p className="text-[10px] text-slate-500 font-medium">
+                                    Describe your store's tone, rules, and personality. This effectively becomes the bot's core operating manual.
                                 </p>
                             </div>
 
-                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
+                            <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 dark:border-slate-700">
                                 <button
                                     type="button"
                                     onClick={closeEditModal}
-                                    className="px-4 py-2 text-slate-300 hover:text-white font-medium"
+                                    className="px-6 py-2.5 text-slate-500 hover:text-slate-900 dark:hover:text-white font-bold text-sm transition-colors"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={isSavingPage}
-                                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-6 py-2 rounded-lg font-medium flex items-center gap-2"
+                                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
                                 >
                                     {isSavingPage ? <RefreshCw className="animate-spin" size={18} /> : <Check size={18} />}
-                                    Save Changes
+                                    Save Instructions
                                 </button>
                             </div>
                         </form>

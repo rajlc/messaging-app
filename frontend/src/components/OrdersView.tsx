@@ -27,7 +27,7 @@ export default function OrdersView() {
         }
         return 'pending';
     });
-    const [orderListSubTab, setOrderListSubTab] = useState<'all' | 'shipped' | 'delivered'>(() => {
+    const [orderListSubTab, setOrderListSubTab] = useState<'all' | 'shipped' | 'delivered' | 'returnProcess' | 'returned'>(() => {
         if (typeof window !== 'undefined') {
             return (localStorage.getItem('ordersListSubTab') as any) || 'all';
         }
@@ -101,7 +101,7 @@ export default function OrdersView() {
         'Delivery Failed',
         'Hold',
         'Return Process',
-        'Return Delivered',
+        'Returned Delivered',
         'Cancelled',
         'Follow up again'
     ];
@@ -442,37 +442,25 @@ export default function OrdersView() {
 
         if (activeTab === 'todayOrder') {
             return orders.filter(order => {
-                const orderDate = new Date(order.created_at || order.order_date);
-                const isToday = orderDate.getDate() === today.getDate() &&
-                    orderDate.getMonth() === today.getMonth() &&
-                    orderDate.getFullYear() === today.getFullYear();
-
                 if (todaySubTab === 'pending') {
+                    // Show all "New Order" regardless of date
                     return order.order_status === 'New Order' || order.order_status === 'Follow up again';
                 } else if (todaySubTab === 'confirmed') {
+                    // Show all "Confirmed Order" regardless of date
                     return order.order_status === 'Confirmed Order';
                 } else if (todaySubTab === 'packed') {
-                    const isPacked = order.order_status === 'Ready to Ship' || order.order_status === 'Packed';
-                    if (!isPacked) return false;
-                    // Optimized: check status history for "Ready to Ship" or "Packed" today
-                    return (order.status_history || []).some((h: any) => {
-                        const hStatus = h.status.trim();
-                        if (hStatus !== 'Ready to Ship' && hStatus !== 'Packed') return false;
-                        const actionDate = new Date(h.changed_at);
-                        return actionDate.getDate() === today.getDate() &&
-                            actionDate.getMonth() === today.getMonth() &&
-                            actionDate.getFullYear() === today.getFullYear();
-                    });
+                    // Show all "Packed" or "Ready to Ship" regardless of date
+                    return order.order_status === 'Ready to Ship' || order.order_status === 'Packed';
                 } else if (todaySubTab === 'shipped') {
-                    if (order.order_status !== 'Shipped') return false;
-                    // Check shipped_at first (set by courier API)
+                    // For Shipped: show ONLY if it was shipped today
                     if (order.shipped_at) {
                         const shippedDate = new Date(order.shipped_at);
                         if (shippedDate.getDate() === today.getDate() &&
                             shippedDate.getMonth() === today.getMonth() &&
                             shippedDate.getFullYear() === today.getFullYear()) return true;
                     }
-                    // Fallback: check status_history for 'Shipped' status changed today
+                    
+                    // Check status_history for 'Shipped' status changed today (fallback if shipped_at missing)
                     return (order.status_history || []).some((h: any) => {
                         if (h.status.trim() !== 'Shipped') return false;
                         const actionDate = new Date(h.changed_at);
@@ -505,7 +493,22 @@ export default function OrdersView() {
         let orderList = orders;
 
         if (orderListSubTab === 'shipped') {
-            orderList = orderList.filter(order => order.order_status === 'Shipped');
+            orderList = orderList.filter(order => 
+                order.order_status === 'Shipped' || 
+                order.order_status === 'Arrived at Branch' || 
+                order.order_status === 'Delivery Process'
+            );
+        } else if (orderListSubTab === 'returnProcess') {
+            orderList = orderList.filter(order => 
+                order.order_status === 'Hold' || 
+                order.order_status === 'Delivery Failed' || 
+                order.order_status === 'Return Process'
+            ).sort((a, b) => {
+                const priority: Record<string, number> = { 'Hold': 1, 'Delivery Failed': 2, 'Return Process': 3 };
+                return (priority[a.order_status] || 99) - (priority[b.order_status] || 99);
+            });
+        } else if (orderListSubTab === 'returned') {
+            orderList = orderList.filter(order => order.order_status === 'Returned Delivered');
         } else if (orderListSubTab === 'delivered') {
             orderList = orderList.filter(order => order.order_status === 'Delivered');
         }
@@ -604,45 +607,50 @@ export default function OrdersView() {
         let shippedCount = 0;
 
         orders.forEach(order => {
-            // Pending: New Order or Follow up again
+            // Pending: All "New Order" or "Follow up again"
             if (order.order_status === 'New Order' || order.order_status === 'Follow up again') {
                 pendingCount++;
             }
-            // Confirmed: Confirmed Order only
+            // Confirmed: All "Confirmed Order"
             if (order.order_status === 'Confirmed Order') {
                 confirmedCount++;
             }
-            // Packed Today: History check for "Ready to Ship"/"Packed" AND current status is Packed
-            const isPacked = order.order_status === 'Ready to Ship' || order.order_status === 'Packed';
-            if (isPacked) {
-                const wasPackedToday = (order.status_history || []).some((h: any) => {
-                    const hStatus = h.status.trim();
-                    if (hStatus !== 'Ready to Ship' && hStatus !== 'Packed') return false;
-                    const actionDate = new Date(h.changed_at);
-                    return isSameDay(actionDate, today);
-                });
-                if (wasPackedToday) {
-                    packedCount++;
-                }
+            // Packed: All "Ready to Ship" or "Packed"
+            if (order.order_status === 'Ready to Ship' || order.order_status === 'Packed') {
+                packedCount++;
             }
-            // Shipped Today
-            if (order.order_status === 'Shipped') {
-                let isShippedToday = false;
-                if (order.shipped_at) {
-                    const shippedDate = new Date(order.shipped_at);
-                    isShippedToday = isSameDay(shippedDate, today);
-                }
-                if (!isShippedToday) {
-                    // Fallback: check status_history
-                    isShippedToday = (order.status_history || []).some((h: any) => {
-                        if (h.status.trim() !== 'Shipped') return false;
-                        return isSameDay(new Date(h.changed_at), today);
-                    });
-                }
-                if (isShippedToday) shippedCount++;
+            // Shipped: ONLY if shipped today
+            if (order.shipped_at) {
+                const shippedDate = new Date(order.shipped_at);
+                if (isSameDay(shippedDate, today)) shippedCount++;
+            } else {
+                // Fallback: check status_history for 'Shipped' change today
+                const wasShippedToday = (order.status_history || []).some((h: any) => {
+                    if (h.status.trim() !== 'Shipped') return false;
+                    return isSameDay(new Date(h.changed_at), today);
+                });
+                if (wasShippedToday) shippedCount++;
             }
         });
         return { pending: pendingCount, confirmed: confirmedCount, packed: packedCount, shipped: shippedCount };
+    }, [orders]);
+
+    // Calculate Order List Stats
+    const listStats = useMemo(() => {
+        const allCount = orders.length;
+        const shippedCount = orders.filter(o => 
+            o.order_status === 'Shipped' || 
+            o.order_status === 'Arrived at Branch' || 
+            o.order_status === 'Delivery Process'
+        ).length;
+        const returnProcessCount = orders.filter(o => 
+            o.order_status === 'Hold' || 
+            o.order_status === 'Delivery Failed' || 
+            o.order_status === 'Return Process'
+        ).length;
+        const returnedCount = orders.filter(o => o.order_status === 'Returned Delivered').length;
+        const deliveredCount = orders.filter(o => o.order_status === 'Delivered').length;
+        return { all: allCount, shipped: shippedCount, returnProcess: returnProcessCount, returned: returnedCount, delivered: deliveredCount };
     }, [orders]);
 
 
@@ -711,7 +719,7 @@ export default function OrdersView() {
                     report[dateKey].deliveredBreakdown[label] = (report[dateKey].deliveredBreakdown[label] || 0) + 1;
                 }
 
-                if (status === 'Return Delivered') {
+                if (status === 'Returned Delivered') {
                     report[dateKey].returnDelivered++;
                     const provider = (order.logistic_name || order.courier_provider || 'Unknown');
                     const label = provider === 'ncm' ? 'Nepal Can Move' : provider === 'self' ? 'Self Delivery' : (provider.charAt(0).toUpperCase() + provider.slice(1));
@@ -735,7 +743,7 @@ export default function OrdersView() {
                 if (actionDate !== selectedDateForReport) return false;
 
                 if (reportDetailStatusFilter === 'all') {
-                    return ['Confirmed Order', 'Ready to Ship', 'Packed', 'Shipped', 'Delivered', 'Return Delivered'].includes(status);
+                    return ['Confirmed Order', 'Ready to Ship', 'Packed', 'Shipped', 'Delivered', 'Returned Delivered'].includes(status);
                 }
 
                 const filterMap: Record<string, string[]> = {
@@ -743,7 +751,7 @@ export default function OrdersView() {
                     'Packed': ['Ready to Ship', 'Packed'],
                     'Shipped': ['Shipped'],
                     'Delivered': ['Delivered'],
-                    'Return Delivered': ['Return Delivered']
+                    'Returned Delivered': ['Returned Delivered']
                 };
 
                 return filterMap[reportDetailStatusFilter]?.includes(status);
@@ -977,16 +985,6 @@ export default function OrdersView() {
                                 {activeTab === 'orderList' && (
                                     <div className="flex gap-2">
                                         <button
-                                            onClick={() => setOrderListSubTab('all')}
-                                            className={`px-4 py-1.5 rounded-full text-[14px] font-semibold transition-colors flex items-center gap-1.5 border ${orderListSubTab === 'all'
-                                                ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30'
-                                                : 'bg-white dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
-                                                }`}
-                                        >
-                                            <List size={12} />
-                                            All
-                                        </button>
-                                        <button
                                             onClick={() => setOrderListSubTab('shipped')}
                                             className={`px-4 py-1.5 rounded-full text-[14px] font-semibold transition-colors flex items-center gap-1.5 border ${orderListSubTab === 'shipped'
                                                 ? 'bg-cyan-100 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-500/30'
@@ -995,6 +993,29 @@ export default function OrdersView() {
                                         >
                                             <Truck size={12} />
                                             Shipped
+                                            <span className="bg-white dark:bg-slate-900/50 px-2 py-0.5 rounded text-[11px] ml-1 shadow-sm font-bold opacity-80">{listStats.shipped}</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setOrderListSubTab('returnProcess')}
+                                            className={`px-4 py-1.5 rounded-full text-[14px] font-semibold transition-colors flex items-center gap-1.5 border ${orderListSubTab === 'returnProcess'
+                                                ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30'
+                                                : 'bg-white dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                                                }`}
+                                        >
+                                            <RefreshCw size={12} />
+                                            Return Process
+                                            <span className="bg-white dark:bg-slate-900/50 px-2 py-0.5 rounded text-[11px] ml-1 shadow-sm font-bold opacity-80">{listStats.returnProcess}</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setOrderListSubTab('returned')}
+                                            className={`px-4 py-1.5 rounded-full text-[14px] font-semibold transition-colors flex items-center gap-1.5 border ${orderListSubTab === 'returned'
+                                                ? 'bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-500/30'
+                                                : 'bg-white dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                                                }`}
+                                        >
+                                            <ArrowLeftRight size={12} />
+                                            Returned
+                                            <span className="bg-white dark:bg-slate-900/50 px-2 py-0.5 rounded text-[11px] ml-1 shadow-sm font-bold opacity-80">{listStats.returned}</span>
                                         </button>
                                         <button
                                             onClick={() => setOrderListSubTab('delivered')}
@@ -1005,6 +1026,18 @@ export default function OrdersView() {
                                         >
                                             <CheckCircle2 size={12} />
                                             Delivered
+                                            <span className="bg-white dark:bg-slate-900/50 px-2 py-0.5 rounded text-[11px] ml-1 shadow-sm font-bold opacity-80">{listStats.delivered}</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setOrderListSubTab('all')}
+                                            className={`px-4 py-1.5 rounded-full text-[14px] font-semibold transition-colors flex items-center gap-1.5 border ${orderListSubTab === 'all'
+                                                ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30'
+                                                : 'bg-white dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                                                }`}
+                                        >
+                                            <List size={12} />
+                                            All
+                                            <span className="bg-white dark:bg-slate-900/50 px-2 py-0.5 rounded text-[11px] ml-1 shadow-sm font-bold opacity-80">{listStats.all}</span>
                                         </button>
                                     </div>
                                 )}
@@ -1121,7 +1154,7 @@ export default function OrdersView() {
                                             className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-black dark:text-slate-300 text-[14px] rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500"
                                         >
                                             <option value="all">All Status</option>
-                                            {['New Order', 'Confirmed Order', 'Ready to Ship', 'Packed', 'Shipped', 'Arrived at Branch', 'Delivery Process', 'Delivered', 'Delivery Failed', 'Hold', 'Return Process', 'Return Delivered', 'Cancelled', 'Follow up again'].map(status => (
+                                            {orderStatuses.map(status => (
                                                 <option key={status} value={status}>{status}</option>
                                             ))}
                                         </select>
@@ -1642,8 +1675,6 @@ export default function OrdersView() {
                                                 <thead className="sticky top-0 bg-gray-50 dark:bg-slate-800 text-[13px] font-bold text-slate-500 dark:text-slate-400 uppercase border-b border-gray-200 dark:border-slate-700 z-10">
                                                     <tr>
                                                         <th className="px-6 py-4">Date</th>
-                                                        <th className="px-6 py-4 text-center text-blue-600 dark:text-blue-400">Confirm Order</th>
-                                                        <th className="px-6 py-4 text-center text-orange-600 dark:text-orange-400">Packed</th>
                                                         <th className="px-6 py-4 text-center text-cyan-600 dark:text-cyan-400">Shipped</th>
                                                         <th className="px-6 py-4 text-center text-emerald-600 dark:text-emerald-400">Delivered</th>
                                                         <th className="px-6 py-4 text-center text-red-600 dark:text-red-400">Return Delivered</th>
@@ -1654,23 +1685,6 @@ export default function OrdersView() {
                                                     {dailyReportData.map((row, idx) => (
                                                         <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors">
                                                             <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">{row.date}</td>
-                                                            <td className="px-6 py-4 text-center font-bold text-[16px]">{row.confirmed}</td>
-                                                            <td className="px-6 py-4 text-center font-bold text-[16px] relative group/packed">
-                                                                <span className="cursor-help border-b border-dotted border-orange-400 pb-0.5">{row.packed}</span>
-                                                                {row.packed > 0 && (
-                                                                    <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl p-3 hidden group-hover/packed:block z-[100] pointer-events-none text-left">
-                                                                        <p className="text-[12px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase border-b border-gray-100 dark:border-slate-700 pb-1">Packed Breakdown</p>
-                                                                        <ul className="space-y-1">
-                                                                            {Object.entries(row.packedBreakdown).map(([name, count]) => (
-                                                                                <li key={name} className="flex justify-between items-center text-[13px] text-slate-700 dark:text-slate-200">
-                                                                                    <span>{name}</span>
-                                                                                    <span className="font-bold">{count}</span>
-                                                                                </li>
-                                                                            ))}
-                                                                        </ul>
-                                                                    </div>
-                                                                )}
-                                                            </td>
                                                             <td className="px-6 py-4 text-center font-bold text-[16px] relative group/shipped">
                                                                 <span className="cursor-help border-b border-dotted border-cyan-400 pb-0.5">{row.shipped}</span>
                                                                 {row.shipped > 0 && (
@@ -1731,7 +1745,7 @@ export default function OrdersView() {
                                                     ))}
                                                     {dailyReportData.length === 0 && (
                                                         <tr>
-                                                            <td colSpan={7} className="px-6 py-12 text-center text-slate-400 bg-gray-50/30 dark:bg-slate-900/10">
+                                                            <td colSpan={5} className="px-6 py-12 text-center text-slate-400 bg-gray-50/30 dark:bg-slate-900/10">
                                                                 No status history recorded yet.
                                                             </td>
                                                         </tr>
