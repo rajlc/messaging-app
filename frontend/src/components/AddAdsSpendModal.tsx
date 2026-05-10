@@ -41,8 +41,9 @@ export default function AddAdsSpendModal({ isOpen, onClose, onSuccess, editingSp
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.data.success) {
-                // Only show campaigns with status 'On'
-                setCampaigns(res.data.data.filter((c: any) => c.status === 'On'));
+                // Only show campaigns with status 'On' and exclude "No Ads Cost Campaign"
+                setCampaigns(res.data.data.filter((c: any) => c.status === 'On' && c.name !== 'No Ads Cost Campaign'));
+
             }
         } catch (error) {
             console.error('Failed to fetch campaigns:', error);

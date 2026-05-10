@@ -16,6 +16,10 @@ import MyDeliveryScreen from '../screens/MyDeliveryScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import AdminDeliveryReportNavigator from './AdminDeliveryReportNavigator';
 import AdminRiderDetailScreen from '../screens/AdminRiderDetailScreen';
+import AdsManagementScreen from '../screens/AdsManagementScreen';
+import ProfitManagementScreen from '../screens/ProfitManagementScreen';
+import CampaignDetailsScreen from '../screens/CampaignDetailsScreen';
+
 
 const Stack = createNativeStackNavigator();
 
@@ -44,6 +48,10 @@ export default function RootNavigator() {
                             <Stack.Screen name="CreateOrder" component={CreateOrderScreen} />
                             <Stack.Screen name="AdminDeliveryReport" component={AdminDeliveryReportNavigator} />
                             <Stack.Screen name="AdminRiderDetail" component={AdminRiderDetailScreen} />
+                            <Stack.Screen name="AdsManagement" component={AdsManagementScreen} />
+                            <Stack.Screen name="ProfitManagement" component={ProfitManagementScreen} />
+                            <Stack.Screen name="CampaignDetails" component={CampaignDetailsScreen} />
+
                         </>
                     )}
                     <Stack.Screen name="MyDelivery" component={MyDeliveryScreen} />

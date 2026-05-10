@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Colors, Spacing, Radius } from '../theme/theme';
-import { Bot, ChevronRight, LogOut, Truck, User, Package, Wallet, MoreHorizontal, FileText } from 'lucide-react-native';
+import { Bot, ChevronRight, LogOut, Truck, User, Package, Wallet, MoreHorizontal, FileText, Megaphone, TrendingUp } from 'lucide-react-native';
+
 import { useAuth } from '../context/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -26,18 +27,7 @@ export default function MoreScreen({ navigation }: any) {
           </View>
         )}
 
-        {(!isRider && navigation.canGoBack()) && (
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: Colors.primary + '10', marginHorizontal: Spacing.m, marginBottom: Spacing.m, borderRadius: Radius.m, borderBottomWidth: 0 }]}
-            onPress={() => navigation.goBack()}
-          >
-            <View style={[styles.iconContainer, { backgroundColor: Colors.primary }]}>
-              <Truck size={24} color={Colors.white} />
-            </View>
-            <Text style={[styles.menuText, { color: Colors.primary }]}>Back to Admin Dashboard</Text>
-            <ChevronRight size={20} color={Colors.primary} />
-          </TouchableOpacity>
-        )}
+
 
         <View style={styles.section}>
           {!isRider && (
@@ -74,6 +64,29 @@ export default function MoreScreen({ navigation }: any) {
                 <Text style={styles.menuText}>Delivery Report</Text>
                 <ChevronRight size={20} color={Colors.textSecondary} />
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => navigation.navigate('AdsManagement')}
+              >
+                <View style={[styles.iconContainer, { backgroundColor: '#FFF3E0' }]}>
+                  <Megaphone size={24} color="#FF9800" />
+                </View>
+                <Text style={styles.menuText}>Ads Management</Text>
+                <ChevronRight size={20} color={Colors.textSecondary} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => navigation.navigate('ProfitManagement')}
+              >
+                <View style={[styles.iconContainer, { backgroundColor: '#E8F5E9' }]}>
+                  <TrendingUp size={24} color="#4CAF50" />
+                </View>
+                <Text style={styles.menuText}>Profit Management</Text>
+                <ChevronRight size={20} color={Colors.textSecondary} />
+              </TouchableOpacity>
+
             </>
           )}
 

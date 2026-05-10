@@ -1,2 +1,2 @@
-export const API_URL = 'http://192.168.18.2:3002';
-export const WS_URL = 'http://192.168.18.2:3002'
+export const API_URL = 'https://message-backend-6n7g.onrender.com';
+export const WS_URL = 'https://message-backend-6n7g.onrender.com';

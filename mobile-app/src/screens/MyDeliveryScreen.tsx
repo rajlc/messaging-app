@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Linking, Alert, Modal, ScrollView, BackHandler, TextInput, RefreshControl } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Colors, Spacing, Radius } from '../theme/theme';
@@ -19,6 +20,10 @@ export default function MyDeliveryScreen({ navigation, route }: any) {
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
     const [modalVisible, setModalVisible] = useState(false);
     const [stock, setStock] = useState<any[]>([]);
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    const RIDER_CACHE_KEY = `@rider_orders_${user?.id}`;
+    const SYNC_QUEUE_KEY = `@sync_queue_${user?.id}`;
     const [isSaleModalOpen, setIsSaleModalOpen] = useState(false);
     const [selectedStockItem, setSelectedStockItem] = useState<any>(null);
     const [saleForm, setSaleForm] = useState({
@@ -116,10 +121,55 @@ export default function MyDeliveryScreen({ navigation, route }: any) {
             });
 
             setOrders(sortedOrders);
+            await AsyncStorage.setItem(RIDER_CACHE_KEY, JSON.stringify(sortedOrders));
+            
+            // Try to sync pending updates if online
+            processSyncQueue();
         } catch (error) {
-            console.error('Fetch orders failed', error);
+            console.log('Fetch orders failed, loading cache');
+            const cached = await AsyncStorage.getItem(RIDER_CACHE_KEY);
+            if (cached) setOrders(JSON.parse(cached));
         } finally {
             setLoading(false);
+        }
+    };
+
+    const processSyncQueue = async () => {
+        if (isSyncing) return;
+        try {
+            const queueStr = await AsyncStorage.getItem(SYNC_QUEUE_KEY);
+            const queue = queueStr ? JSON.parse(queueStr) : [];
+            if (queue.length === 0) return;
+
+            setIsSyncing(true);
+            console.log(`Processing sync queue: ${queue.length} items`);
+
+            const remainingQueue = [];
+            for (const item of queue) {
+                try {
+                    if (item.type === 'status_update') {
+                        await axios.post(`${API_URL}/api/orders/${item.orderId}/delivery-status`,
+                            { status: item.status },
+                            { headers: { Authorization: `Bearer ${token}` } }
+                        );
+                    } else if (item.type === 'cancel') {
+                        await axios.post(`${API_URL}/api/orders/${item.orderId}/cancel-assignment`, {}, {
+                            headers: { Authorization: `Bearer ${token}` }
+                        });
+                    }
+                } catch (e) {
+                    remainingQueue.push(item);
+                }
+            }
+
+            await AsyncStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(remainingQueue));
+            if (remainingQueue.length === 0) {
+                fetchOrders();
+            }
+        } catch (error) {
+            console.error('Sync queue processing error:', error);
+        } finally {
+            setIsSyncing(false);
         }
     };
 
@@ -189,8 +239,21 @@ export default function MyDeliveryScreen({ navigation, route }: any) {
                 setModalVisible(false);
             }
         } catch (error) {
-            console.error('Update status failed', error);
-            Alert.alert('Error', 'Failed to update status');
+            console.log('Update status failed, queueing for offline sync');
+            
+            // 1. Update UI locally
+            const updatedOrders = orders.map(o => o.id === orderId ? { ...o, order_status: status } : o);
+            setOrders(updatedOrders);
+            await AsyncStorage.setItem(RIDER_CACHE_KEY, JSON.stringify(updatedOrders));
+
+            // 2. Add to sync queue
+            const queueStr = await AsyncStorage.getItem(SYNC_QUEUE_KEY);
+            const queue = queueStr ? JSON.parse(queueStr) : [];
+            queue.push({ type: 'status_update', orderId, status, timestamp: new Date().toISOString() });
+            await AsyncStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
+
+            setModalVisible(false);
+            Alert.alert('Offline', 'Update saved locally and will sync when online.');
         }
     };
 
@@ -208,7 +271,21 @@ export default function MyDeliveryScreen({ navigation, route }: any) {
                             setModalVisible(false);
                         }
                     } catch (error) {
-                        console.error('Cancel failed', error);
+                        console.log('Cancel failed, queueing for offline sync');
+                        
+                        // 1. Update UI locally
+                        const updatedOrders = orders.filter(o => o.id !== orderId);
+                        setOrders(updatedOrders);
+                        await AsyncStorage.setItem(RIDER_CACHE_KEY, JSON.stringify(updatedOrders));
+
+                        // 2. Add to sync queue
+                        const queueStr = await AsyncStorage.getItem(SYNC_QUEUE_KEY);
+                        const queue = queueStr ? JSON.parse(queueStr) : [];
+                        queue.push({ type: 'cancel', orderId, timestamp: new Date().toISOString() });
+                        await AsyncStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
+
+                        setModalVisible(false);
+                        Alert.alert('Offline', 'Cancellation saved locally and will sync when online.');
                     }
                 }
             }
@@ -566,7 +643,16 @@ export default function MyDeliveryScreen({ navigation, route }: any) {
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Order Details</Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.modalTitle}>Order Details</Text>
+                                {isSyncing ? (
+                                    <ActivityIndicator size="small" color={Colors.primary} style={{ alignSelf: 'flex-start', marginTop: 4 }} />
+                                ) : (
+                                    <TouchableOpacity onPress={processSyncQueue} style={styles.syncBtn}>
+                                        <Text style={styles.syncBtnText}>Sync Pending Updates</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
                             <TouchableOpacity onPress={() => setModalVisible(false)}>
                                 <X size={24} color={Colors.text} />
                             </TouchableOpacity>
@@ -793,6 +879,8 @@ const styles = StyleSheet.create({
     phone: { fontSize: 14, fontWeight: '600', color: Colors.secondary },
     callButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.secondary, paddingHorizontal: 12, paddingVertical: 4, borderRadius: Radius.s, gap: 4 },
     callButtonText: { color: Colors.white, fontSize: 12, fontWeight: 'bold' },
+    syncBtn: { alignSelf: 'flex-start', marginTop: 4, backgroundColor: Colors.primary + '15', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
+    syncBtnText: { fontSize: 11, color: Colors.primary, fontWeight: 'bold' },
     amount: { fontSize: 18, fontWeight: 'bold', color: Colors.text },
     cardActionsRow: { flexDirection: 'row', gap: Spacing.s, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 10, marginTop: 5 },
     fullActionButton: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: Radius.s },

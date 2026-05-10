@@ -101,6 +101,9 @@ const CreateOrderScreen = ({ route, navigation }: any) => {
     // New Fields State
     const [itemWeight, setItemWeight] = useState('0.5');
     const [pathaoPrice, setPathaoPrice] = useState('0');
+    const [orderType, setOrderType] = useState('Ads');
+    const [orderTypeModalVisible, setOrderTypeModalVisible] = useState(false);
+
 
     // Status Modal (Only if user wants to change initial status, though usually starts as New)
     const [statusModalVisible, setStatusModalVisible] = useState(false);
@@ -502,10 +505,11 @@ const CreateOrderScreen = ({ route, navigation }: any) => {
                 // Local
                 logistic_name: courierProvider === 'local' ? logisticName : null,
                 delivery_branch: courierProvider === 'local' ? deliveryBranch : null,
-                courier_delivery_fee: courierProvider === 'pickdrop' ? (parseFloat(pickdropDeliveryCost) || 0) :
+                        courier_delivery_fee: courierProvider === 'pickdrop' ? (parseFloat(pickdropDeliveryCost) || 0) :
                     courierProvider === 'ncm' ? (parseFloat(ncmDeliveryCost) || 0) :
                         courierProvider === 'pathao' ? (parseFloat(pathaoPrice) || 0) :
                             (parseFloat(courierDeliveryFee) || 0),
+                order_type: orderType,
             };
 
             const { data, error } = await supabase
@@ -608,6 +612,19 @@ const CreateOrderScreen = ({ route, navigation }: any) => {
                         </View>
                     </View>
 
+                    {/* Order Type Section */}
+                    <View style={styles.section}>
+                        <Text style={styles.label}>Order Type <Text style={{ color: '#EF4444' }}>*</Text></Text>
+                        <TouchableOpacity
+                            style={styles.dropdownButton}
+                            onPress={() => setOrderTypeModalVisible(true)}
+                        >
+                            <Text style={styles.input}>{orderType}</Text>
+                            <ChevronDown size={18} color={Colors.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+
+
                     {/* 2. Order Items Section */}
                     <View style={{ marginTop: 10 }}>
                         <View style={styles.sectionHeader}>
@@ -708,6 +725,26 @@ const CreateOrderScreen = ({ route, navigation }: any) => {
                                 placeholderTextColor="#9CA3AF"
                             />
                         </View>
+                        {items.some(i => i.product_name && i.qty) && (
+                            <TouchableOpacity 
+                                style={styles.suggestionContainer}
+                                onPress={() => {
+                                    const suggestion = items
+                                        .filter(item => item.product_name && item.qty)
+                                        .map(item => `${item.qty} Pc X ${item.product_name}`)
+                                        .join(', ');
+                                    setPackageDescription(suggestion);
+                                }}
+                            >
+                                <Text style={styles.suggestionTitle}>Suggest:</Text>
+                                <Text style={styles.suggestionText} numberOfLines={1}>
+                                    {items
+                                        .filter(item => item.product_name && item.qty)
+                                        .map(item => `${item.qty} Pc X ${item.product_name}`)
+                                        .join(', ')}
+                                </Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
 
                     <Text style={styles.sectionTitle}>Logistics Partner</Text>
@@ -1181,7 +1218,47 @@ const CreateOrderScreen = ({ route, navigation }: any) => {
                     </View>
                 </View>
             </Modal>
+
+            {/* Order Type Modal */}
+            <Modal
+                visible={orderTypeModalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setOrderTypeModalVisible(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setOrderTypeModalVisible(false)}
+                >
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Select Order Type</Text>
+                            <TouchableOpacity onPress={() => setOrderTypeModalVisible(false)}>
+                                <X size={20} color={Colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <FlatList
+                            data={['Ads', 'Others']}
+                            keyExtractor={(item) => item}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={styles.modalItem}
+                                    onPress={() => {
+                                        setOrderType(item);
+                                        setOrderTypeModalVisible(false);
+                                    }}
+                                >
+                                    <Text style={[styles.modalItemText, orderType === item && styles.selectedItemText]}>{item}</Text>
+                                    {orderType === item && <Check size={18} color={Colors.primary} />}
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </View>
+
     );
 };
 
@@ -1517,6 +1594,58 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: Colors.text,
     },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        padding: 20
+    },
+    modalContent: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        padding: 20,
+        maxHeight: '80%'
+    },
+    modalItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6'
+    },
+    modalItemText: {
+        fontSize: 16,
+        color: '#1F2937'
+    },
+    selectedItemText: {
+        color: Colors.primary,
+        fontWeight: 'bold'
+    },
+    suggestionContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        backgroundColor: '#EEF2FF',
+        borderRadius: 4,
+        borderWidth: 1,
+        borderColor: '#E0E7FF',
+    },
+    suggestionTitle: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: Colors.primary,
+        textTransform: 'uppercase',
+        marginRight: 6,
+    },
+    suggestionText: {
+        flex: 1,
+        fontSize: 11,
+        color: Colors.primary,
+        fontStyle: 'italic',
+    }
 });
 
 export default CreateOrderScreen;

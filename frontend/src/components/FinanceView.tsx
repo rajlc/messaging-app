@@ -21,7 +21,12 @@ import {
     ChevronDown,
     Save,
     Edit,
-    X
+    X,
+    Package,
+    User,
+    RefreshCw,
+    XCircle,
+    CheckCircle2
 } from 'lucide-react';
 import BoostingCostView from './BoostingCostView';
 import AddBoostingModal from './AddBoostingModal';
@@ -76,6 +81,8 @@ export default function FinanceView({ orders }: FinanceViewProps) {
     const [dailyProfitData, setDailyProfitData] = useState<any[]>([]);
     const [viewingDailyBreakdown, setViewingDailyBreakdown] = useState<any>(null);
     const [isLoadingProfit, setIsLoadingProfit] = useState(false);
+    const [allPendingSummaries, setAllPendingSummaries] = useState<any[]>([]);
+
 
 
     const fetchAdsSpends = useCallback(async () => {
@@ -95,9 +102,21 @@ export default function FinanceView({ orders }: FinanceViewProps) {
         setIsLoadingSettlements(true);
         try {
             const results: Record<string, Settlement[]> = {};
+            const token = localStorage.getItem('token');
+            
+            // Also fetch pending summaries for self delivery dashboard metrics
+            const pendingRes = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/settlements/pending-summary`, { headers: { 'Authorization': `Bearer ${token}` } });
+            setAllPendingSummaries(pendingRes.data || []);
+
             await Promise.all(LOGISTICS.map(async (log: any) => {
-                const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/cod-settlements/${log.id}`);
-                if (res.data.success) {
+                let url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/cod-settlements/${log.id}`;
+                if (log.id === 'self') {
+                    url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/settlements`;
+                }
+                const res = await axios.get(url, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (log.id === 'self') {
+                    results[log.id] = res.data || [];
+                } else if (res.data.success) {
                     results[log.id] = res.data.data;
                 }
             }));
@@ -133,8 +152,17 @@ export default function FinanceView({ orders }: FinanceViewProps) {
 
     const refreshLogisticSettlements = useCallback(async (logisticId: string) => {
         try {
-            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/cod-settlements/${logisticId}`);
-            if (res.data.success) {
+            const token = localStorage.getItem('token');
+            let url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/cod-settlements/${logisticId}`;
+            if (logisticId === 'self') {
+                url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/settlements`;
+                const pendingRes = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/settlements/pending-summary`, { headers: { 'Authorization': `Bearer ${token}` } });
+                setAllPendingSummaries(pendingRes.data || []);
+            }
+            const res = await axios.get(url, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (logisticId === 'self') {
+                setAllSettlements(prev => ({ ...prev, [logisticId]: res.data || [] }));
+            } else if (res.data.success) {
                 setAllSettlements(prev => ({ ...prev, [logisticId]: res.data.data }));
             }
         } catch (error) {
@@ -160,16 +188,27 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                 .filter(o => o.order_status?.toLowerCase() === 'delivered')
                 .reduce((sum, o) => sum + Number(o.courier_delivery_fee || o.delivery_charge || 0), 0);
 
-            // 3. Last COD Amount (From lifted settlement state)
+            // 3. Last COD Amount (Sum all on latest date)
             const settlements = allSettlements[log.id] || [];
-            const lastCodAmount = settlements[0] ? Number(settlements[0].amount) : 0;
+            let lastCodAmount = 0;
+            if (settlements.length > 0) {
+                const sorted = [...settlements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                const latestDate = sorted[0].date;
+                lastCodAmount = sorted
+                    .filter(s => s.date === latestDate)
+                    .reduce((sum, s) => sum + Number(s.amount || 0), 0);
+            }
 
-            // 4. Pending COD = (Delivered Orders Amt - Deliv Charges) - Last COD
-            const deliveredOrdersAmt = logOrders
-                .filter(o => o.order_status?.toLowerCase() === 'delivered')
-                .reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
-
-            const pendingCod = (deliveredOrdersAmt - deliveryCharges) - lastCodAmount;
+            // 4. Pending COD logic
+            let pendingCod = 0;
+            if (log.id === 'self') {
+                pendingCod = allPendingSummaries.reduce((sum, r) => sum + Number(r.net_pending_settlement || 0), 0);
+            } else {
+                const deliveredOrdersAmt = logOrders
+                    .filter(o => o.order_status?.toLowerCase() === 'delivered')
+                    .reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+                pendingCod = (deliveredOrdersAmt - deliveryCharges) - lastCodAmount;
+            }
 
             stats[log.id] = {
                 pendingValue,
@@ -180,7 +219,7 @@ export default function FinanceView({ orders }: FinanceViewProps) {
         });
 
         return stats;
-    }, [orders, allSettlements, LOGISTICS]);
+    }, [orders, allSettlements, LOGISTICS, allPendingSummaries]);
 
     // Find logistic with highest pending value
     const highestPendingLogistic = useMemo(() => {
@@ -318,13 +357,15 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                                                 icon={<Truck className="text-red-500" size={16} />}
                                                 color="red"
                                             />
-                                            <MetricCard
-                                                label="Last Cod Amount"
-                                                amount={stats.lastCodAmount}
-                                                icon={<CreditCard className="text-emerald-500" size={16} />}
-                                                color="emerald"
-                                                isMock
-                                            />
+                                            {log.id !== 'self' && (
+                                                <MetricCard
+                                                    label="Last Cod Amount"
+                                                    amount={stats.lastCodAmount}
+                                                    icon={<CreditCard className="text-emerald-500" size={16} />}
+                                                    color="emerald"
+                                                    isMock
+                                                />
+                                            )}
                                         </div>
                                     </div>
                                 );
@@ -535,6 +576,131 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
     const [isLoadingLogs, setIsLoadingLogs] = useState(false);
     const [newCod, setNewCod] = useState({ amount: '', date: new Date().toISOString().split('T')[0], remarks: '' });
 
+    // Self Delivery specific states
+    const [pendingSummaries, setPendingSummaries] = useState<any[]>([]);
+    const [adminOrders, setAdminOrders] = useState<any[]>([]);
+    const [riders, setRiders] = useState<any[]>([]);
+    const [riderStock, setRiderStock] = useState<any[]>([]);
+    const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false);
+    const [settlementForm, setSettlementForm] = useState({
+        riderId: '',
+        amount: '',
+        date: new Date().toISOString().split('T')[0]
+    });
+    const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+    const [stockForm, setStockForm] = useState({
+        riderId: '',
+        productName: '',
+        quantity: '',
+        amount: ''
+    });
+    const [inventoryProducts, setInventoryProducts] = useState<any[]>([]);
+    const [completedSettlements, setCompletedSettlements] = useState<any[]>([]);
+
+
+    const fetchSelfDeliveryData = useCallback(async () => {
+        if (logistic.id !== 'self') return;
+        setIsLoadingLogs(true);
+        try {
+            const token = localStorage.getItem('token');
+            const [pendingRes, ordersRes, ridersRes, stockRes, invRes, compRes] = await Promise.all([
+                axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/settlements/pending-summary`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/orders/admin/delivery-list`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/settlements/riders`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/rider-inventory/all`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/orders/inventory-products`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/settlements`, { headers: { 'Authorization': `Bearer ${token}` } })
+            ]);
+
+            setPendingSummaries(pendingRes.data || []);
+            setAdminOrders(ordersRes.data || []);
+            setRiders(ridersRes.data || []);
+            setRiderStock(stockRes.data || []);
+            setInventoryProducts(invRes.data || []);
+            setCompletedSettlements(compRes.data || []);
+        } catch (error) {
+            console.error('Failed to fetch self delivery data:', error);
+        } finally {
+            setIsLoadingLogs(false);
+        }
+    }, [logistic.id]);
+
+    useEffect(() => {
+        if (logistic.id === 'self') {
+            fetchSelfDeliveryData();
+        }
+    }, [logistic.id, fetchSelfDeliveryData]);
+
+    const handleApproveReturn = async (orderId: string) => {
+        if (!confirm('Mark this order as Returned Delivered (Received in Warehouse)?')) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/orders/${orderId}/delivery-status`, 
+                { status: 'Returned Delivered' },
+                { headers: { 'Authorization': `Bearer ${token}` } }
+            );
+            fetchSelfDeliveryData();
+        } catch (error) {
+            console.error('Failed to approve return', error);
+        }
+    };
+
+    const handleAddSettlement = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!settlementForm.riderId || !settlementForm.amount || !settlementForm.date) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/settlements`, 
+                {
+                    riderId: settlementForm.riderId,
+                    amount: parseFloat(settlementForm.amount),
+                    date: settlementForm.date
+                },
+                { headers: { 'Authorization': `Bearer ${token}` } }
+            );
+            setIsSettlementModalOpen(false);
+            fetchSelfDeliveryData();
+        } catch (error) {
+            console.error('Failed to add settlement', error);
+        }
+    };
+
+    const handleAssignStock = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!stockForm.riderId || !stockForm.productName || !stockForm.quantity) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/rider-inventory/assign`, 
+                {
+                    rider_id: stockForm.riderId,
+                    product_name: stockForm.productName,
+                    quantity: parseInt(stockForm.quantity),
+                    amount: parseFloat(stockForm.amount)
+                },
+                { headers: { 'Authorization': `Bearer ${token}` } }
+            );
+            setIsStockModalOpen(false);
+            fetchSelfDeliveryData();
+        } catch (error) {
+            console.error('Failed to assign stock', error);
+        }
+    };
+
+    const handleApproveStockReturn = async (stockId: string, approve: boolean) => {
+        const newStatus = approve ? 'returned' : 'assigned';
+        if (!confirm(`Are you sure you want to ${approve ? 'approve' : 'decline'} this stock return?`)) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/rider-inventory/${stockId}/status`, 
+                { status: newStatus },
+                { headers: { 'Authorization': `Bearer ${token}` } }
+            );
+            fetchSelfDeliveryData();
+        } catch (error) {
+            console.error('Failed to update stock return status', error);
+        }
+    };
+
     // Reset page on filter or tab change
     useEffect(() => {
         setCurrentPage(1);
@@ -602,10 +768,25 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
             .reduce((sum, o) => sum + Number(o.courier_delivery_fee || o.delivery_charge || 0), 0);
 
         const deliveredValue = deliveredValueTotalAmt - totalDeliveryCharges;
-        const lastSettlement = settlements[0];
-        const lastCodDate = lastSettlement ? new Date(lastSettlement.date).toLocaleDateString() : 'N/A';
-        const lastCodAmount = lastSettlement ? Number(lastSettlement.amount) : 0;
-        const pendingCod = deliveredValue - lastCodAmount;
+
+        let lastCodDate = 'N/A';
+        let lastCodAmount = 0;
+        let pendingCod = deliveredValue;
+
+        if (settlements.length > 0) {
+            const sorted = [...settlements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            const latestDate = sorted[0].date;
+            lastCodDate = new Date(latestDate).toLocaleDateString();
+            lastCodAmount = sorted
+                .filter(s => s.date === latestDate)
+                .reduce((sum, s) => sum + Number(s.amount || 0), 0);
+        }
+
+        if (logistic.id === 'self') {
+            pendingCod = pendingSummaries.reduce((sum, r) => sum + Number(r.net_pending_settlement || 0), 0);
+        } else {
+            pendingCod = deliveredValue - lastCodAmount;
+        }
 
         const packedOrders = orders.filter(o =>
             (o.courier_provider === logistic.id || o.courier_provider === logistic.providerKey) &&
@@ -666,7 +847,7 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
             todayRtvOrders,
             pendingQty
         };
-    }, [logisticOrders, settlements, orders, logistic]);
+    }, [logisticOrders, settlements, orders, logistic, pendingSummaries, completedSettlements]);
 
     const handleSaveCod = async () => {
         if (!newCod.amount || !newCod.date) return;
@@ -743,8 +924,12 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                                 <CreditCard className="text-emerald-500" size={16} /> COD Info
                             </h3>
                             <div className="space-y-3">
-                                <MetricLine label="Last Cod Date" value={calculations.lastCodDate} textSize="text-base" />
-                                <MetricLine label="Last Cod Amount" value={`Rs. ${calculations.lastCodAmount.toLocaleString()}`} valueColor="text-indigo-600" textSize="text-base" />
+                                {logistic.id !== 'self' && (
+                                    <>
+                                        <MetricLine label="Last Cod Date" value={calculations.lastCodDate} textSize="text-base" />
+                                        <MetricLine label="Last Cod Amount" value={`Rs. ${calculations.lastCodAmount.toLocaleString()}`} valueColor="text-indigo-600" textSize="text-base" />
+                                    </>
+                                )}
                                 <MetricLine label="Pending Cod" value={`Rs. ${calculations.pendingCod.toLocaleString()}`} valueColor="text-orange-600" textSize="text-base" />
                                 <MetricLine
                                     label="Total Delivery Charges"
@@ -776,7 +961,11 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                         <div className="px-8 py-5 border-b border-gray-100 dark:border-slate-700/50 flex items-center justify-between bg-gray-50/30 dark:bg-slate-800/50">
                             <div className="flex p-1 bg-gray-200/50 dark:bg-slate-900/50 rounded-2xl">
                                 <button onClick={() => setActiveTab('orders')} className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all ${activeTab === 'orders' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-slate-500'}`}>Order List</button>
-                                <button onClick={() => setActiveTab('cod')} className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all ${activeTab === 'cod' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-slate-500'}`}>COD Details</button>
+                                {logistic.id === 'self' ? (
+                                    <button onClick={() => setActiveTab('cod')} className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all ${activeTab === 'cod' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-slate-500'}`}>Rider Settlement</button>
+                                ) : (
+                                    <button onClick={() => setActiveTab('cod')} className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all ${activeTab === 'cod' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-slate-500'}`}>COD Details</button>
+                                )}
                                 <button onClick={() => setActiveTab('changelogs')} className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all ${activeTab === 'changelogs' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-slate-500'}`}>Order Changelogs</button>
                             </div>
 
@@ -797,7 +986,7 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                                         <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                                     </div>
                                 </div>
-                            ) : activeTab === 'cod' ? (
+                            ) : activeTab === 'cod' && logistic.id !== 'self' ? (
                                 <button onClick={() => setIsAddCodOpen(true)} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg active:scale-95">
                                     <Plus size={18} /> Add COD
                                 </button>
@@ -806,76 +995,267 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
 
                         <div className="overflow-x-auto min-h-[400px]">
                             {activeTab === 'orders' ? (
-                                <table className="w-full text-left border-collapse">
-                                    <thead>
-                                        <tr className="bg-gray-50/50 dark:bg-slate-800/50 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100 dark:border-slate-700/50">
-                                            <th className="px-6 py-4">#</th>
-                                            <th className="px-6 py-4">Date</th>
-                                            <th className="px-6 py-4">Order ID</th>
-                                            <th className="px-6 py-4">Branch</th>
-                                            <th className="px-6 py-4">Customer</th>
-                                            <th className="px-6 py-4">Phone</th>
-                                            <th className="px-6 py-4">Amount</th>
-                                            <th className="px-6 py-4">Est. Charge</th>
-                                            <th className="px-6 py-4">Balance</th>
-                                            <th className="px-6 py-4">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
-                                        {paginatedOrders.map((order, idx) => (
-                                            <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-slate-900/40 transition-colors">
-                                                <td className="px-6 py-4 text-xs font-bold text-slate-400">{(currentPage - 1) * pageSize + idx + 1}</td>
-                                                <td className="px-6 py-4 text-xs text-slate-500 font-medium">{new Date(order.created_at).toLocaleDateString()}</td>
-                                                <td className="px-6 py-4 text-xs font-black text-indigo-600 dark:text-indigo-400">{order.order_number}</td>
-                                                <td className="px-6 py-4 text-xs text-slate-700 dark:text-slate-300 font-bold">
-                                                    {(order as any).delivery_branch || (order as any).city_name || 'N/A'}
-                                                </td>
-                                                <td className="px-6 py-4 text-xs text-slate-700 dark:text-slate-300 font-bold max-w-[120px] truncate">{order.customer_name}</td>
-                                                <td className="px-6 py-4 text-xs text-slate-500 font-medium tracking-tighter">{order.phone_number}</td>
-                                                <td className="px-6 py-4 text-sm font-black text-slate-900 dark:text-white">Rs. {order.total_amount?.toLocaleString()}</td>
-                                                <td className="px-6 py-4 text-xs font-bold text-red-500">Rs. {(order.courier_delivery_fee || order.delivery_charge || 0).toLocaleString()}</td>
-                                                <td className="px-6 py-4 text-xs font-bold text-emerald-600">Rs. {((order.total_amount || 0) - (order.courier_delivery_fee || order.delivery_charge || 0)).toLocaleString()}</td>
-                                                <td className="px-6 py-4">
-                                                    <span className={`text-[10px] px-2.5 py-1 rounded-full font-black uppercase tracking-tight ${getStatusStyle(order.order_status)}`}>
-                                                        {order.order_status}
-                                                    </span>
-                                                </td>
+                                logistic.id === 'self' ? (
+                                    <div className="overflow-x-auto min-h-[400px]">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="bg-gray-50 dark:bg-slate-900/50 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-gray-100 dark:border-slate-700">
+                                                    <th className="px-4 py-4">Date</th>
+                                                    <th className="px-4 py-4">Order ID</th>
+                                                    <th className="px-4 py-4">Customer</th>
+                                                    <th className="px-4 py-4">Assigned Rider</th>
+                                                    <th className="px-4 py-4 text-right">Amount</th>
+                                                    <th className="px-4 py-4 text-center">Status</th>
+                                                    <th className="px-4 py-4 text-center">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
+                                                {adminOrders.filter(o => statusFilter === 'ALL' || o.order_status?.toLowerCase() === statusFilter.toLowerCase()).map((order) => (
+                                                    <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors text-[13px]">
+                                                        <td className="px-4 py-4 text-slate-500">
+                                                            {new Date(order.created_at).toLocaleDateString()}
+                                                        </td>
+                                                        <td className="px-4 py-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                                            #{order.order_number}
+                                                        </td>
+                                                        <td className="px-4 py-4 font-bold text-slate-900 dark:text-white">
+                                                            {order.customer_name}
+                                                        </td>
+                                                        <td className="px-4 py-4">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-[10px] text-blue-600 font-bold">
+                                                                    {order.assigned_rider?.full_name?.charAt(0) || '?'}
+                                                                </div>
+                                                                <span className="text-slate-600 dark:text-slate-300 font-medium">
+                                                                    {order.assigned_rider?.full_name || 'Unassigned'}
+                                                                </span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-4 text-right font-black">Rs. {order.total_amount}</td>
+                                                        <td className="px-4 py-4 text-center">
+                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${getStatusStyle(order.order_status)}`}>
+                                                                {order.order_status}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-4 text-center">
+                                                            {['Return Process', 'Delivery Failed', 'Hold', 'Returning to Seller'].includes(order.order_status) && (
+                                                                <button 
+                                                                    onClick={() => handleApproveReturn(order.id)}
+                                                                    className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-black uppercase hover:bg-indigo-700 transition-colors shadow-sm"
+                                                                >
+                                                                    Approve Return
+                                                                </button>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                {adminOrders.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan={7} className="px-4 py-12 text-center text-slate-500 italic">No orders found.</td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-gray-50/50 dark:bg-slate-800/50 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100 dark:border-slate-700/50">
+                                                <th className="px-6 py-4">#</th>
+                                                <th className="px-6 py-4">Date</th>
+                                                <th className="px-6 py-4">Order ID</th>
+                                                <th className="px-6 py-4">Branch</th>
+                                                <th className="px-6 py-4">Customer</th>
+                                                <th className="px-6 py-4">Phone</th>
+                                                <th className="px-6 py-4">Amount</th>
+                                                <th className="px-6 py-4">Est. Charge</th>
+                                                <th className="px-6 py-4">Balance</th>
+                                                <th className="px-6 py-4">Status</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
+                                            {paginatedOrders.map((order, idx) => (
+                                                <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-slate-900/40 transition-colors">
+                                                    <td className="px-6 py-4 text-xs font-bold text-slate-400">{(currentPage - 1) * pageSize + idx + 1}</td>
+                                                    <td className="px-6 py-4 text-xs text-slate-500 font-medium">{new Date(order.created_at).toLocaleDateString()}</td>
+                                                    <td className="px-6 py-4 text-xs font-black text-indigo-600 dark:text-indigo-400">{order.order_number}</td>
+                                                    <td className="px-6 py-4 text-xs text-slate-700 dark:text-slate-300 font-bold">
+                                                        {(order as any).delivery_branch || (order as any).city_name || 'N/A'}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-xs text-slate-700 dark:text-slate-300 font-bold max-w-[120px] truncate">{order.customer_name}</td>
+                                                    <td className="px-6 py-4 text-xs text-slate-500 font-medium tracking-tighter">{order.phone_number}</td>
+                                                    <td className="px-6 py-4 text-sm font-black text-slate-900 dark:text-white">Rs. {order.total_amount?.toLocaleString()}</td>
+                                                    <td className="px-6 py-4 text-xs font-bold text-red-500">Rs. {(order.courier_delivery_fee || order.delivery_charge || 0).toLocaleString()}</td>
+                                                    <td className="px-6 py-4 text-xs font-bold text-emerald-600">Rs. {((order.total_amount || 0) - (order.courier_delivery_fee || order.delivery_charge || 0)).toLocaleString()}</td>
+                                                    <td className="px-6 py-4">
+                                                        <span className={`text-[10px] px-2.5 py-1 rounded-full font-black uppercase tracking-tight ${getStatusStyle(order.order_status)}`}>
+                                                            {order.order_status}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )
                             ) : activeTab === 'cod' ? (
-                                <table className="w-full text-left border-collapse">
-                                    <thead>
-                                        <tr className="bg-gray-50/50 dark:bg-slate-800/50 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100 dark:border-slate-700/50">
-                                            <th className="px-8 py-4 w-16">#</th>
-                                            <th className="px-8 py-4">Date</th>
-                                            <th className="px-8 py-4 text-right">COD Amount</th>
-                                            <th className="px-8 py-4">Remarks</th>
-                                            <th className="px-8 py-4 text-center">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
-                                        {settlements.map((settlement, idx) => (
-                                            <tr key={settlement.id} className="hover:bg-gray-50 dark:hover:bg-slate-900/40 transition-colors">
-                                                <td className="px-8 py-5 text-sm font-bold text-slate-400">{idx + 1}</td>
-                                                <td className="px-8 py-5 text-sm font-black text-slate-900 dark:text-white flex items-center gap-3">
-                                                    <Calendar size={16} className="text-slate-400" />
-                                                    {new Date(settlement.date).toLocaleDateString()}
-                                                </td>
-                                                <td className="px-8 py-5 text-lg font-black text-emerald-600 text-right">Rs. {Number(settlement.amount).toLocaleString()}</td>
-                                                <td className="px-8 py-5 text-sm text-slate-500 font-medium italic">{settlement.remarks || '-'}</td>
-                                                <td className="px-8 py-5 text-center">
-                                                    {canEditSettlement(settlement.created_at) ? (
-                                                        <button onClick={() => { setEditingSettlement(settlement); setIsEditSettlementOpen(true); }} className="p-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors">
-                                                            <Edit size={16} />
-                                                        </button>
-                                                    ) : <span className="text-[10px] font-bold text-slate-300 uppercase tracking-tighter">Locked</span>}
-                                                </td>
+                                logistic.id === 'self' ? (
+                                    <div className="p-6 space-y-8 max-h-[600px] overflow-y-auto custom-scrollbar">
+                                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                                            {pendingSummaries.map((rider) => {
+                                                const riderPendingOrders = adminOrders.filter(o => 
+                                                    o.assigned_rider_id === rider.rider_id && 
+                                                    !['Delivered', 'delivered', 'Returned Delivered'].includes(o.order_status)
+                                                );
+                                                const assignedStock = riderStock.filter(s => s.rider_id === rider.rider_id && (s.status === 'assigned' || s.status === 'return_pending'));
+
+                                                return (
+                                                    <div key={rider.rider_id} className="group bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-[2.5rem] overflow-hidden flex flex-col transition-all duration-500 hover:shadow-2xl hover:shadow-indigo-500/10">
+                                                        <div className="p-8 pb-6 bg-gradient-to-br from-slate-50/50 to-white dark:from-slate-800/40 dark:to-slate-800 border-b border-slate-100 dark:border-slate-700/50">
+                                                            <div className="flex justify-between items-start mb-6">
+                                                                <div className="flex items-center gap-5">
+                                                                    <div className="w-16 h-16 rounded-[1.25rem] bg-indigo-600 dark:bg-indigo-500 flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-indigo-500/20 group-hover:scale-110 transition-transform duration-500">
+                                                                        {rider.rider_name?.charAt(0)}
+                                                                    </div>
+                                                                    <div>
+                                                                        <h3 className="text-xl font-black text-slate-900 dark:text-white leading-tight mb-1">{rider.rider_name}</h3>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Active Logistics Professional</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex gap-2">
+                                                                    <button 
+                                                                        onClick={() => {
+                                                                            setSettlementForm({ riderId: rider.rider_id, amount: rider.net_pending_settlement.toString(), date: new Date().toISOString().split('T')[0] });
+                                                                            setIsSettlementModalOpen(true);
+                                                                        }}
+                                                                        className="p-3 bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 rounded-2xl hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white shadow-sm border border-indigo-100 dark:border-indigo-900/30 transition-all duration-300"
+                                                                        title="Settle Account"
+                                                                    >
+                                                                        <Wallet size={20} />
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => {
+                                                                            setStockForm({ ...stockForm, riderId: rider.rider_id });
+                                                                            setIsStockModalOpen(true);
+                                                                        }}
+                                                                        className="p-3 bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-2xl hover:bg-slate-900 hover:text-white dark:hover:bg-white dark:hover:text-slate-900 shadow-sm border border-slate-200 dark:border-slate-600 transition-all duration-300"
+                                                                        title="Assign Inventory"
+                                                                    >
+                                                                        <Plus size={20} />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                            <div className="bg-slate-900 dark:bg-indigo-950 rounded-[1.5rem] p-6 text-white shadow-2xl relative overflow-hidden group/amount">
+                                                                <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl transition-all group-hover/amount:scale-150" />
+                                                                <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-60 mb-2">Net Pending Settlement</p>
+                                                                <div className="flex items-baseline gap-2">
+                                                                    <span className="text-lg font-bold opacity-60 font-mono">Rs.</span>
+                                                                    <span className="text-4xl font-black tracking-tight">{rider.net_pending_settlement.toLocaleString()}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="p-8 space-y-8 flex-1 bg-white dark:bg-slate-800/50">
+                                                            <div className="grid grid-cols-2 gap-4">
+                                                                <div className="p-5 bg-indigo-50/30 dark:bg-indigo-900/10 rounded-[1.5rem] border border-indigo-100/50 dark:border-indigo-900/20">
+                                                                    <div className="flex items-center gap-2 mb-2 text-indigo-500">
+                                                                        <Package size={14} />
+                                                                        <span className="text-[10px] font-black uppercase tracking-[0.2em]">Pending Orders</span>
+                                                                    </div>
+                                                                    <p className="text-2xl font-black text-slate-900 dark:text-white">{rider.pending_orders_count}</p>
+                                                                </div>
+                                                                <div className="p-5 bg-emerald-50/30 dark:bg-emerald-900/10 rounded-[1.5rem] border border-emerald-100/50 dark:border-emerald-900/20">
+                                                                    <div className="flex items-center gap-2 mb-2 text-emerald-500">
+                                                                        <Truck size={14} />
+                                                                        <span className="text-[10px] font-black uppercase tracking-[0.2em]">Assigned Stock</span>
+                                                                    </div>
+                                                                    <p className="text-2xl font-black text-slate-900 dark:text-white">{rider.assigned_stock_count}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="space-y-6">
+                                                                <div>
+                                                                    <div className="flex justify-between items-center mb-4">
+                                                                        <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                                                            <RefreshCw size={12} className="text-amber-500" /> Recent Logistics activity
+                                                                        </h4>
+                                                                        <span className="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-full text-[10px] font-bold">
+                                                                            {riderPendingOrders.length} Tasks
+                                                                        </span>
+                                                                    </div>
+                                                                    {riderPendingOrders.length > 0 ? (
+                                                                        <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                                                            {riderPendingOrders.map((o) => (
+                                                                                <div key={o.id} className={`p-4 border rounded-2xl flex justify-between items-center group/item transition-all hover:border-indigo-300 dark:hover:border-indigo-700 ${['Return Process', 'Delivery Failed', 'Hold'].includes(o.order_status) ? 'bg-amber-50/40 dark:bg-amber-900/5 border-amber-100/50 dark:border-amber-900/20' : 'bg-slate-50/40 dark:bg-slate-900/20 border-slate-100/50 dark:border-slate-800/50'}`}>
+                                                                                    <div>
+                                                                                        <div className="flex items-center gap-2 mb-1">
+                                                                                            <p className="text-[13px] font-bold text-slate-900 dark:text-white">#{o.order_number}</p>
+                                                                                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${['Return Process', 'Delivery Failed', 'Hold'].includes(o.order_status) ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                                                                                                {o.order_status}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        <p className="text-[11px] font-medium text-slate-500">{o.customer_name}</p>
+                                                                                    </div>
+                                                                                    <div className="flex items-center gap-4">
+                                                                                        <span className="text-sm font-black text-slate-900 dark:text-white">Rs. {o.total_amount}</span>
+                                                                                        {['Return Process', 'Delivery Failed', 'Hold', 'Returning to Seller'].includes(o.order_status) && (
+                                                                                            <button
+                                                                                                onClick={() => handleApproveReturn(o.id)}
+                                                                                                className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-indigo-600/20 opacity-0 group-hover/item:opacity-100 transition-all duration-300"
+                                                                                            >
+                                                                                                Confirm Return
+                                                                                            </button>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="p-8 bg-slate-50/50 dark:bg-slate-900/20 rounded-[2rem] border border-dashed border-slate-200 dark:border-slate-800 text-center">
+                                                                            <p className="text-xs text-slate-400 font-medium italic">No active delivery tasks</p>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-gray-50/50 dark:bg-slate-800/50 text-[11px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100 dark:border-slate-700/50">
+                                                <th className="px-8 py-4 w-16">#</th>
+                                                <th className="px-8 py-4">Date</th>
+                                                <th className="px-8 py-4 text-right">COD Amount</th>
+                                                <th className="px-8 py-4">Remarks</th>
+                                                <th className="px-8 py-4 text-center">Actions</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
+                                            {settlements.map((settlement, idx) => (
+                                                <tr key={settlement.id} className="hover:bg-gray-50 dark:hover:bg-slate-900/40 transition-colors">
+                                                    <td className="px-8 py-5 text-sm font-bold text-slate-400">{idx + 1}</td>
+                                                    <td className="px-8 py-5 text-sm font-black text-slate-900 dark:text-white flex items-center gap-3">
+                                                        <Calendar size={16} className="text-slate-400" />
+                                                        {new Date(settlement.date).toLocaleDateString()}
+                                                    </td>
+                                                    <td className="px-8 py-5 text-lg font-black text-emerald-600 text-right">Rs. {Number(settlement.amount).toLocaleString()}</td>
+                                                    <td className="px-8 py-5 text-sm text-slate-500 font-medium italic">{settlement.remarks || '-'}</td>
+                                                    <td className="px-8 py-5 text-center">
+                                                        {canEditSettlement(settlement.created_at) ? (
+                                                            <button onClick={() => { setEditingSettlement(settlement); setIsEditSettlementOpen(true); }} className="p-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors">
+                                                                <Edit size={16} />
+                                                            </button>
+                                                        ) : <span className="text-[10px] font-bold text-slate-300 uppercase tracking-tighter">Locked</span>}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )
                             ) : (
                                 <table className="w-full text-left border-collapse">
                                     <thead>
@@ -1007,6 +1387,133 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                             <button onClick={() => { setIsEditSettlementOpen(false); setEditingSettlement(null); }} className="flex-1 py-4 rounded-2xl text-sm font-black text-slate-500 hover:bg-gray-100 transition-all">Cancel</button>
                             <button onClick={handleUpdateCod} className="flex-1 py-4 rounded-2xl text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all">Update COD</button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {isSettlementModalOpen && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden border border-gray-100 dark:border-slate-700">
+                        <div className="p-8 border-b border-gray-100 dark:border-slate-700/50 flex justify-between items-center">
+                            <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Record Rider Settlement</h2>
+                            <button onClick={() => setIsSettlementModalOpen(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-all">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleAddSettlement} className="p-8 space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Select Rider</label>
+                                <select 
+                                    value={settlementForm.riderId}
+                                    onChange={(e) => setSettlementForm({...settlementForm, riderId: e.target.value})}
+                                    className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                    required
+                                >
+                                    <option value="">Choose a rider...</option>
+                                    {riders.map(r => (
+                                        <option key={r.id} value={r.id}>{r.full_name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Settlement Amount (Rs.)</label>
+                                <input 
+                                    type="number" 
+                                    value={settlementForm.amount}
+                                    onChange={(e) => setSettlementForm({...settlementForm, amount: e.target.value})}
+                                    className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                    placeholder="Enter amount"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Settlement Date</label>
+                                <input 
+                                    type="date" 
+                                    value={settlementForm.date}
+                                    onChange={(e) => setSettlementForm({...settlementForm, date: e.target.value})}
+                                    className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                    required
+                                />
+                            </div>
+                            <button 
+                                type="submit"
+                                className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest shadow-xl shadow-indigo-500/20 hover:bg-indigo-700 transition-all active:scale-[0.98]"
+                            >
+                                Confirm Settlement
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {isStockModalOpen && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden border border-gray-100 dark:border-slate-700">
+                        <div className="p-8 border-b border-gray-100 dark:border-slate-700/50 flex justify-between items-center">
+                            <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Assign Stock to Rider</h2>
+                            <button onClick={() => setIsStockModalOpen(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-all">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleAssignStock} className="p-8 space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Rider</label>
+                                <select 
+                                    value={stockForm.riderId}
+                                    onChange={(e) => setStockForm({...stockForm, riderId: e.target.value})}
+                                    className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                    required
+                                >
+                                    <option value="">Select Rider</option>
+                                    {riders.map(r => (
+                                        <option key={r.id} value={r.id}>{r.full_name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Product</label>
+                                <select 
+                                    value={stockForm.productName}
+                                    onChange={(e) => setStockForm({...stockForm, productName: e.target.value})}
+                                    className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                    required
+                                >
+                                    <option value="">Select Product</option>
+                                    {inventoryProducts.map((p, i) => (
+                                        <option key={i} value={p.name}>{p.name} (Stock: {p.stock_quantity})</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Quantity</label>
+                                    <input 
+                                        type="number" 
+                                        value={stockForm.quantity}
+                                        onChange={(e) => setStockForm({...stockForm, quantity: e.target.value})}
+                                        className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Price/Unit</label>
+                                    <input 
+                                        type="number" 
+                                        value={stockForm.amount}
+                                        onChange={(e) => setStockForm({...stockForm, amount: e.target.value})}
+                                        className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <button 
+                                type="submit"
+                                className="w-full py-4 bg-emerald-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest shadow-xl shadow-emerald-500/20 hover:bg-emerald-700 transition-all active:scale-[0.98]"
+                            >
+                                Assign Stock
+                            </button>
+                        </form>
                     </div>
                 </div>
             )}

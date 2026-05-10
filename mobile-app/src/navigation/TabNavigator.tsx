@@ -134,7 +134,11 @@ export default function TabNavigator() {
                 initialRouteName="Home"
                 screenOptions={({ route }: any) => {
                     const options = commonScreenOptions(insets);
-                    const isTabBarHidden = route.params?.hideTabBar === true;
+                    
+                    // Logic to hide tab bar for specific nested screens
+                    const routeName = getFocusedRouteNameFromRoute(route);
+                    const hideOnScreens = ['ChatDetail', 'CreateOrder', 'OrderDetails'];
+                    const isTabBarHidden = hideOnScreens.includes(routeName as string) || route.params?.hideTabBar === true;
 
                     return {
                         ...options,
@@ -149,6 +153,7 @@ export default function TabNavigator() {
                     };
                 }}
             >
+
                 <Tab.Screen name="Home" component={HomeScreen} />
                 <Tab.Screen name="Messages" component={MessagesNavigator} />
                 <Tab.Screen name="Orders" component={OrdersScreen} />
