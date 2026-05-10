@@ -100,4 +100,14 @@ export class AdsManagementController {
             return { success: false, error: error.message };
         }
     }
+
+    @Get('daily-profit-analysis')
+    async getDailyProfitAnalysis() {
+        try {
+            const data = await this.adsManagementService.getDailyProfitAnalysis();
+            return { success: true, data };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    }
 }

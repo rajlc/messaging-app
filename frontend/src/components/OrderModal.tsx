@@ -61,6 +61,7 @@ export default function OrderModal({
     const [userRole, setUserRole] = useState<string>('');
     const [isDirty, setIsDirty] = useState(false);
     const [remarks, setRemarks] = useState('');
+    const [orderType, setOrderType] = useState('Ads');
 
     // Logistics State
     const [courierProvider, setCourierProvider] = useState('');
@@ -224,6 +225,7 @@ export default function OrderModal({
                 if (initialOrder.platform) setOrderPlatform(initialOrder.platform);
                 if (initialOrder.page_name) setOrderPageName(initialOrder.page_name);
                 if (initialOrder.platform_account) setOrderPageId(initialOrder.platform_account);
+                if (initialOrder.order_type) setOrderType(initialOrder.order_type);
 
                 setPackageDescription(initialOrder.package_description || '');
 
@@ -281,6 +283,7 @@ export default function OrderModal({
                 setNcmDeliveryCost(0);
                 setPackageDescription('');
                 setCourierProvider('');
+                setOrderType('Ads');
             }
 
 
@@ -773,6 +776,7 @@ export default function OrderModal({
                 order_date: initialOrder?.order_date || new Date().toISOString().split('T')[0],
                 order_number: initialOrder?.order_number || `WEB-${Math.floor(1000 + Math.random() * 9000)}`,
                 tracking_number: initialOrder?.tracking_number || `TRK-${Date.now()}`,
+                order_type: orderType,
                 status: 'Pending'
             };
 
@@ -845,8 +849,8 @@ export default function OrderModal({
                 {/* Body (Scrollable) */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
-                    {/* Row 0: Platform & Page (Vital for Visibility) */}
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* Row 0: Platform, Order Type & Page (Vital for Visibility) */}
+                    <div className="grid grid-cols-3 gap-3">
                         <div>
                             <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1 uppercase font-bold">Platform {!isReadOnly && <span className="text-red-500">*</span>}</label>
                             {/* Always show Select if we have allowed platforms (which we now do for Admin too) */}
@@ -878,6 +882,18 @@ export default function OrderModal({
                                     className="w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded p-2 text-slate-900 dark:text-white outline-none"
                                 />
                             )}
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1 uppercase font-bold">Order Type {!isReadOnly && <span className="text-red-500">*</span>}</label>
+                            <select
+                                value={orderType}
+                                onChange={(e) => setDirty(() => setOrderType(e.target.value))}
+                                disabled={isReadOnly}
+                                className="w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded p-2 text-slate-900 dark:text-white outline-none"
+                            >
+                                <option value="Ads">Ads</option>
+                                <option value="Others">Others</option>
+                            </select>
                         </div>
                         <div>
                             <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1 uppercase font-bold">Page Name {!isReadOnly && <span className="text-red-500">*</span>}</label>
@@ -1132,6 +1148,27 @@ export default function OrderModal({
                             placeholder="e.g. Clothes, Electronics..."
                             className={`w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded p-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 ${!isReadOnly && orderStatus !== 'New Order' && !packageDescription ? 'border-red-300' : ''}`}
                         />
+                        {!isReadOnly && items.some(i => i.product_name && i.qty) && (
+                            <div className="mt-1.5 flex items-center gap-1.5">
+                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Suggest:</span>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const suggestion = items
+                                            .filter(item => item.product_name && item.qty)
+                                            .map(item => `${item.qty} Pc X ${item.product_name}`)
+                                            .join(', ');
+                                        setDirty(() => setPackageDescription(suggestion));
+                                    }}
+                                    className="text-[10px] px-2 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800/50 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors font-medium italic"
+                                >
+                                    {items
+                                        .filter(item => item.product_name && item.qty)
+                                        .map(item => `${item.qty} Pc X ${item.product_name}`)
+                                        .join(', ')}
+                                </button>
+                            </div>
+                        )}
                         {orderStatus !== 'New Order' && !packageDescription && !isReadOnly && (
                             <p className="text-[9px] text-red-500 mt-0.5">Package description is required</p>
                         )}
@@ -1142,7 +1179,13 @@ export default function OrderModal({
                         <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1 uppercase font-bold">Logistic Partner</label>
                             <select
                                 value={courierProvider}
-                                onChange={(e) => setCourierProvider(e.target.value)}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setCourierProvider(val);
+                                    if (val === 'self') {
+                                        setTotalDeliveryCost(100);
+                                    }
+                                }}
                                 disabled={isReadOnly}
                                 className="w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded p-2 text-slate-900 dark:text-white focus:border-indigo-500 outline-none appearance-none disabled:opacity-70"
                             >

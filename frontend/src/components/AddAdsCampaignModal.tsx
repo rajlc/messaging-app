@@ -11,11 +11,14 @@ interface AddAdsCampaignModalProps {
 
 export default function AddAdsCampaignModal({ isOpen, onClose, onSuccess, editingCampaign }: AddAdsCampaignModalProps) {
     const [name, setName] = useState('');
+    const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+    const [endDate, setEndDate] = useState('');
     const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
     const [allProducts, setAllProducts] = useState<any[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
     const [productSearch, setProductSearch] = useState('');
+    const [status, setStatus] = useState<'On' | 'Off'>('On');
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -41,10 +44,16 @@ export default function AddAdsCampaignModal({ isOpen, onClose, onSuccess, editin
             fetchProducts();
             if (editingCampaign) {
                 setName(editingCampaign.name);
+                setStartDate(editingCampaign.start_date || new Date().toISOString().split('T')[0]);
+                setEndDate(editingCampaign.end_date || '');
                 setSelectedProducts(editingCampaign.product_names || []);
+                setStatus(editingCampaign.status || 'On');
             } else {
                 setName('');
+                setStartDate(new Date().toISOString().split('T')[0]);
+                setEndDate('');
                 setSelectedProducts([]);
+                setStatus('On');
             }
         }
     }, [isOpen, editingCampaign]);
@@ -85,7 +94,10 @@ export default function AddAdsCampaignModal({ isOpen, onClose, onSuccess, editin
 
             const res = await axios[method](url, {
                 name,
-                product_names: selectedProducts
+                start_date: startDate,
+                end_date: endDate || null,
+                product_names: selectedProducts,
+                status
             }, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -135,6 +147,46 @@ export default function AddAdsCampaignModal({ isOpen, onClose, onSuccess, editin
                             className="w-full px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-transparent focus:border-indigo-500 rounded-xl text-sm font-bold text-slate-900 dark:text-white outline-none transition-all"
                             placeholder="Enter campaign name..."
                             required
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Start Date</label>
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="w-full px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-transparent focus:border-indigo-500 rounded-xl text-sm font-bold text-slate-900 dark:text-white outline-none transition-all"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Status</label>
+                            <select
+                                value={status}
+                                onChange={(e) => {
+                                    const newStatus = e.target.value as 'On' | 'Off';
+                                    setStatus(newStatus);
+                                    if (newStatus === 'Off') {
+                                        setEndDate(new Date().toISOString().split('T')[0]);
+                                    }
+                                }}
+                                className="w-full px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-transparent focus:border-indigo-500 rounded-xl text-sm font-bold text-slate-900 dark:text-white outline-none transition-all cursor-pointer"
+                            >
+                                <option value="On">On</option>
+                                <option value="Off">Off</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">End Date (Optional)</label>
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-transparent focus:border-indigo-500 rounded-xl text-sm font-bold text-slate-900 dark:text-white outline-none transition-all"
                         />
                     </div>
 

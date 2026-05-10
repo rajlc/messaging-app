@@ -167,7 +167,8 @@ export class OrdersService {
                 ncm_from_branch: orderData.ncm_from_branch,
                 ncm_to_branch: orderData.ncm_to_branch,
                 ncm_delivery_type: orderData.ncm_delivery_type,
-                package_description: orderData.package_description
+                package_description: orderData.package_description,
+                order_type: orderData.order_type || 'Ads'
             })
             .select()
             .single();
@@ -519,6 +520,7 @@ export class OrdersService {
             ncm_to_branch: orderData.ncm_to_branch,
             ncm_delivery_type: orderData.ncm_delivery_type,
             package_description: orderData.package_description,
+            order_type: orderData.order_type,
 
             updated_by: user?.full_name || 'System'
         };

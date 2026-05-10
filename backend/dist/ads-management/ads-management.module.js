@@ -10,11 +10,13 @@ exports.AdsManagementModule = void 0;
 const common_1 = require("@nestjs/common");
 const ads_management_controller_1 = require("./ads-management.controller");
 const ads_management_service_1 = require("./ads-management.service");
+const orders_module_1 = require("../orders/orders.module");
 let AdsManagementModule = class AdsManagementModule {
 };
 exports.AdsManagementModule = AdsManagementModule;
 exports.AdsManagementModule = AdsManagementModule = __decorate([
     (0, common_1.Module)({
+        imports: [orders_module_1.OrdersModule],
         controllers: [ads_management_controller_1.AdsManagementController],
         providers: [ads_management_service_1.AdsManagementService],
     })

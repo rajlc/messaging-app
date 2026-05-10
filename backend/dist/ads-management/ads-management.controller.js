@@ -103,6 +103,15 @@ let AdsManagementController = class AdsManagementController {
             return { success: false, error: error.message };
         }
     }
+    async getDailyProfitAnalysis() {
+        try {
+            const data = await this.adsManagementService.getDailyProfitAnalysis();
+            return { success: true, data };
+        }
+        catch (error) {
+            return { success: false, error: error.message };
+        }
+    }
 };
 exports.AdsManagementController = AdsManagementController;
 __decorate([
@@ -167,6 +176,12 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AdsManagementController.prototype, "upsertProductMetric", null);
+__decorate([
+    (0, common_1.Get)('daily-profit-analysis'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AdsManagementController.prototype, "getDailyProfitAnalysis", null);
 exports.AdsManagementController = AdsManagementController = __decorate([
     (0, common_1.Controller)('api/ads-management'),
     (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),

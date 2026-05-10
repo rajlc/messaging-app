@@ -33,9 +33,34 @@ export declare class AdsManagementController {
         success: boolean;
         data: {
             campaign: any;
-            metrics: any[];
             orders: any[];
-            total_profit: number;
+            metrics: any[];
+            total_profit: any;
+            ads_management: {
+                total_ads_amount: number;
+                ads_orders: number;
+                ads_spend: number;
+                past_orders: number;
+                ads_amount: number;
+            };
+            status_breakdown: {
+                shipped: {
+                    qty: number;
+                    amount: number;
+                };
+                returning: {
+                    qty: number;
+                    amount: number;
+                };
+                delivered: {
+                    qty: number;
+                    amount: number;
+                };
+                returned: {
+                    qty: number;
+                    amount: number;
+                };
+            };
         };
         error?: undefined;
     } | {
@@ -82,6 +107,22 @@ export declare class AdsManagementController {
     upsertProductMetric(body: any): Promise<{
         success: boolean;
         data: any;
+        error?: undefined;
+    } | {
+        success: boolean;
+        error: any;
+        data?: undefined;
+    }>;
+    getDailyProfitAnalysis(): Promise<{
+        success: boolean;
+        data: {
+            date: string;
+            totalProfit: number;
+            campaignBreakdown: Record<string, {
+                name: string;
+                profit: number;
+            }>;
+        }[];
         error?: undefined;
     } | {
         success: boolean;

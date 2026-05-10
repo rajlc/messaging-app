@@ -79,6 +79,8 @@ export default function DeliveryView() {
                 fetchSettlements();
             } else {
                 fetchPendingSummaries();
+                fetchRiderStock();
+                fetchAdminDeliveryOrders();
             }
         } else if (activeTab === 'admin-report') {
             if (adminReportSubTab === 'daily') {
@@ -1176,6 +1178,59 @@ export default function DeliveryView() {
                                             ) : (
                                                 <div className="p-8 bg-slate-50/50 dark:bg-slate-900/20 rounded-[2rem] border border-dashed border-slate-200 dark:border-slate-800 text-center">
                                                     <p className="text-xs text-slate-400 font-medium italic">No active delivery tasks</p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Assigned Stock Section */}
+                                        <div className="pt-6 border-t border-slate-100 dark:border-slate-700/50">
+                                            <div className="flex justify-between items-center mb-4">
+                                                <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                                    <Truck size={12} className="text-emerald-500" /> Assigned Stock Items
+                                                </h4>
+                                                <span className="px-3 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-full text-[10px] font-bold">
+                                                    {assignedStock.length} Items
+                                                </span>
+                                            </div>
+
+                                            {assignedStock.length > 0 ? (
+                                                <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+                                                    {assignedStock.map((stock) => (
+                                                        <div key={stock.id} className="p-4 bg-emerald-50/30 dark:bg-emerald-900/10 border border-emerald-100/50 dark:border-emerald-900/20 rounded-2xl flex justify-between items-center group/stock transition-all hover:border-emerald-300 dark:hover:border-emerald-700">
+                                                            <div>
+                                                                <p className="text-[13px] font-bold text-slate-900 dark:text-white">{stock.product_name}</p>
+                                                                <div className="flex items-center gap-2 mt-1">
+                                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Qty: {stock.quantity}</span>
+                                                                    {stock.status === 'return_pending' && (
+                                                                        <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[9px] font-black uppercase">Return Pending</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-4">
+                                                                <span className="text-sm font-black text-emerald-600">Rs. {stock.amount || 0}</span>
+                                                                {stock.status === 'return_pending' && (
+                                                                    <div className="flex gap-1">
+                                                                        <button 
+                                                                            onClick={() => handleApproveStockReturn(stock.id, true)}
+                                                                            className="px-2 py-1 bg-emerald-600 text-white rounded text-[9px] font-black uppercase shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+                                                                        >
+                                                                            Approve
+                                                                        </button>
+                                                                        <button 
+                                                                            onClick={() => handleApproveStockReturn(stock.id, false)}
+                                                                            className="px-2 py-1 bg-red-600 text-white rounded text-[9px] font-black uppercase shadow-lg shadow-red-600/20 transition-all active:scale-95"
+                                                                        >
+                                                                            Decline
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="p-6 bg-slate-50/50 dark:bg-slate-900/20 rounded-[1.5rem] border border-dashed border-slate-200 dark:border-slate-800 text-center">
+                                                    <p className="text-[10px] text-slate-400 font-medium italic">No assigned stock for this rider</p>
                                                 </div>
                                             )}
                                         </div>

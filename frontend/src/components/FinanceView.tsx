@@ -72,6 +72,10 @@ export default function FinanceView({ orders }: FinanceViewProps) {
     const [allSettlements, setAllSettlements] = useState<Record<string, Settlement[]>>({});
     const [adsSpends, setAdsSpends] = useState<any[]>([]);
     const [isLoadingSettlements, setIsLoadingSettlements] = useState(false);
+    const [adsMainTab, setAdsMainTab] = useState<'ads' | 'profit'>('ads');
+    const [dailyProfitData, setDailyProfitData] = useState<any[]>([]);
+    const [viewingDailyBreakdown, setViewingDailyBreakdown] = useState<any>(null);
+    const [isLoadingProfit, setIsLoadingProfit] = useState(false);
 
 
     const fetchAdsSpends = useCallback(async () => {
@@ -105,10 +109,27 @@ export default function FinanceView({ orders }: FinanceViewProps) {
         }
     }, [LOGISTICS]);
 
+    const fetchDailyProfitAnalysis = useCallback(async () => {
+        setIsLoadingProfit(true);
+        try {
+            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/ads-management/daily-profit-analysis`, {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            if (res.data.success) {
+                setDailyProfitData(res.data.data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch daily profit analysis:', error);
+        } finally {
+            setIsLoadingProfit(false);
+        }
+    }, []);
+
     useEffect(() => {
         fetchAdsSpends();
         fetchAllSettlements();
-    }, [fetchAdsSpends, fetchAllSettlements]);
+        fetchDailyProfitAnalysis();
+    }, [fetchAdsSpends, fetchAllSettlements, fetchDailyProfitAnalysis]);
 
     const refreshLogisticSettlements = useCallback(async (logisticId: string) => {
         try {
@@ -311,12 +332,27 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                         </div>
                     </section>
 
-                    {/* Ads Management Section */}
                     <section>
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
-                                <TrendingUp className="text-emerald-500" size={20} /> Ads Management
-                            </h2>
+                            <div className="flex items-center gap-6">
+                                <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                    <TrendingUp className="text-emerald-500" size={20} /> Ads & Profit Management
+                                </h2>
+                                <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-900/50 p-1 rounded-xl">
+                                    <button
+                                        onClick={() => setAdsMainTab('ads')}
+                                        className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${adsMainTab === 'ads' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-slate-500'}`}
+                                    >
+                                        Ads Management
+                                    </button>
+                                    <button
+                                        onClick={() => setAdsMainTab('profit')}
+                                        className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${adsMainTab === 'profit' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-slate-500'}`}
+                                    >
+                                        Profit Management
+                                    </button>
+                                </div>
+                            </div>
                             <button
                                 onClick={() => setIsBoostingDetailOpen(true)}
                                 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 group"
@@ -324,34 +360,47 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                                 View More <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
                             </button>
                         </div>
-                        <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-3xl overflow-hidden shadow-sm">
-                            <div className="p-0">
-                                <table className="w-full text-left border-collapse">
-                                    <thead>
-                                        <tr className="bg-gray-50/50 dark:bg-slate-800/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100 dark:border-slate-700/50">
-                                            <th className="px-8 py-3">Date</th>
-                                            <th className="px-8 py-3">Campaign Name</th>
-                                            <th className="px-8 py-3 text-right">Amount</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
-                                        {adsSpends.length === 0 ? (
-                                            <tr>
-                                                <td colSpan={3} className="px-8 py-8 text-center text-slate-400 text-xs italic">
-                                                    No ads spend records found.
-                                                </td>
+
+                        {adsMainTab === 'ads' ? (
+                            <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-3xl overflow-hidden shadow-sm">
+                                <div className="p-0">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-gray-50/50 dark:bg-slate-800/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-gray-100 dark:border-slate-700/50">
+                                                <th className="px-8 py-3">Date</th>
+                                                <th className="px-8 py-3">Campaign Name</th>
+                                                <th className="px-8 py-3 text-right">Amount</th>
                                             </tr>
-                                        ) : adsSpends.map((spend) => (
-                                            <tr key={spend.id} className="hover:bg-gray-50 dark:hover:bg-slate-900/40 transition-colors">
-                                                <td className="px-8 py-3 text-xs font-bold text-slate-500">{spend.date}</td>
-                                                <td className="px-8 py-3 text-xs font-black text-indigo-600">{spend.ads_campaigns?.name || 'Unknown'}</td>
-                                                <td className="px-8 py-3 text-sm font-black text-slate-900 dark:text-white text-right">Rs. {Number(spend.amount).toLocaleString()}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
+                                            {adsSpends.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={3} className="px-8 py-8 text-center text-slate-400 text-xs italic">
+                                                        No ads spend records found.
+                                                    </td>
+                                                </tr>
+                                            ) : adsSpends.map((spend) => (
+                                                <tr key={spend.id} className="hover:bg-gray-50 dark:hover:bg-slate-900/40 transition-colors">
+                                                    <td className="px-8 py-3 text-xs font-bold text-slate-500">{spend.date}</td>
+                                                    <td className="px-8 py-3 text-xs font-black text-indigo-600">{spend.ads_campaigns?.name || 'Unknown'}</td>
+                                                    <td className="px-8 py-3 text-sm font-black text-slate-900 dark:text-white text-right">Rs. {Number(spend.amount).toLocaleString()}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
-                        </div>
+                        ) : (
+                            <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-3xl p-8 shadow-sm text-center">
+                                <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <DollarSign className="text-emerald-600" size={24} />
+                                </div>
+                                <h3 className="text-lg font-black text-slate-900 dark:text-white mb-2">Profit Management</h3>
+                                <p className="text-slate-500 dark:text-slate-400 text-xs font-medium max-w-sm mx-auto">
+                                    The Profit Management system is coming soon. You'll be able to track your net profit margins and financial performance here.
+                                </p>
+                            </div>
+                        )}
                     </section>
 
                     {/* Profit Analysis Section */}
@@ -360,40 +409,110 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                             <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
                                 <DollarSign className="text-indigo-500" size={20} /> Profit Analysis
                             </h2>
-                            <button className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1">
-                                View More <ArrowUpRight size={12} />
+                            <button 
+                                onClick={fetchDailyProfitAnalysis}
+                                className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                            >
+                                Refresh Data <Clock size={12} />
                             </button>
                         </div>
                         <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">
                             <div className="space-y-4">
-                                {[...Array(7)].map((_, i) => {
-                                    const date = new Date();
-                                    date.setDate(date.getDate() - i);
-                                    return (
-                                        <div key={i} className="flex items-center justify-between p-4 bg-gray-50/50 dark:bg-slate-900/30 rounded-2xl border border-gray-100 dark:border-slate-700/50">
+                                {isLoadingProfit ? (
+                                    <div className="py-20 text-center">
+                                        <div className="animate-spin w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+                                        <p className="text-sm text-slate-500 font-bold uppercase tracking-widest">Calculating Profits...</p>
+                                    </div>
+                                ) : dailyProfitData.length === 0 ? (
+                                    <div className="py-20 text-center text-slate-400 italic text-sm">
+                                        No profit data available for the last 60 days.
+                                    </div>
+                                ) : (
+                                    dailyProfitData.slice(0, 7).map((day, i) => (
+                                        <div key={day.date} className="flex items-center justify-between p-4 bg-gray-50/50 dark:bg-slate-900/30 rounded-2xl border border-gray-100 dark:border-slate-700/50 hover:bg-white dark:hover:bg-slate-800 transition-all group">
                                             <div className="flex items-center gap-4">
                                                 <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center">
                                                     <Calendar size={18} className="text-indigo-600 dark:text-indigo-400" />
                                                 </div>
                                                 <div>
-                                                    <p className="text-xs font-bold text-slate-500">{date.toLocaleDateString()}</p>
-                                                    <p className="text-sm font-black text-slate-900 dark:text-white">Daily Summary</p>
+                                                    <p className="text-xs font-bold text-slate-500">{new Date(day.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                                    <p className="text-sm font-black text-slate-900 dark:text-white">Daily Profit Summary</p>
                                                 </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Net Profit</p>
-                                                <p className="text-base font-black text-emerald-600">Rs. {(15000 - i * 500).toLocaleString()}</p>
+                                            <div className="flex items-center gap-8">
+                                                <div className="text-right">
+                                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Net Profit</p>
+                                                    <p className={`text-lg font-black ${day.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                        {day.totalProfit >= 0 ? '' : '-'} Rs. {Math.abs(Math.round(day.totalProfit)).toLocaleString()}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    onClick={() => setViewingDailyBreakdown(day)}
+                                                    className="px-4 py-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-gray-200 dark:border-slate-600 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all shadow-sm"
+                                                >
+                                                    View Breakdown
+                                                </button>
                                             </div>
                                         </div>
-                                    );
-                                })}
+                                    ))
+                                )}
+                                {dailyProfitData.length > 7 && (
+                                    <p className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest pt-2">Showing last 7 days only</p>
+                                )}
                             </div>
                         </div>
                     </section>
                 </div>
             </main>
 
-            {/* Modals will be updated/added below */}
+            {/* Daily Profit Breakdown Modal */}
+            {viewingDailyBreakdown && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-xl overflow-hidden border border-gray-100 dark:border-slate-700 animate-in zoom-in-95 duration-300">
+                        <div className="p-8 border-b border-gray-100 dark:border-slate-700/50 flex justify-between items-center bg-gray-50/50 dark:bg-slate-900/30">
+                            <div>
+                                <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Daily Breakdown</h2>
+                                <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest mt-1">
+                                    {new Date(viewingDailyBreakdown.date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+                                </p>
+                            </div>
+                            <button 
+                                onClick={() => setViewingDailyBreakdown(null)}
+                                className="p-3 bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 rounded-2xl transition-all shadow-sm border border-gray-100 dark:border-slate-700"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        
+                        <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                            <div className="space-y-4">
+                                {Object.values(viewingDailyBreakdown.campaignBreakdown).map((camp: any, idx: number) => (
+                                    <div key={idx} className="flex items-center justify-between p-4 bg-gray-50/50 dark:bg-slate-900/30 rounded-2xl border border-gray-100 dark:border-slate-700/50">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center shadow-sm border border-gray-100 dark:border-slate-700">
+                                                <TrendingUp size={14} className="text-indigo-500" />
+                                            </div>
+                                            <span className="text-sm font-black text-slate-700 dark:text-slate-200">{camp.name}</span>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className={`text-base font-black ${camp.profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                {camp.profit >= 0 ? '+' : '-'} Rs. {Math.abs(Math.round(camp.profit)).toLocaleString()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="p-8 bg-gray-50 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-700 flex justify-between items-center">
+                            <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Total Daily Profit</span>
+                            <span className={`text-2xl font-black ${viewingDailyBreakdown.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                {viewingDailyBreakdown.totalProfit >= 0 ? '' : '-'} Rs. {Math.abs(Math.round(viewingDailyBreakdown.totalProfit)).toLocaleString()}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -157,11 +157,14 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
     }, [selectedArea]);
 
     // Keep delivery_charge in sync with totalDeliveryCost for relevant providers
+    // DECOUPLED: Removed auto-sync to allow independent management of Est Delivery Charge and Delivery Charge
+    /*
     useEffect(() => {
         if (['pathao', 'pickdrop', 'local', 'self'].includes(courierProvider)) {
             setEditedOrder((prev: any) => ({ ...prev, delivery_charge: editedOrder.courier_delivery_fee || 0 }));
         }
     }, [editedOrder.courier_delivery_fee, courierProvider]);
+    */
 
     // Update from NCM fee specifically
     useEffect(() => {
@@ -756,7 +759,16 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
                         <select
                             value={courierProvider}
                             disabled={isRestricted}
-                            onChange={(e) => setCourierProvider(e.target.value)}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setCourierProvider(val);
+                                if (val === 'self') {
+                                    setEditedOrder((prev: any) => ({
+                                        ...prev,
+                                        courier_delivery_fee: 100
+                                    }));
+                                }
+                            }}
                             className="w-full bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-indigo-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <option value="pathao">Pathao Parcel</option>
