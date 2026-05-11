@@ -38,6 +38,7 @@ export declare class SupabaseService {
     updatePage(id: string, data: {
         is_ai_enabled?: boolean;
         custom_prompt?: string;
+        cutoff_messages?: string;
     }): Promise<any>;
     getPageByFacebookId(pageId: string): Promise<any>;
     markConversationAsRead(id: string): Promise<boolean>;

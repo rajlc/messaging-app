@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -34,11 +34,11 @@ export default function ProfileScreen({ navigation }: any) {
 
     const isAdminOrEditor = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'editor';
 
-React.useEffect(() => {
-    if (isAdminOrEditor) {
-        loadCallAssistantSetting();
-    }
-}, []);
+    useEffect(() => {
+        if (isAdminOrEditor) {
+            loadCallAssistantSetting();
+        }
+    }, [isAdminOrEditor]);
 
 const loadCallAssistantSetting = async () => {
     try {
@@ -82,10 +82,10 @@ const handleSave = async () => {
             phone: formData.phone,
             ...(formData.password ? { password: formData.password } : {})
         }, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token || ''}` }
         });
 
-        if (res.data) {
+        if (res.data && user && token) {
             // Update local auth context
             login(token, { ...user, full_name: formData.fullName, phone: formData.phone });
             Alert.alert('Success', 'Profile updated successfully');

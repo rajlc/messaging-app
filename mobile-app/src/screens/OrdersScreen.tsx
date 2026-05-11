@@ -15,7 +15,6 @@ import {
   TextInput,
   ActivityIndicator,
   SafeAreaView,
-  Platform as RNPlatform,
   Platform,
   Modal,
   RefreshControl,
@@ -60,7 +59,10 @@ export default function OrdersScreen({ navigation }: any) {
     packed: 0,
     shipped: 0,
     delivered: 0,
-    totalToday: 0
+    totalToday: 0,
+    shippedToday: 0,
+    deliveredToday: 0,
+    redirectCount: 0
   });
 
   const [logisticsStats, setLogisticsStats] = useState<any[]>([]);
@@ -258,8 +260,13 @@ export default function OrdersScreen({ navigation }: any) {
           );
         }).length,
         
-        totalToday: filtered.filter(o => isSameDay(new Date(o.created_at), today)).length,
-        redirectCount: filtered.filter(o => ['Delivery Failed', 'Hold', 'Return Process'].includes(o.order_status)).length
+        delivered: filtered.filter(o => 
+          o.order_status === 'Delivered' && 
+          isSameDay(new Date(o.created_at), today)
+        ).length,
+        
+        totalToday: filtered.filter((o: any) => isSameDay(new Date(o.created_at), today)).length,
+        redirectCount: filtered.filter((o: any) => ['Delivery Failed', 'Hold', 'Return Process'].includes(o.order_status)).length
       };
       setStats(counts);
 
@@ -291,13 +298,13 @@ export default function OrdersScreen({ navigation }: any) {
 
       const lStats = providers.map(p => {
         // Today's Shipped/Delivered for this provider (from filtered today's orders)
-        const shippedToday = filtered.filter(o => 
+        const shippedToday = filtered.filter((o: any) => 
           (o.courier_provider?.toLowerCase() === p.id) &&
           (o.shipped_at ? isSameDay(new Date(o.shipped_at), today) : 
            (o.order_status_history || []).some((h: any) => h.status?.trim() === 'Shipped' && isSameDay(new Date(h.changed_at), today)))
         ).length;
 
-        const deliveredToday = filtered.filter(o => 
+        const deliveredToday = filtered.filter((o: any) => 
           (o.courier_provider?.toLowerCase() === p.id) &&
           (o.delivered_at ? isSameDay(new Date(o.delivered_at), today) : 
            (o.order_status_history || []).some((h: any) => h.status?.trim() === 'Delivered' && isSameDay(new Date(h.changed_at), today)))
@@ -1526,7 +1533,7 @@ export default function OrdersScreen({ navigation }: any) {
     return (
       <View style={styles.container}>
         <View style={[styles.listHeader, { paddingTop: insets.top }]}>
-          <TouchableOpacity onPress={() => setViewMode('dashboard')} style={styles.backButton}>
+          <TouchableOpacity onPress={() => setViewMode('dashboard')} style={styles.headerBackButton}>
             <ChevronLeft size={24} color={Colors.text} />
           </TouchableOpacity>
           <View style={styles.listHeaderCenter}>
@@ -1569,7 +1576,7 @@ export default function OrdersScreen({ navigation }: any) {
       {/* List Mode Header */}
       {viewMode === 'list' && (
         <View style={[styles.listHeader, { paddingTop: insets.top }]}>
-          <TouchableOpacity onPress={() => setViewMode('dashboard')} style={styles.backButton}>
+          <TouchableOpacity onPress={() => setViewMode('dashboard')} style={styles.headerBackButton}>
             <ChevronRight size={24} color={Colors.text} style={{ transform: [{ rotate: '180deg' }] }} />
           </TouchableOpacity>
           <View style={styles.listHeaderCenter}>
@@ -1834,7 +1841,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
     zIndex: 10,
-    paddingTop: RNPlatform.OS === 'ios' ? 0 : 0, // Placeholder, will set in style object
+    paddingTop: Platform.OS === 'ios' ? 0 : 0, // Placeholder, will set in style object
   },
   cardRow: {
     flexDirection: 'row',
@@ -1912,7 +1919,11 @@ const styles = StyleSheet.create({
   },
   activeSummaryTab: {
     backgroundColor: Colors.white,
-    shadowS: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   summaryTabText: {
     fontSize: 14,
@@ -2095,12 +2106,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   listHeaderCenter: {
     flex: 1,
     justifyContent: 'center',
@@ -2110,6 +2115,12 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: Colors.text,
+  },
+  headerBackButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   tabsContainer: {
     flexDirection: 'row',

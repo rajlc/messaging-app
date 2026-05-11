@@ -175,6 +175,24 @@ export class WebhooksController {
                                             if (isGlobalEnabled === 'true') {
                                                 const page = await supabaseService.getPageByFacebookId(pageId);
                                                 if (page && page.is_ai_enabled) {
+                                                    // --- CUT-OFF MESSAGES CHECK ---
+                                                    if (page.cutoff_messages) {
+                                                        const cutoffList = page.cutoff_messages.split(',').map(m => m.trim().toLowerCase());
+                                                        if (cutoffList.includes(text.trim().toLowerCase())) {
+                                                            console.log(`[AI] Cut-off message detected: "${text}". Skipping AI reply.`);
+                                                            
+                                                            // Broadcast original message before returning
+                                                            this.messagingGateway.broadcastIncomingMessage('facebook', {
+                                                                ...savedMessage,
+                                                                isOwnMessage: false,
+                                                                conversationId: conversation.id,
+                                                                customerName: customerName,
+                                                                customerProfilePic: userProfile?.profile_pic
+                                                            });
+                                                            return;
+                                                        }
+                                                    }
+
                                                     console.log('[AI] processing...');
                                                     const history = await supabaseService.getMessages(conversation.id, 5);
                                                     const systemPrompt = page.custom_prompt || "You are a helpful assistant.";

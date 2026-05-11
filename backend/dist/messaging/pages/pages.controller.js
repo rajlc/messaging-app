@@ -28,16 +28,21 @@ let PagesController = class PagesController {
         if (!body.pageId || !body.accessToken) {
             throw new common_1.HttpException('Page ID and Access Token are required', common_1.HttpStatus.BAD_REQUEST);
         }
-        const isValid = await this.facebookService.validatePageToken(body.pageId, body.accessToken);
-        if (!isValid) {
-            throw new common_1.HttpException('Invalid Page ID or Access Token', common_1.HttpStatus.BAD_REQUEST);
+        let pageName = 'Social Account';
+        if (!body.platform || body.platform === 'facebook') {
+            const isValid = await this.facebookService.validatePageToken(body.pageId, body.accessToken);
+            if (!isValid) {
+                throw new common_1.HttpException('Invalid Facebook Page ID or Access Token', common_1.HttpStatus.BAD_REQUEST);
+            }
+            try {
+                pageName = await this.facebookService.getPageName(body.pageId, body.accessToken);
+            }
+            catch (error) {
+                console.warn('Could not fetch page name, using default');
+            }
         }
-        let pageName = 'Unknown Page';
-        try {
-            pageName = await this.facebookService.getPageName(body.pageId, body.accessToken);
-        }
-        catch (error) {
-            console.warn('Could not fetch page name, using default');
+        else {
+            pageName = `${body.platform.charAt(0).toUpperCase() + body.platform.slice(1)} Account (${body.pageId})`;
         }
         const page = await supabase_service_1.supabaseService.createPage({
             platform: body.platform || 'facebook',

@@ -370,6 +370,7 @@ export class SupabaseService {
     async updatePage(id: string, data: {
         is_ai_enabled?: boolean;
         custom_prompt?: string;
+        cutoff_messages?: string;
     }) {
         const { data: page, error } = await this.getClient()
             .from('pages')

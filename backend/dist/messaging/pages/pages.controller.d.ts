@@ -12,5 +12,6 @@ export declare class PagesController {
     updatePage(id: string, body: {
         is_ai_enabled?: boolean;
         custom_prompt?: string;
+        cutoff_messages?: string;
     }): Promise<any>;
 }

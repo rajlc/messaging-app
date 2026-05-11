@@ -16,9 +16,11 @@ import MyDeliveryScreen from '../screens/MyDeliveryScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import AdminDeliveryReportNavigator from './AdminDeliveryReportNavigator';
 import AdminRiderDetailScreen from '../screens/AdminRiderDetailScreen';
+import CampaignDetailsScreen from '../screens/CampaignDetailsScreen';
 import AdsManagementScreen from '../screens/AdsManagementScreen';
 import ProfitManagementScreen from '../screens/ProfitManagementScreen';
-import CampaignDetailsScreen from '../screens/CampaignDetailsScreen';
+import { startCallAssistant } from '../services/CallAssistantService';
+import { useEffect } from 'react';
 
 
 const Stack = createNativeStackNavigator();
@@ -26,6 +28,13 @@ const Stack = createNativeStackNavigator();
 export default function RootNavigator() {
     const { user, loading } = useAuth();
     const isRider = user?.role?.toLowerCase() === 'rider';
+    const isAdminOrEditor = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'editor';
+
+    useEffect(() => {
+        if (user && isAdminOrEditor) {
+            startCallAssistant();
+        }
+    }, [user, isAdminOrEditor]);
 
     if (loading) {
         return (

@@ -11,6 +11,7 @@ type Page = {
     is_active: boolean;
     is_ai_enabled: boolean;
     custom_prompt: string;
+    cutoff_messages?: string;
 };
 
 export default function AIAgentSettings() {
@@ -30,6 +31,8 @@ export default function AIAgentSettings() {
     const [editingPage, setEditingPage] = useState<Page | null>(null);
     const [editPrompt, setEditPrompt] = useState('');
     const [editAiEnabled, setEditAiEnabled] = useState(false);
+    const [editCutoffMessages, setEditCutoffMessages] = useState<string[]>([]);
+    const [cutoffInput, setCutoffInput] = useState('');
     const [isSavingPage, setIsSavingPage] = useState(false);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
@@ -98,6 +101,7 @@ export default function AIAgentSettings() {
         setEditingPage(page);
         setEditPrompt(page.custom_prompt || '');
         setEditAiEnabled(page.is_ai_enabled || false);
+        setEditCutoffMessages(page.cutoff_messages ? page.cutoff_messages.split(',').filter(m => m.trim()).map(m => m.trim()) : []);
     };
 
     const closeEditModal = () => {
@@ -115,7 +119,8 @@ export default function AIAgentSettings() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     is_ai_enabled: editAiEnabled,
-                    custom_prompt: editPrompt
+                    custom_prompt: editPrompt,
+                    cutoff_messages: editCutoffMessages.join(',')
                 })
             });
 
@@ -123,7 +128,7 @@ export default function AIAgentSettings() {
                 // Update local state
                 setPages(pages.map(p =>
                     p.id === editingPage.id
-                        ? { ...p, is_ai_enabled: editAiEnabled, custom_prompt: editPrompt }
+                        ? { ...p, is_ai_enabled: editAiEnabled, custom_prompt: editPrompt, cutoff_messages: editCutoffMessages.join(',') }
                         : p
                 ));
                 closeEditModal();
@@ -341,6 +346,55 @@ export default function AIAgentSettings() {
                                 />
                                 <p className="text-[10px] text-slate-500 font-medium">
                                     Describe your store's tone, rules, and personality. This effectively becomes the bot's core operating manual.
+                                </p>
+                            </div>
+
+                            {/* Cut-off Messages */}
+                            <div className="space-y-3">
+                                <label className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
+                                    <X size={14} className="text-red-500" />
+                                    AI Cut-off Messages
+                                </label>
+
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                    {editCutoffMessages.map((msg, index) => (
+                                        <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full border border-indigo-100 dark:border-indigo-500/20 text-xs font-bold animate-in fade-in zoom-in duration-200">
+                                            {msg}
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditCutoffMessages(editCutoffMessages.filter((_, i) => i !== index))}
+                                                className="hover:text-red-500 transition-colors"
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        value={cutoffInput}
+                                        onChange={(e) => setCutoffInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                if (cutoffInput.trim()) {
+                                                    if (!editCutoffMessages.includes(cutoffInput.trim())) {
+                                                        setEditCutoffMessages([...editCutoffMessages, cutoffInput.trim()]);
+                                                    }
+                                                    setCutoffInput('');
+                                                }
+                                            }
+                                        }}
+                                        placeholder="Type message and press Enter..."
+                                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm font-medium transition-all"
+                                    />
+                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black bg-slate-200 dark:bg-slate-800 text-slate-500 px-2 py-1 rounded-lg uppercase tracking-tighter">Enter</div>
+                                </div>
+
+                                <p className="text-[10px] text-slate-500 font-medium">
+                                    Type a message and press **Enter** to add it. If a customer sends any of these messages exactly, the AI will not reply.
                                 </p>
                             </div>
 

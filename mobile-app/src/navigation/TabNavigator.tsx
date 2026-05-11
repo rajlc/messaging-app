@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { Home, MessageCircle, ShoppingBag, MoreHorizontal, Truck, Wallet, FileText } from 'lucide-react-native';
@@ -44,10 +44,15 @@ export function RiderTabNavigator() {
     return (
         <Tab.Navigator
             initialRouteName="My Delivery"
-            screenOptions={({ route }: any) => {
+            screenOptions={(props: any) => {
+                const route = props.route;
+                const routeName = getFocusedRouteNameFromRoute(route);
+                const isNestedHidden = routeName && ['ChatDetail', 'CreateOrder', 'OrderDetails'].includes(routeName);
+                const isParamHidden = (route.params as any)?.hideTabBar === true;
+                const isTabBarHidden = isNestedHidden || isParamHidden;
+                
                 const options = commonScreenOptions(insets);
-                const isTabBarHidden = route.params?.hideTabBar === true;
-
+                
                 return {
                     ...options,
                     tabBarStyle: isTabBarHidden ? { display: 'none' } : options.tabBarStyle,
@@ -75,9 +80,9 @@ export default function TabNavigator() {
     const isRider = user?.role?.toLowerCase() === 'rider';
     const isAdminOrEditor = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'editor';
 
-    const [popupData, setPopupData] = React.useState<any>(null);
+    const [popupData, setPopupData] = useState<any>(null);
 
-    React.useEffect(() => {
+    useEffect(() => {
         if (isAdminOrEditor) {
             if (typeof startCallAssistant === 'function') {
                 startCallAssistant();
@@ -132,14 +137,15 @@ export default function TabNavigator() {
         <>
             <Tab.Navigator
                 initialRouteName="Home"
-                screenOptions={({ route }: any) => {
+                screenOptions={(props: any) => {
+                    const route = props.route;
+                    const routeName = getFocusedRouteNameFromRoute(route);
+                    const isNestedHidden = routeName && ['ChatDetail', 'CreateOrder', 'OrderDetails'].includes(routeName);
+                    const isParamHidden = (route.params as any)?.hideTabBar === true;
+                    const isTabBarHidden = isNestedHidden || isParamHidden;
+                    
                     const options = commonScreenOptions(insets);
                     
-                    // Logic to hide tab bar for specific nested screens
-                    const routeName = getFocusedRouteNameFromRoute(route);
-                    const hideOnScreens = ['ChatDetail', 'CreateOrder', 'OrderDetails'];
-                    const isTabBarHidden = hideOnScreens.includes(routeName as string) || route.params?.hideTabBar === true;
-
                     return {
                         ...options,
                         tabBarStyle: isTabBarHidden ? { display: 'none' } : options.tabBarStyle,

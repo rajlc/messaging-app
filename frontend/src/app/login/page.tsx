@@ -109,6 +109,12 @@ export default function LoginPage() {
                             Create Account
                         </Link>
                     </div>
+
+                    <div className="mt-12 flex justify-center gap-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                        <Link href="/privacy" className="hover:text-indigo-600 transition-colors">Privacy Policy</Link>
+                        <span>•</span>
+                        <Link href="/terms" className="hover:text-indigo-600 transition-colors">Terms of Service</Link>
+                    </div>
                 </div>
             </div>
         </div>

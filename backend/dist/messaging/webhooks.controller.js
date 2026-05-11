@@ -156,6 +156,20 @@ let WebhooksController = class WebhooksController {
                                             if (isGlobalEnabled === 'true') {
                                                 const page = await supabase_service_1.supabaseService.getPageByFacebookId(pageId);
                                                 if (page && page.is_ai_enabled) {
+                                                    if (page.cutoff_messages) {
+                                                        const cutoffList = page.cutoff_messages.split(',').map(m => m.trim().toLowerCase());
+                                                        if (cutoffList.includes(text.trim().toLowerCase())) {
+                                                            console.log(`[AI] Cut-off message detected: "${text}". Skipping AI reply.`);
+                                                            this.messagingGateway.broadcastIncomingMessage('facebook', {
+                                                                ...savedMessage,
+                                                                isOwnMessage: false,
+                                                                conversationId: conversation.id,
+                                                                customerName: customerName,
+                                                                customerProfilePic: userProfile?.profile_pic
+                                                            });
+                                                            return;
+                                                        }
+                                                    }
                                                     console.log('[AI] processing...');
                                                     const history = await supabase_service_1.supabaseService.getMessages(conversation.id, 5);
                                                     const systemPrompt = page.custom_prompt || "You are a helpful assistant.";

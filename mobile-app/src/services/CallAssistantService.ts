@@ -1,4 +1,4 @@
-import { Alert, Platform, Linking, NativeModules } from 'react-native';
+import { Alert, Platform, Linking, NativeModules, ToastAndroid, Vibration } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../api/supabase';
 
@@ -12,11 +12,30 @@ export const setCallListener = (listener: (data: any) => void) => {
 };
 
 export const startCallAssistant = async () => {
-    // 1. Strict Safety Check (prevents crash in Expo Go)
     const nativeModule = NativeModules.CallDetectionManager || NativeModules.CallDetectorManager;
     if (Platform.OS === 'android' && !nativeModule) {
         console.warn('Call Assistant: Native module not found. This feature requires a native build/APK.');
         return;
+    }
+
+    // Permission check for Android
+    if (Platform.OS === 'android') {
+        const { PermissionsAndroid } = require('react-native');
+        const permissions = [
+            PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
+            PermissionsAndroid.PERMISSIONS.READ_CALL_LOG
+        ];
+        
+        try {
+            const granted = await PermissionsAndroid.requestMultiple(permissions);
+            const allGranted = Object.values(granted).every(status => status === PermissionsAndroid.RESULTS.GRANTED);
+            if (!allGranted) {
+                console.warn('Call Assistant: Permissions not granted.');
+                return;
+            }
+        } catch (err) {
+            console.error('Call Assistant: Permission request error', err);
+        }
     }
 
     try {
@@ -35,7 +54,9 @@ export const startCallAssistant = async () => {
                 console.log('Call Event:', event, 'Phone:', phoneNumber);
 
                 // event: Incoming, Connected, Disconnected, Dialing, Offhook
-                if (event === 'Incoming' || event === 'Dialing' || event === 'Offhook') { 
+                // Note: On some Android versions, Incoming event might not have the phoneNumber
+                // but Offhook/Incoming combined with READ_CALL_LOG permission usually works.
+                if (event === 'Incoming' || event === 'Offhook') { 
                     if (phoneNumber) {
                         handleCallDetected(phoneNumber);
                     }
@@ -64,11 +85,22 @@ export const stopCallAssistant = () => {
 
 const handleCallDetected = async (phoneNumber: string) => {
     try {
+        console.log('Handling call for:', phoneNumber);
+        
+        // Immediate feedback
+        if (Platform.OS === 'android') {
+            Vibration.vibrate(500);
+            ToastAndroid.show(`Call Assistant: Processing ${phoneNumber}`, ToastAndroid.SHORT);
+        }
+
         // 1. Lookup customer in Supabase
+        // Clean phone number (remove +, spaces, etc for lookup)
+        const cleanPhone = phoneNumber.replace(/\D/g, '').slice(-10); // Last 10 digits
+
         const { data: customer, error } = await supabase
             .from('orders')
             .select('customer_name, total_amount, created_at')
-            .eq('phone_number', phoneNumber)
+            .or(`phone_number.ilike.%${cleanPhone}%,phone_number.eq.${phoneNumber}`)
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
@@ -95,6 +127,12 @@ const handleCallDetected = async (phoneNumber: string) => {
             });
         } else {
             // Fallback to Alert if no UI is mounted
+            // To show over other apps, we'd need a native activity, 
+            // but ToastAndroid + Alert is the best we can do with standard RN in background
+            if (Platform.OS === 'android') {
+                ToastAndroid.show(`${title}\n${message}`, ToastAndroid.LONG);
+            }
+
             Alert.alert(
                 title,
                 message,

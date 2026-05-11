@@ -396,7 +396,7 @@ const CreateOrderScreen = ({ route, navigation }: any) => {
             Alert.alert('Validation Error', 'Phone Number is required');
             return false;
         }
-        if (!items[0].product_name.trim()) {
+        if (!items || items.length === 0 || !items[0].product_name.trim()) {
             Alert.alert('Validation Error', 'At least one product is required');
             return false;
         }
@@ -1301,15 +1301,16 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
     },
-    section: {
-        marginBottom: 20,
-    },
     sectionTitle: {
         fontSize: 16,
         fontWeight: '700',
         color: Colors.text,
         marginBottom: 12,
         letterSpacing: 0.5,
+    },
+    inputText: {
+        fontSize: 16,
+        color: Colors.text,
     },
     label: {
         fontSize: 12,

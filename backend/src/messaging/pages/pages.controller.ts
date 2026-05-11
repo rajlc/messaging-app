@@ -17,18 +17,23 @@ export class PagesController {
             throw new HttpException('Page ID and Access Token are required', HttpStatus.BAD_REQUEST);
         }
 
-        // Validate token
-        const isValid = await this.facebookService.validatePageToken(body.pageId, body.accessToken);
-        if (!isValid) {
-            throw new HttpException('Invalid Page ID or Access Token', HttpStatus.BAD_REQUEST);
-        }
+        // Validate token (Only for Facebook for now)
+        let pageName = 'Social Account';
+        if (!body.platform || body.platform === 'facebook') {
+            const isValid = await this.facebookService.validatePageToken(body.pageId, body.accessToken);
+            if (!isValid) {
+                throw new HttpException('Invalid Facebook Page ID or Access Token', HttpStatus.BAD_REQUEST);
+            }
 
-        // Get page name
-        let pageName = 'Unknown Page';
-        try {
-            pageName = await this.facebookService.getPageName(body.pageId, body.accessToken);
-        } catch (error) {
-            console.warn('Could not fetch page name, using default');
+            // Get page name
+            try {
+                pageName = await this.facebookService.getPageName(body.pageId, body.accessToken);
+            } catch (error) {
+                console.warn('Could not fetch page name, using default');
+            }
+        } else {
+            // For TikTok and others, we use the pageId as the name for now if not provided
+            pageName = `${body.platform.charAt(0).toUpperCase() + body.platform.slice(1)} Account (${body.pageId})`;
         }
 
         const page = await supabaseService.createPage({
@@ -47,7 +52,7 @@ export class PagesController {
     }
 
     @Patch(':id')
-    async updatePage(@Param('id') id: string, @Body() body: { is_ai_enabled?: boolean; custom_prompt?: string }) {
+    async updatePage(@Param('id') id: string, @Body() body: { is_ai_enabled?: boolean; custom_prompt?: string; cutoff_messages?: string }) {
         return await supabaseService.updatePage(id, body);
     }
 }

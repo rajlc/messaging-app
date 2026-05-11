@@ -466,6 +466,11 @@ const OrderDetailsScreen = ({ route, navigation }: any) => {
 
     // --- Save Logic ---
     const validateOrder = () => {
+        if (!items || items.length === 0 || !items[0].product_name.trim()) {
+            Alert.alert('Validation Error', 'At least one product is required');
+            return false;
+        }
+
         if (!address.trim()) {
             Alert.alert('Validation Error', 'Address is required');
             return false;
@@ -1404,12 +1409,20 @@ const styles = StyleSheet.create({
     section: {
         marginBottom: 20,
     },
+    row: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
     sectionTitle: {
         fontSize: 16,
         fontWeight: '700',
         color: Colors.text,
         marginBottom: 12,
         letterSpacing: 0.5,
+    },
+    inputText: {
+        fontSize: 16,
+        color: Colors.text,
     },
     label: {
         fontSize: 12,
