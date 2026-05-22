@@ -101,7 +101,7 @@ export default function ProfileView() {
         <div className="flex-1 flex flex-col bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 h-full overflow-hidden transition-colors duration-200">
             {/* Header */}
             <div className="h-16 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-6 flex-shrink-0 shadow-sm">
-                <h2 className="text-xl font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+                <h2 className="text-page-title flex items-center gap-2 text-slate-900 dark:text-white">
                     <User className="text-indigo-500" size={22} />
                     Profile
                 </h2>
@@ -119,7 +119,7 @@ export default function ProfileView() {
                     </button>
                     <button
                         onClick={logout}
-                        className="flex items-center gap-2 px-4 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 rounded-lg text-sm font-medium transition-colors border border-red-200 dark:border-red-500/20"
+                        className="flex items-center gap-2 px-4 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 rounded-lg text-btn transition-colors border border-red-200 dark:border-red-500/20"
                     >
                         <LogOut size={14} />
                         Sign Out
@@ -132,11 +132,11 @@ export default function ProfileView() {
                 <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
                     {/* Card Header */}
                     <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/80">
-                        <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                        <h3 className="text-card-title text-slate-800 dark:text-white flex items-center gap-2">
                             <User size={16} className="text-indigo-500" />
                             Account Information
                         </h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Update your personal details</p>
+                        <p className="text-small-label text-slate-500 dark:text-slate-400 mt-0.5">Update your personal details</p>
                     </div>
 
                     <div className="p-6">
@@ -172,45 +172,45 @@ export default function ProfileView() {
                             {/* Form Fields */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div className="space-y-1.5">
-                                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Full Name</label>
+                                    <label className="text-small-label text-slate-700 dark:text-slate-300">Full Name</label>
                                     <input
                                         type="text"
                                         value={formData.fullName}
                                         onChange={e => setFormData({ ...formData, fullName: e.target.value })}
-                                        className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 dark:focus:border-indigo-500 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors"
+                                        className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 dark:focus:border-indigo-500 text-input-field text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors"
                                         placeholder="Your full name"
                                     />
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Phone</label>
+                                    <label className="text-small-label text-slate-700 dark:text-slate-300">Phone</label>
                                     <input
                                         type="text"
                                         value={formData.phone}
                                         onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                                        className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 dark:focus:border-indigo-500 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors"
+                                        className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 dark:focus:border-indigo-500 text-input-field text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors"
                                         placeholder="Your phone number"
                                     />
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email</label>
+                                    <label className="text-small-label text-slate-700 dark:text-slate-300">Email</label>
                                     <input
                                         type="email"
                                         value={user?.email || ''}
                                         disabled
-                                        className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-900/60 border border-gray-200 dark:border-slate-700 rounded-lg text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                                        className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-900/60 border border-gray-200 dark:border-slate-700 rounded-lg text-slate-400 dark:text-slate-500 cursor-not-allowed text-input-field"
                                     />
-                                    <p className="text-xs text-slate-400 dark:text-slate-500">Email cannot be changed</p>
+                                    <p className="text-small-label text-slate-400 dark:text-slate-500">Email cannot be changed</p>
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Role</label>
+                                    <label className="text-small-label text-slate-700 dark:text-slate-300">Role</label>
                                     <input
                                         type="text"
                                         value={user?.role?.toUpperCase() || ''}
                                         disabled
-                                        className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-900/60 border border-gray-200 dark:border-slate-700 rounded-lg text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                                        className="w-full px-4 py-2.5 bg-gray-100 dark:bg-slate-900/60 border border-gray-200 dark:border-slate-700 rounded-lg text-slate-400 dark:text-slate-500 cursor-not-allowed text-input-field"
                                     />
                                 </div>
                             </div>
@@ -228,22 +228,22 @@ export default function ProfileView() {
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div className="space-y-1.5">
-                                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">New Password</label>
+                                        <label className="text-small-label text-slate-700 dark:text-slate-300">New Password</label>
                                         <input
                                             type="password"
                                             value={formData.password}
                                             onChange={e => setFormData({ ...formData, password: e.target.value })}
-                                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 dark:focus:border-indigo-500 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors"
+                                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 dark:focus:border-indigo-500 text-input-field text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors"
                                             placeholder="Enter new password"
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Confirm Password</label>
+                                        <label className="text-small-label text-slate-700 dark:text-slate-300">Confirm Password</label>
                                         <input
                                             type="password"
                                             value={formData.confirmPassword}
                                             onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
-                                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 dark:focus:border-indigo-500 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors"
+                                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 dark:focus:border-indigo-500 text-input-field text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors"
                                             placeholder="Confirm new password"
                                         />
                                     </div>
@@ -254,7 +254,7 @@ export default function ProfileView() {
                                 <button
                                     type="submit"
                                     disabled={status === 'loading'}
-                                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-medium rounded-lg shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-btn rounded-lg shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {status === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                                     Save Changes
@@ -268,14 +268,14 @@ export default function ProfileView() {
                 <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
                     {/* Card Header */}
                     <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/80">
-                        <h3 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                        <h3 className="text-card-title text-slate-800 dark:text-white flex items-center gap-2">
                             {theme === 'dark'
                                 ? <Moon size={16} className="text-indigo-400" />
                                 : <Sun size={16} className="text-amber-500" />
                             }
                             Appearance
                         </h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Choose how the app looks to you</p>
+                        <p className="text-small-label text-slate-500 dark:text-slate-400 mt-0.5">Choose how the app looks to you</p>
                     </div>
 
                     <div className="p-6">
@@ -304,7 +304,7 @@ export default function ProfileView() {
                                         </div>
 
                                         <div className="text-center">
-                                            <p className={`text-sm font-semibold transition-colors ${isActive ? option.activeText : 'text-slate-600 dark:text-slate-400'}`}>
+                                            <p className={`text-normal transition-colors ${isActive ? option.activeText : 'text-slate-600 dark:text-slate-400'}`}>
                                                 {option.label}
                                             </p>
                                             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{option.description}</p>

@@ -481,7 +481,7 @@ export default function DeliveryView() {
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
-                                <tr className="bg-gray-50 dark:bg-slate-900/50 text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-gray-100 dark:border-slate-700">
+                                <tr className="bg-gray-50 dark:bg-slate-900/50 text-small-label text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-gray-100 dark:border-slate-700">
                                     <th className="px-4 py-4">Date</th>
                                     <th className="px-4 py-4">Order ID</th>
                                     <th className="px-4 py-4">Customer</th>
@@ -497,7 +497,7 @@ export default function DeliveryView() {
                                 {filteredRiderOrders.map((order) => {
                                     const totalQty = order.items?.reduce((sum: number, i: any) => sum + (i.qty || 0), 0) || 0;
                                     return (
-                                        <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors text-[13px]">
+                                        <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/20 transition-colors text-table-cell">
                                             <td className="px-4 py-4 text-slate-500 whitespace-nowrap">
                                                 {new Date(order.assigned_at || order.created_at).toLocaleDateString()}
                                             </td>
@@ -855,7 +855,7 @@ export default function DeliveryView() {
                         
                         <div className="text-right w-full md:w-auto p-4 md:p-0 bg-indigo-50/30 dark:bg-indigo-900/10 md:bg-transparent rounded-2xl">
                             <p className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.2em] mb-1">Current Pending Settlement</p>
-                            <p className="text-3xl md:text-4xl font-black text-indigo-600 dark:text-indigo-400">
+                            <p className="text-3xl md:text-4xl font-medium text-indigo-600 dark:text-indigo-400">
                                 Rs. {mySummary.net_pending_settlement}
                             </p>
                         </div>
@@ -892,14 +892,14 @@ export default function DeliveryView() {
                                 <div key={order.id} className="p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-2xl flex justify-between items-center group transition-all hover:shadow-md">
                                     <div>
                                         <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">#{order.order_number}</span>
+                                            <span className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">#{order.order_number}</span>
                                             <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[9px] font-black uppercase">{order.order_status}</span>
                                         </div>
                                         <p className="text-sm font-bold text-slate-900 dark:text-white">{order.customer_name}</p>
                                         <p className="text-[10px] text-slate-500 mt-1">{new Date(order.updated_at).toLocaleString()}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-sm font-black text-slate-900 dark:text-white">Rs. {order.total_amount}</p>
+                                        <p className="text-sm font-semibold text-slate-900 dark:text-white">Rs. {order.total_amount}</p>
                                         <p className="text-[9px] text-amber-600 font-bold mt-1">Pending Confirmation</p>
                                     </div>
                                 </div>
@@ -1076,7 +1076,7 @@ export default function DeliveryView() {
                                                 {rider.rider_name?.charAt(0)}
                                             </div>
                                             <div>
-                                                <h3 className="text-xl font-black text-slate-900 dark:text-white leading-tight mb-1">{rider.rider_name}</h3>
+                                                <h3 className="text-xl font-semibold text-slate-900 dark:text-white leading-tight mb-1">{rider.rider_name}</h3>
                                                 <div className="flex items-center gap-2">
                                                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Active Logistics Professional</span>
@@ -1107,12 +1107,12 @@ export default function DeliveryView() {
                                         </div>
                                     </div>
                                     
-                                    <div className="bg-slate-900 dark:bg-indigo-950 rounded-[1.5rem] p-6 text-white shadow-2xl relative overflow-hidden group/amount">
+                                    <div className="bg-slate-700 dark:bg-slate-800 rounded-[1.5rem] p-6 text-white shadow-xl relative overflow-hidden group/amount">
                                         <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl transition-all group-hover/amount:scale-150" />
-                                        <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-60 mb-2">Net Pending Settlement</p>
+                                        <p className="text-[10px] font-bold uppercase tracking-[0.3em] opacity-80 mb-2">Net Pending Settlement</p>
                                         <div className="flex items-baseline gap-2">
                                             <span className="text-lg font-bold opacity-60 font-mono">Rs.</span>
-                                            <span className="text-4xl font-black tracking-tight">{rider.net_pending_settlement.toLocaleString()}</span>
+                                            <span className="text-4xl font-semibold tracking-tight">{rider.net_pending_settlement.toLocaleString()}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -1125,14 +1125,14 @@ export default function DeliveryView() {
                                                 <Package size={14} />
                                                 <span className="text-[10px] font-black uppercase tracking-[0.2em]">Pending Orders</span>
                                             </div>
-                                            <p className="text-2xl font-black text-slate-900 dark:text-white">{rider.pending_orders_count}</p>
+                                            <p className="text-2xl font-semibold text-slate-900 dark:text-white">{rider.pending_orders_count}</p>
                                         </div>
                                         <div className="p-5 bg-emerald-50/30 dark:bg-emerald-900/10 rounded-[1.5rem] border border-emerald-100/50 dark:border-emerald-900/20">
                                             <div className="flex items-center gap-2 mb-2 text-emerald-500">
                                                 <Truck size={14} />
                                                 <span className="text-[10px] font-black uppercase tracking-[0.2em]">Assigned Stock</span>
                                             </div>
-                                            <p className="text-2xl font-black text-slate-900 dark:text-white">{rider.assigned_stock_count}</p>
+                                            <p className="text-2xl font-semibold text-slate-900 dark:text-white">{rider.assigned_stock_count}</p>
                                         </div>
                                     </div>
 
@@ -1162,7 +1162,7 @@ export default function DeliveryView() {
                                                                 <p className="text-[11px] font-medium text-slate-500">{o.customer_name}</p>
                                                             </div>
                                                             <div className="flex items-center gap-4">
-                                                                <span className="text-sm font-black text-slate-900 dark:text-white">Rs. {o.total_amount}</span>
+                                                                <span className="text-sm font-semibold text-slate-900 dark:text-white">Rs. {o.total_amount}</span>
                                                                 {['Return Process', 'Delivery Failed', 'Hold', 'Returning to Seller'].includes(o.order_status) && (
                                                                     <button
                                                                         onClick={() => handleApproveReturn(o.id)}
@@ -1207,7 +1207,7 @@ export default function DeliveryView() {
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-4">
-                                                                <span className="text-sm font-black text-emerald-600">Rs. {stock.amount || 0}</span>
+                                                                <span className="text-sm font-medium text-emerald-600">Rs. {stock.amount || 0}</span>
                                                                 {stock.status === 'return_pending' && (
                                                                     <div className="flex gap-1">
                                                                         <button 
@@ -1260,7 +1260,7 @@ export default function DeliveryView() {
                             <Calendar size={24} />
                         </div>
                         <div>
-                            <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Daily Delivery Report</h3>
+                            <h3 className="text-xl font-semibold text-slate-900 dark:text-white uppercase tracking-tight">Daily Delivery Report</h3>
                             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Track daily performance across all riders</p>
                         </div>
                     </div>
@@ -1330,7 +1330,7 @@ export default function DeliveryView() {
                                                 {row.parcel_qty}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-right font-black text-slate-900 dark:text-white">
+                                        <td className="px-6 py-4 text-right font-semibold text-slate-900 dark:text-white">
                                             Rs. {row.delivery_amount.toLocaleString()}
                                         </td>
                                     </tr>
@@ -1459,16 +1459,16 @@ export default function DeliveryView() {
     };
 
     return (
-        <div className="p-6 h-full flex flex-col bg-gray-50 dark:bg-slate-900 overflow-hidden">
+        <div className="font-sans p-6 h-full flex flex-col bg-gray-50 dark:bg-slate-900 overflow-hidden">
             {/* Main Header */}
             <div className="mb-6 flex flex-col gap-4">
                 <div className="flex justify-between items-center">
                     <div>
-                        <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <h1 className="text-page-title text-slate-900 dark:text-white flex items-center gap-2">
                             <Truck className="text-blue-500" />
                             Logistics Hub
                         </h1>
-                        <p className="text-slate-500 dark:text-slate-400 text-sm">Delivery tracking and settlements</p>
+                        <p className="text-normal text-slate-500 dark:text-slate-400">Delivery tracking and settlements</p>
                     </div>
                     
                     <div className="flex items-center gap-3">
@@ -1479,7 +1479,7 @@ export default function DeliveryView() {
                                 placeholder="Search orders..." 
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64 transition-all"
+                                className="pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-input-field focus:outline-none focus:ring-2 focus:ring-blue-500 w-64 transition-all"
                             />
                         </div>
                         <button 
@@ -1512,28 +1512,28 @@ export default function DeliveryView() {
                             <div className="w-1 h-3 bg-slate-300 dark:bg-slate-600 rounded-full" />
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em]">Personal Dashboard</span>
                         </div>
-                        <div className="flex gap-2 p-1.5 bg-slate-50/50 dark:bg-slate-900/50 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 w-fit backdrop-blur-sm">
+                        <div className="flex justify-center items-center gap-2 p-1.5 bg-slate-50/50 dark:bg-slate-900/50 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 w-full md:w-auto backdrop-blur-sm">
                             <button 
                                 onClick={() => setActiveTab('my-orders')}
-                                className={`px-5 py-2.5 rounded-xl text-[13px] font-bold flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'my-orders' 
-                                    ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm border border-indigo-100 dark:border-indigo-900/30' 
-                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-800/50'}`}
+                                className={`px-5 py-2.5 rounded-xl  flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'my-orders' 
+                                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold text-[15px] shadow-sm border border-slate-200 dark:border-slate-700' 
+                                    : 'text-slate-600 dark:text-slate-400 font-medium text-[15px] hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-800/50'}`}
                             >
                                 <Package size={14} className={activeTab === 'my-orders' ? 'text-indigo-600' : ''} /> My Order List
                             </button>
                             <button 
                                 onClick={() => setActiveTab('my-settlement')}
-                                className={`px-5 py-2.5 rounded-xl text-[13px] font-bold flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'my-settlement' 
-                                    ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm border border-indigo-100 dark:border-indigo-900/30' 
-                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-800/50'}`}
+                                className={`px-5 py-2.5 rounded-xl  flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'my-settlement' 
+                                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold text-[15px] shadow-sm border border-slate-200 dark:border-slate-700' 
+                                    : 'text-slate-600 dark:text-slate-400 font-medium text-[15px] hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-800/50'}`}
                             >
                                 <Wallet size={14} className={activeTab === 'my-settlement' ? 'text-indigo-600' : ''} /> My Settlement
                             </button>
                             <button 
                                 onClick={() => setActiveTab('my-report')}
-                                className={`px-5 py-2.5 rounded-xl text-[13px] font-bold flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'my-report' 
-                                    ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm border border-indigo-100 dark:border-indigo-900/30' 
-                                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-800/50'}`}
+                                className={`px-5 py-2.5 rounded-xl  flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'my-report' 
+                                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold text-[15px] shadow-sm border border-slate-200 dark:border-slate-700' 
+                                    : 'text-slate-600 dark:text-slate-400 font-medium text-[15px] hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-800/50'}`}
                             >
                                 <FileText size={14} className={activeTab === 'my-report' ? 'text-indigo-600' : ''} /> My Report
                             </button>
@@ -1547,36 +1547,36 @@ export default function DeliveryView() {
                                 <div className="w-1 h-3 bg-indigo-400 rounded-full animate-pulse" />
                                 <span className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.25em]">Management Console</span>
                             </div>
-                            <div className="flex gap-2 p-1.5 bg-indigo-50/30 dark:bg-indigo-900/10 rounded-2xl border border-indigo-100/50 dark:border-indigo-900/20 w-fit backdrop-blur-sm">
+                            <div className="flex justify-center items-center gap-2 p-1.5 bg-slate-50/50 dark:bg-slate-900/50 rounded-2xl border border-slate-200/60 dark:border-slate-700/50 w-full md:w-auto backdrop-blur-sm">
                                 <button 
                                     onClick={() => setActiveTab('admin-orders')}
-                                    className={`px-5 py-2.5 rounded-xl text-[13px] font-bold flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'admin-orders' 
-                                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-none' 
-                                        : 'text-indigo-600/70 dark:text-indigo-400/70 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-white dark:hover:bg-slate-800'}`}
+                                    className={`px-5 py-2.5 rounded-xl  flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'admin-orders' 
+                                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold text-[15px] shadow-sm border border-slate-200 dark:border-slate-700' 
+                                        : 'text-slate-600 dark:text-slate-400 font-medium text-[15px] hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800'}`}
                                 >
                                     <Truck size={14} /> Order List
                                 </button>
                                 <button 
                                     onClick={() => setActiveTab('admin-settlement')}
-                                    className={`px-5 py-2.5 rounded-xl text-[13px] font-bold flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'admin-settlement' 
-                                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-none' 
-                                        : 'text-indigo-600/70 dark:text-indigo-400/70 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-white dark:hover:bg-slate-800'}`}
+                                    className={`px-5 py-2.5 rounded-xl  flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'admin-settlement' 
+                                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold text-[15px] shadow-sm border border-slate-200 dark:border-slate-700' 
+                                        : 'text-slate-600 dark:text-slate-400 font-medium text-[15px] hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800'}`}
                                 >
                                     <Wallet size={14} /> Settlement
                                 </button>
                                 <button 
                                     onClick={() => setActiveTab('admin-report')}
-                                    className={`px-5 py-2.5 rounded-xl text-[13px] font-bold flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'admin-report' 
-                                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-none' 
-                                        : 'text-indigo-600/70 dark:text-indigo-400/70 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-white dark:hover:bg-slate-800'}`}
+                                    className={`px-5 py-2.5 rounded-xl  flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'admin-report' 
+                                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold text-[15px] shadow-sm border border-slate-200 dark:border-slate-700' 
+                                        : 'text-slate-600 dark:text-slate-400 font-medium text-[15px] hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800'}`}
                                 >
                                     <FileText size={14} /> Report
                                 </button>
                                 <button 
                                     onClick={() => setActiveTab('admin-stock')}
-                                    className={`px-5 py-2.5 rounded-xl text-[13px] font-bold flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'admin-stock' 
-                                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-none' 
-                                        : 'text-indigo-600/70 dark:text-indigo-400/70 hover:text-indigo-700 dark:hover:text-indigo-300 hover:bg-white dark:hover:bg-slate-800'}`}
+                                    className={`px-5 py-2.5 rounded-xl  flex items-center gap-2.5 transition-all duration-300 ${activeTab === 'admin-stock' 
+                                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold text-[15px] shadow-sm border border-slate-200 dark:border-slate-700' 
+                                        : 'text-slate-600 dark:text-slate-400 font-medium text-[15px] hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800'}`}
                                 >
                                     <Package size={14} /> Rider Stock
                                 </button>
@@ -1767,7 +1767,7 @@ export default function DeliveryView() {
                                     <RefreshCw size={24} />
                                 </div>
                                 <div>
-                                    <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Pending Return Orders</h3>
+                                    <h3 className="text-xl font-semibold text-slate-900 dark:text-white uppercase tracking-tight">Pending Return Orders</h3>
                                     <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Orders waiting for warehouse confirmation</p>
                                 </div>
                             </div>
@@ -1785,7 +1785,7 @@ export default function DeliveryView() {
                                     {orders.filter(o => ['Return Process', 'Delivery Failed', 'Hold'].includes(o.order_status)).map((order) => (
                                         <div key={order.id} className="p-4 bg-gray-50 dark:bg-slate-900/50 border border-gray-100 dark:border-slate-700 rounded-2xl flex justify-between items-center hover:border-amber-200 dark:hover:border-amber-500/30 transition-all group">
                                             <div>
-                                                <p className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">#{order.order_number}</p>
+                                                <p className="text-xs font-medium text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-1">#{order.order_number}</p>
                                                 <p className="text-sm font-bold text-slate-900 dark:text-white">{order.customer_name}</p>
                                                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1">
                                                     <Clock size={10} /> 
@@ -1793,7 +1793,7 @@ export default function DeliveryView() {
                                                 </p>
                                             </div>
                                             <div className="text-right">
-                                                <p className="text-sm font-black text-slate-900 dark:text-white mb-1">Rs. {order.total_amount}</p>
+                                                <p className="text-sm font-semibold text-slate-900 dark:text-white mb-1">Rs. {order.total_amount}</p>
                                                 <span className="px-2.5 py-1 bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 rounded-lg font-black text-[10px] uppercase tracking-wider">
                                                     Pending Warehouse
                                                 </span>

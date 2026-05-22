@@ -69,7 +69,7 @@ export default function SettingsView() {
             {/* Header */}
             <div className="h-16 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-6 flex-shrink-0 shadow-sm">
                 <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+                    <h2 className="text-page-title flex items-center gap-2 text-slate-900 dark:text-white">
                         {activeSection === 'gallery' ? (
                             <>
                                 <Settings className="text-indigo-500 dark:text-slate-400" size={22} />
@@ -126,7 +126,7 @@ export default function SettingsView() {
                                                 params.set('sub', sub.id);
                                                 router.push(`${pathname}?${params.toString()}`);
                                             }}
-                                            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
+                                            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sidebar-menu transition-all ${
                                                 subActive 
                                                 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
                                                 : 'text-slate-500 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
@@ -173,7 +173,7 @@ export default function SettingsView() {
                                                 params.set('sub', sub.id);
                                                 router.push(`${pathname}?${params.toString()}`);
                                             }}
-                                            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
+                                            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sidebar-menu transition-all ${
                                                 subActive 
                                                 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
                                                 : 'text-slate-500 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
@@ -212,8 +212,8 @@ export default function SettingsView() {
                     /* Gallery View */
                     <div className="flex-1 p-8 overflow-y-auto">
                         <div className="mb-8">
-                            <h3 className="text-2xl font-bold mb-2 text-slate-900 dark:text-white">Settings Gallery</h3>
-                            <p className="text-slate-500 dark:text-slate-400">Manage your application preferences and configurations.</p>
+                            <h3 className="text-page-title mb-2 text-slate-900 dark:text-white">Settings Gallery</h3>
+                            <p className="text-normal text-slate-500 dark:text-slate-400">Manage your application preferences and configurations.</p>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -232,8 +232,8 @@ export default function SettingsView() {
                                         }`}>
                                         <section.icon size={24} />
                                     </div>
-                                    <h4 className="text-lg font-bold mb-2 text-slate-800 dark:text-white">{section.label}</h4>
-                                    <p className="text-sm text-slate-500 dark:text-slate-400">{section.description}</p>
+                                    <h4 className="text-card-title mb-2 text-slate-800 dark:text-white">{section.label}</h4>
+                                    <p className="text-normal text-slate-500 dark:text-slate-400">{section.description}</p>
                                     {!isImplemented(section.id) && (
                                         <span className="inline-block mt-4 text-xs font-mono bg-gray-100 dark:bg-slate-900 px-2 py-1 rounded text-slate-400 dark:text-slate-500">Coming Soon</span>
                                     )}

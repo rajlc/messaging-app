@@ -259,20 +259,20 @@ export default function FinanceView({ orders }: FinanceViewProps) {
     }
 
     return (
-        <div className="flex-1 flex flex-col bg-gray-50 dark:bg-slate-900 overflow-hidden">
+        <div className="font-sans flex-1 flex flex-col bg-gray-50 dark:bg-slate-900 overflow-hidden">
             {/* Header */}
             <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-8 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl">
                         <BarChart3 className="text-indigo-600 dark:text-indigo-400" size={24} />
                     </div>
-                    <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Finance Dashboard</h1>
+                    <h1 className="text-page-title text-slate-900 dark:text-white tracking-tight">Finance Dashboard</h1>
                 </div>
 
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => { }}
-                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-full text-sm font-bold transition-all shadow-lg shadow-indigo-500/20 active:scale-95 opacity-50 cursor-not-allowed"
+                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-full text-btn transition-all shadow-lg shadow-indigo-500/20 active:scale-95 opacity-50 cursor-not-allowed"
                         title="Select a logistic partner first"
                     >
                         <Plus size={18} />
@@ -280,7 +280,7 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                     </button>
                     <button
                         onClick={() => setIsAddBoostingOpen(true)}
-                        className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-full text-sm font-bold transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
+                        className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-full text-btn transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
                     >
                         <TrendingUp size={18} />
                         Add Boosting Cost
@@ -293,7 +293,7 @@ export default function FinanceView({ orders }: FinanceViewProps) {
 
                     <section>
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                            <h2 className="text-section-title text-slate-800 dark:text-white flex items-center gap-2">
                                 <Truck className="text-blue-500" size={20} /> Logistic Finance
                             </h2>
                             <button className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1">
@@ -322,13 +322,13 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                                                     {log.name.charAt(0)}
                                                 </div>
                                                 <div>
-                                                    <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                                                    <h3 className="text-card-title text-slate-900 dark:text-white flex items-center gap-2">
                                                         {log.name}
                                                         {isHighest && (
                                                             <span className="bg-blue-600 text-[9px] text-white px-1.5 py-0.5 rounded-full uppercase tracking-widest font-black">Top Pending</span>
                                                         )}
                                                     </h3>
-                                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium tracking-tight">Settlement overview for {log.name}</p>
+                                                    <p className="text-small-label text-slate-500 dark:text-slate-400 tracking-tight">Settlement overview for {log.name}</p>
                                                 </div>
                                             </div>
                                             <button
@@ -376,13 +376,13 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                     <section>
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-6">
-                                <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
-                                    <TrendingUp className="text-emerald-500" size={20} /> Ads & Profit Management
-                                </h2>
+                                <h2 className="text-section-title text-slate-800 dark:text-white flex items-center gap-2">
+                                <TrendingUp className="text-emerald-500" size={20} /> Ads & Profit Management
+                            </h2>
                                 <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-900/50 p-1 rounded-xl">
                                     <button
                                         onClick={() => setAdsMainTab('ads')}
-                                        className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${adsMainTab === 'ads' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-slate-500'}`}
+                                        className={`px-4 py-1.5 rounded-lg text-btn font-black transition-all ${adsMainTab === 'ads' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-slate-500'}`}
                                     >
                                         Ads Management
                                     </button>
@@ -445,9 +445,9 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                     </section>
 
                     {/* Profit Analysis Section */}
-                    <section>
+                    <section style={{ fontFamily: 'Inter, sans-serif' }}>
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                            <h2 className="text-section-title text-slate-800 dark:text-white flex items-center gap-2 font-[600]">
                                 <DollarSign className="text-indigo-500" size={20} /> Profit Analysis
                             </h2>
                             <button 
@@ -482,8 +482,8 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                                             </div>
                                             <div className="flex items-center gap-8">
                                                 <div className="text-right">
-                                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Net Profit</p>
-                                                    <p className={`text-lg font-black ${day.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                    <p className="text-[11px] font-[600] text-slate-400 uppercase tracking-tighter">Net Profit</p>
+                                                    <p className={`text-[16px] font-[700] ${day.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                                                         {day.totalProfit >= 0 ? '' : '-'} Rs. {Math.abs(Math.round(day.totalProfit)).toLocaleString()}
                                                     </p>
                                                 </div>
@@ -546,8 +546,8 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                         </div>
 
                         <div className="p-8 bg-gray-50 dark:bg-slate-900/50 border-t border-gray-100 dark:border-slate-700 flex justify-between items-center">
-                            <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Total Daily Profit</span>
-                            <span className={`text-2xl font-black ${viewingDailyBreakdown.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                            <span className="text-[12px] font-[600] text-slate-400 uppercase tracking-widest">Total Daily Profit</span>
+                            <span className={`text-[20px] font-[700] ${viewingDailyBreakdown.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                                 {viewingDailyBreakdown.totalProfit >= 0 ? '' : '-'} Rs. {Math.abs(Math.round(viewingDailyBreakdown.totalProfit)).toLocaleString()}
                             </span>
                         </div>
@@ -889,7 +889,7 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
     };
 
     return (
-        <div className="flex-1 flex flex-col bg-gray-50 dark:bg-slate-900 overflow-hidden">
+        <div className="flex-1 flex flex-col bg-gray-50 dark:bg-slate-900 overflow-hidden" style={{ fontFamily: 'Inter, sans-serif' }}>
             <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-8 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
                 <div className="flex items-center gap-4">
                     <button onClick={onBack} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-all text-slate-500">
@@ -1521,12 +1521,12 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
     );
 }
 
-function MetricLine({ label, value, valueColor = "text-slate-900 dark:text-white", subValue, textSize = "text-[16px]" }: { label: string, value: any, valueColor?: string, subValue?: string, textSize?: string }) {
+function MetricLine({ label, value, valueColor = "text-slate-900 dark:text-white", subValue, textSize = "text-[14px]" }: { label: string, value: any, valueColor?: string, subValue?: string, textSize?: string }) {
     return (
         <div className="flex items-center justify-between py-1.5 border-b border-gray-50 dark:border-slate-700/30 last:border-0 hover:bg-gray-50/50 dark:hover:bg-slate-700/20 px-1 -mx-1 rounded-lg transition-colors">
-            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 capitalize">{label} =</span>
+            <span className="text-[12px] font-[500] text-slate-500 dark:text-slate-400 capitalize">{label} =</span>
             <div className="text-right">
-                <span className={`${textSize} font-black tracking-tight ${valueColor}`}>
+                <span className={`${textSize} font-[600] tracking-tight ${valueColor}`}>
                     {value}
                 </span>
                 {subValue && (
@@ -1596,7 +1596,7 @@ function MetricCard({ label, amount, icon, color, isMock }: { label: string, amo
             </div>
             <div>
                 <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight mb-0.5">{label}</p>
-                <p className="text-xl font-black text-slate-900 dark:text-white tracking-tighter">Rs. {amount.toLocaleString()}</p>
+                <p className="text-[18px] font-[600] text-slate-900 dark:text-white tracking-tight">Rs. {amount.toLocaleString()}</p>
                 {isMock && <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest leading-none mt-1">(Simulation)</span>}
             </div>
             <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-500">

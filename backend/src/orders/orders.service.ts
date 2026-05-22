@@ -30,16 +30,26 @@ export class OrdersService {
 
     private async getInventoryConfig() {
         // Try DB first
-        const dbUrl = await this.settingsService.getSetting('INV_APP_URL');
+        let dbUrl = await this.settingsService.getSetting('INV_APP_URL');
         const dbKey = await this.settingsService.getSetting('INV_APP_API_KEY');
+
+        // Remove trailing slash if it exists
+        if (dbUrl && dbUrl.endsWith('/')) {
+            dbUrl = dbUrl.slice(0, -1);
+        }
 
         if (dbUrl && dbKey) {
             return { url: dbUrl, key: dbKey };
         }
 
+        let envUrl = this.configService.get<string>('INV_APP_URL') || 'http://localhost:5000';
+        if (envUrl.endsWith('/')) {
+            envUrl = envUrl.slice(0, -1);
+        }
+
         // Fallback to Env
         return {
-            url: this.configService.get<string>('INV_APP_URL') || 'http://localhost:5000',
+            url: envUrl,
             key: this.configService.get<string>('INV_APP_API_KEY')
         };
     }
@@ -97,6 +107,120 @@ export class OrdersService {
                 error: `Failed to save order: ${dbError.message}`,
             };
         }
+    }
+
+    async createEcommerceOrder(orderData: any) {
+        const resolvedItems: any[] = [];
+        
+        // Fetch all inventory products ONCE for this order to avoid multiple API calls
+        let fullInventoryList: any[] | null = null;
+        try {
+            const response = await this.getInventoryProducts();
+            
+            if (Array.isArray(response)) {
+                fullInventoryList = response;
+            } else if (response && typeof response === 'object' && response.data && Array.isArray(response.data)) {
+                fullInventoryList = response.data;
+            } else {
+                fullInventoryList = [];
+            }
+        } catch (err) {
+            this.logger.error(`Error fetching full inventory list: ${err.message}`);
+            fullInventoryList = [];
+        }
+        
+        if (orderData.items && Array.isArray(orderData.items)) {
+            for (const item of orderData.items) {
+                let resolvedName = item.product_name;
+                let resolvedId = item.product_id;
+                
+                const rawProductId = String(item.product_id || '').trim();
+                if (rawProductId && fullInventoryList && fullInventoryList.length > 0) {
+                    const matched = fullInventoryList.find((p: any) => String(p.product_id).trim() === rawProductId);
+                    
+                    if (matched) {
+                        resolvedName = matched.product_name;
+                        resolvedId = matched.id || matched.uuid || matched.id;
+                    }
+                }
+                
+                resolvedItems.push({
+                    product_id: resolvedId,
+                    product_name: resolvedName,
+                    qty: item.qty || item.quantity || 1,
+                    amount: item.amount || item.price || 0
+                });
+            }
+        }
+
+        const packageDesc = resolvedItems.map((item: any) => {
+            const truncated = item.product_name.length > 20 ? item.product_name.substring(0, 20) + '...' : item.product_name;
+            return `${item.qty} * ${truncated}`;
+        }).join(', ') || orderData.package_description || '';
+
+        // Map the payload from ecommerce to messages format
+        const payload = {
+            order_number: orderData.order_number,
+            customer_name: orderData.customer_name,
+            phone_number: orderData.customer_phone,
+            alternative_phone: orderData.alt_phone || '',
+            address: orderData.shipping_address,
+            platform: 'Website',
+            page_name: 'Others',
+            order_status: 'Confirmed Order',
+            delivery_charge: orderData.shipping_fee || 0,
+            courier_delivery_fee: orderData.courier_delivery_fee || 0,
+            total_amount: orderData.total_amount,
+            items: resolvedItems,
+            remarks: '', // explicitly empty
+            courier_provider: orderData.logistic_provider,
+            logistic_name: orderData.logistic_provider,
+            delivery_branch: orderData.logistic_branch,
+            package_description: packageDesc,
+            order_type: 'Others',
+            created_by: 'Website',
+            
+            // Partner Specific Fields
+            ncm_from_branch: orderData.ncm_from_branch,
+            ncm_to_branch: orderData.ncm_to_branch,
+            ncm_delivery_type: orderData.ncm_delivery_type,
+            pickdrop_destination_branch: orderData.pickdrop_destination_branch
+        };
+        
+        return this.createExternalOrder(payload);
+    }
+    
+    async updateEcommerceOrder(orderNumber: string, orderData: any) {
+        // Find the order by order_number
+        const { data: currentOrder, error } = await supabaseService.getSupabaseClient()
+            .from('orders')
+            .select('id')
+            .eq('order_number', orderNumber)
+            .single();
+            
+        if (error || !currentOrder) {
+            throw new Error(`Order ${orderNumber} not found`);
+        }
+        
+        // Prepare update object
+        const updatePayload: any = {};
+        if (orderData.customer_name) updatePayload.customer_name = orderData.customer_name;
+        if (orderData.customer_phone) updatePayload.phone_number = orderData.customer_phone;
+        if (orderData.alt_phone) updatePayload.alternative_phone = orderData.alt_phone;
+        if (orderData.shipping_address) updatePayload.address = orderData.shipping_address;
+        
+        updatePayload.updated_by = 'Website';
+        
+        const { data, error: updateError } = await supabaseService.getSupabaseClient()
+            .from('orders')
+            .update(updatePayload)
+            .eq('id', currentOrder.id)
+            .select()
+            .single();
+            
+        if (updateError) throw updateError;
+        
+        return { success: true, data };
     }
 
     private async saveOrderToDatabase(orderData: any) {
@@ -591,6 +715,13 @@ export class OrdersService {
             this.handleInventorySync(data, currentOrder.order_status).catch(err => {
                 this.logger.error(`Background inventory sync failed: ${err.message}`);
             });
+
+            // 3. Ecommerce Sync trigger
+            if (data.platform === 'Website') {
+                this.handleEcommerceSync(data).catch(err => {
+                    this.logger.error(`Background ecommerce sync failed: ${err.message}`);
+                });
+            }
         } else {
             this.logger.log(`DEBUG: Status NOT changed for order ${id}. Skipping history recording.`);
         }
@@ -628,6 +759,50 @@ export class OrdersService {
         return false;
     }
 
+    private async handleEcommerceSync(order: any) {
+        const ecommerceUrl = this.configService.get<string>('ECOMMERCE_APP_URL');
+        if (!ecommerceUrl) {
+            this.logger.warn('Ecommerce App URL not configured.');
+            return;
+        }
+
+        // Map status to ecommerce status
+        const statusMap: Record<string, string> = {
+            'Confirmed Order': 'Processing',
+            'Packed': 'Processing',
+            'Ready to Ship': 'Processing',
+            'Shipped': 'Shipped',
+            'Arrived at Branch': 'Delivery Process',
+            'Delivery Process': 'Delivery Process',
+            'Delivered': 'Delivered',
+            'Delivery Failed': 'Return Process',
+            'Hold': 'Hold',
+            'Return Process': 'Return Process',
+            'Return Delivered': 'Returned',
+            'Cancelled': 'Cancelled'
+        };
+
+        const ecommerceStatus = statusMap[order.order_status] || order.order_status;
+        const targetUrl = `${ecommerceUrl}/api/webhook/order-status`;
+        
+        this.logger.log(`DEBUG: Attempting to sync status to Ecommerce App at URL: ${targetUrl}`);
+        this.logger.log(`DEBUG: Payload -> order_number: ${order.order_number}, status: ${ecommerceStatus}`);
+
+        try {
+            const response = await axios.post(targetUrl, {
+                order_number: order.order_number,
+                status: ecommerceStatus,
+                api_key: this.configService.get<string>('INVENTORY_APP_API_KEY')
+            });
+            this.logger.log(`✅ Synced status ${ecommerceStatus} to Ecommerce for order ${order.order_number}. Response: ${response.status}`);
+        } catch (error: any) {
+            this.logger.error(`Failed to sync status to Ecommerce at ${targetUrl}: ${error.message}`);
+            if (error.response) {
+                this.logger.error(`Response data: ${JSON.stringify(error.response.data)}`);
+            }
+        }
+    }
+
     private async handleInventorySync(order: any, previousStatus: string) {
         // Condition 1: Newly Confirmed (Transition from anything -> Confirmed Order)
         if (order.order_status === 'Confirmed Order' && previousStatus !== 'Confirmed Order') {
@@ -635,8 +810,16 @@ export class OrdersService {
             return;
         }
 
-        // Condition 2: Status Update (Shipped, Delivered, Cancelled)
-        const relevantStatuses = ['Shipped', 'Delivered', 'Cancelled'];
+        // Condition 2: Status Update (Shipped, Delivered, Cancelled, Returned, etc)
+        const relevantStatuses = [
+            'Ready to Ship', 
+            'Shipped', 
+            'Delivered', 
+            'Cancelled', 
+            'Returned Delivered', 
+            'Returned to Courier', 
+            'Hold'
+        ];
         if (relevantStatuses.includes(order.order_status)) {
             await this.updateInventoryStatus(order);
         }
@@ -655,10 +838,8 @@ export class OrdersService {
 
             // Map items to match inventory API expectations
             const mappedItems = order.items.map((item: any) => ({
-                product_id: null, // Inventory expects UUID, messaging app has integers
-                product_name: item.product_id
-                    ? `${item.product_name} (ID: ${item.product_id})`
-                    : item.product_name,
+                product_id: item.product_id || null, // Will now be UUID
+                product_name: item.product_name,
                 quantity: item.qty || item.quantity,
                 price: item.amount // Inventory API expects 'price' field
             }));
@@ -698,7 +879,7 @@ export class OrdersService {
 
             this.logger.log(`Sync payload: ${JSON.stringify(payload, null, 2)}`);
 
-            const targetUrl = `${url}/api/sales/messenger`;
+            const targetUrl = `${url}/api/sales/website-orders`;
             this.logger.log(`🚀 SENDING TO: ${targetUrl}`);
             this.logger.log(`🔑 USING KEY: ...${key.slice(-4)}`);
 
@@ -722,7 +903,7 @@ export class OrdersService {
 
         try {
             this.logger.log(`Updating order status ${order.order_number} in inventory...`);
-            await axios.put(`${url}/api/sales/messenger/status`, {
+            await axios.put(`${url}/api/sales/website-orders/status`, {
                 order_number: order.order_number,
                 status: order.order_status
             }, {
@@ -944,6 +1125,16 @@ export class OrdersService {
 
     async assignToRider(orderId: string, riderId: string, adminName: string) {
         try {
+            // Fetch current order to get old status
+            const { data: currentOrder, error: fetchError } = await supabaseService.getSupabaseClient()
+                .from('orders')
+                .select('*')
+                .eq('id', orderId)
+                .single();
+
+            if (fetchError) throw fetchError;
+            const oldStatus = currentOrder.order_status;
+
             // 1. Get rider details to get their name
             const rider = await this.usersService.findById(riderId);
             if (!rider) throw new Error('Rider not found');
@@ -977,6 +1168,15 @@ export class OrdersService {
                 assignedRider: rider.full_name
             });
 
+            // 5. Trigger syncs since status changed to 'Packed'
+            if (oldStatus !== 'Packed') {
+                this.handleStatusChange(data).catch(err => this.logger.error(`Auto-message failed: ${err.message}`));
+                this.handleInventorySync(data, oldStatus).catch(err => this.logger.error(`Inventory sync failed: ${err.message}`));
+                if (data.platform === 'Website') {
+                    this.handleEcommerceSync(data).catch(err => this.logger.error(`Ecommerce sync failed: ${err.message}`));
+                }
+            }
+
             return { success: true, data };
         } catch (error: any) {
             this.logger.error(`Failed to assign rider: ${error.message}`);
@@ -1009,11 +1209,24 @@ export class OrdersService {
 
     async cancelAssignment(orderId: string, actorName: string) {
         try {
+            // Fetch current order to get old status
+            const { data: currentOrder, error: fetchError } = await supabaseService.getSupabaseClient()
+                .from('orders')
+                .select('*')
+                .eq('id', orderId)
+                .single();
+
+            if (fetchError) throw fetchError;
+            const oldStatus = currentOrder.order_status;
+
             const timestamp = new Date();
             const { data, error } = await supabaseService.getSupabaseClient()
                 .from('orders')
                 .update({
-                    order_status: 'Return Process',
+                    order_status: 'Confirmed Order',
+                    assigned_rider_id: null,
+                    assigned_at: null,
+                    assigned_by: null,
                     updated_at: timestamp.toISOString()
                 })
                 .eq('id', orderId)
@@ -1022,12 +1235,22 @@ export class OrdersService {
 
             if (error) throw error;
 
-            await this.recordStatusHistory(orderId, 'Return Process', actorName, `Marked for return by rider ${actorName}`);
+            await this.recordStatusHistory(orderId, 'Confirmed Order', actorName, `Assignment cancelled by ${actorName}`);
 
             this.messagingGateway.server.emit('orderUpdated', {
                 orderId: orderId,
-                newStatus: 'Return Process'
+                newStatus: 'Confirmed Order',
+                assignedRider: null
             });
+
+            // Trigger syncs since status changed to 'Confirmed Order'
+            if (oldStatus !== 'Confirmed Order') {
+                this.handleStatusChange(data).catch(err => this.logger.error(`Auto-message failed: ${err.message}`));
+                this.handleInventorySync(data, oldStatus).catch(err => this.logger.error(`Inventory sync failed: ${err.message}`));
+                if (data.platform === 'Website') {
+                    this.handleEcommerceSync(data).catch(err => this.logger.error(`Ecommerce sync failed: ${err.message}`));
+                }
+            }
 
             return { success: true, data };
         } catch (error: any) {
@@ -1038,6 +1261,16 @@ export class OrdersService {
 
     async updateDeliveryStatus(orderId: string, status: string, actorName: string) {
         try {
+            // Fetch current order to get old status for sync comparisons
+            const { data: currentOrder, error: fetchError } = await supabaseService.getSupabaseClient()
+                .from('orders')
+                .select('*')
+                .eq('id', orderId)
+                .single();
+
+            if (fetchError) throw fetchError;
+            const oldStatus = currentOrder.order_status;
+
             const timestamp = new Date();
             const { data, error } = await supabaseService.getSupabaseClient()
                 .from('orders')
@@ -1057,6 +1290,15 @@ export class OrdersService {
                 orderId: orderId,
                 newStatus: status
             });
+
+            // Trigger syncs if status changed
+            if (oldStatus !== status) {
+                this.handleStatusChange(data).catch(err => this.logger.error(`Auto-message failed: ${err.message}`));
+                this.handleInventorySync(data, oldStatus).catch(err => this.logger.error(`Inventory sync failed: ${err.message}`));
+                if (data.platform === 'Website') {
+                    this.handleEcommerceSync(data).catch(err => this.logger.error(`Ecommerce sync failed: ${err.message}`));
+                }
+            }
 
             return { success: true, data };
         } catch (error: any) {

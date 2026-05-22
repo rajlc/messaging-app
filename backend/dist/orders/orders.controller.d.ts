@@ -11,6 +11,25 @@ export declare class OrdersController {
         error: string;
         data?: undefined;
     }>;
+    handleEcommerceOrder(orderData: any, apiKey?: string): Promise<{
+        success: boolean;
+        data: any;
+        error?: undefined;
+    } | {
+        success: boolean;
+        error: string;
+        data?: undefined;
+    } | {
+        error: string;
+        status: number;
+    }>;
+    handleEcommerceEdit(orderNumber: string, orderData: any, apiKey?: string): Promise<{
+        success: boolean;
+        data: any;
+    } | {
+        error: string;
+        status: number;
+    }>;
     getOrders(req: any, limit?: string, offset?: string, customerId?: string): Promise<any[]>;
     updateOrder(req: any, id: string, orderData: any): Promise<{
         success: boolean;

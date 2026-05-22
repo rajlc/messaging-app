@@ -196,7 +196,7 @@ export default function BoostingCostView({ onBack }: BoostingCostViewProps) {
     }, [viewingProfitReport]);
 
     return (
-        <div className="flex-1 flex flex-col bg-gray-50 dark:bg-slate-900 overflow-hidden">
+        <div className="font-sans flex-1 flex flex-col bg-gray-50 dark:bg-slate-900 overflow-hidden">
             {/* Header */}
             <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 py-4 flex flex-col gap-6 shadow-sm sticky top-0 z-10">
                 <div className="flex items-center justify-between">

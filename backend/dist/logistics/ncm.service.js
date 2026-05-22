@@ -82,18 +82,21 @@ let NcmService = NcmService_1 = class NcmService {
                 'Branch2Branch': 'B2B'
             };
             const ncmType = typeMap[type] || type;
-            const response = await axios_1.default.get(`${baseUrl}/api/v1/shipping-rate`, {
+            const url = `${baseUrl}/api/v1/shipping-rate`;
+            const params = {
+                creation: cleanPickup,
+                destination: cleanDestination,
+                type: ncmType
+            };
+            this.logger.debug(`Calling NCM Rate API: ${url} with params: ${JSON.stringify(params)}`);
+            const response = await axios_1.default.get(url, {
                 headers,
-                params: {
-                    creation: cleanPickup,
-                    destination: cleanDestination,
-                    type: ncmType
-                },
+                params,
                 timeout: 10000
             });
-            if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-                this.logger.error(`NCM API returned HTML instead of JSON for rate: ${response.data.substring(0, 200)}...`);
-                return { error: 'NCM API server error (500)', success: false };
+            if (typeof response.data === 'string' && (response.data.includes('<!DOCTYPE html>') || response.data.includes('<html'))) {
+                this.logger.warn(`NCM API is currently unavailable (returned HTML). Using fallback pricing.`);
+                return { error: 'NCM API currently unavailable', success: false };
             }
             this.logger.log(`NCM Shipping Rate from ${cleanPickup} to ${cleanDestination} (${ncmType}): ${JSON.stringify(response.data)}`);
             return response.data;

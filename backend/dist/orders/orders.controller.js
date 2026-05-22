@@ -28,6 +28,26 @@ let OrdersController = class OrdersController {
         };
         return this.ordersService.createExternalOrder(enrichedData);
     }
+    async handleEcommerceOrder(orderData, apiKey) {
+        console.log("== WEBHOOK RECEIVED FROM ECOMMERCE ==");
+        console.log(JSON.stringify(orderData.items, null, 2));
+        if (orderData.debug_info) {
+            console.log("== DEBUG INFO ==");
+            console.log(JSON.stringify(orderData.debug_info, null, 2));
+        }
+        const validApiKey = process.env.INVENTORY_APP_API_KEY;
+        if (apiKey !== validApiKey && orderData.api_key !== validApiKey) {
+            return { error: 'Unauthorized', status: 401 };
+        }
+        return this.ordersService.createEcommerceOrder(orderData);
+    }
+    async handleEcommerceEdit(orderNumber, orderData, apiKey) {
+        const validApiKey = process.env.INVENTORY_APP_API_KEY;
+        if (apiKey !== validApiKey && orderData.api_key !== validApiKey) {
+            return { error: 'Unauthorized', status: 401 };
+        }
+        return this.ordersService.updateEcommerceOrder(orderNumber, orderData);
+    }
     async getOrders(req, limit, offset, customerId) {
         const limitNum = limit ? parseInt(limit) : 1000;
         const offsetNum = offset ? parseInt(offset) : 0;
@@ -84,6 +104,7 @@ let OrdersController = class OrdersController {
 exports.OrdersController = OrdersController;
 __decorate([
     (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.Post)(),
     __param(0, (0, common_1.Request)()),
     __param(1, (0, common_1.Body)()),
@@ -91,6 +112,23 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "createOrder", null);
+__decorate([
+    (0, common_1.Post)('ecommerce/webhook'),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Query)('api_key')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], OrdersController.prototype, "handleEcommerceOrder", null);
+__decorate([
+    (0, common_1.Put)('ecommerce/:order_number'),
+    __param(0, (0, common_1.Param)('order_number')),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Query)('api_key')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, String]),
+    __metadata("design:returntype", Promise)
+], OrdersController.prototype, "handleEcommerceEdit", null);
 __decorate([
     (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.Get)(),

@@ -1,7 +1,129 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
 /* Enable dark mode via .dark class (used by next-themes) */
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* =============================================
+   GLOBAL FONT: Inter
+   ============================================= */
+*, *::before, *::after {
+    font-family: 'Inter', var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+
+/* =============================================
+   TYPOGRAPHY SCALE CSS VARIABLES
+   ============================================= */
+:root {
+    /* Page title: 24px / 700 */
+    --text-page-title: 24px;
+    --weight-page-title: 700;
+
+    /* Section title: 18px / 600 */
+    --text-section-title: 18px;
+    --weight-section-title: 600;
+
+    /* Card title: 16px / 600 */
+    --text-card-title: 16px;
+    --weight-card-title: 600;
+
+    /* Normal text: 14px / 400 */
+    --text-normal: 14px;
+    --weight-normal: 400;
+
+    /* Sidebar menu: 14px / 500 */
+    --text-sidebar: 14px;
+    --weight-sidebar: 500;
+
+    /* Table text: 13px / 400 */
+    --text-table: 13px;
+    --weight-table: 400;
+
+    /* Small labels: 12px / 500 */
+    --text-label: 12px;
+    --weight-label: 500;
+
+    /* Button text: 14px / 500 */
+    --text-button: 14px;
+    --weight-button: 500;
+
+    /* Chat message: 14px / 400 */
+    --text-chat: 14px;
+    --weight-chat: 400;
+
+    /* Input text: 14px / 400 */
+    --text-input: 14px;
+    --weight-input: 400;
+}
+
+/* =============================================
+   TYPOGRAPHY UTILITY CLASSES
+   ============================================= */
+.text-page-title {
+    font-size: var(--text-page-title);
+    font-weight: var(--weight-page-title);
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+}
+
+.text-section-title {
+    font-size: var(--text-section-title);
+    font-weight: var(--weight-section-title);
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+}
+
+.text-card-title {
+    font-size: var(--text-card-title);
+    font-weight: var(--weight-card-title);
+    line-height: 1.35;
+}
+
+.text-normal {
+    font-size: var(--text-normal);
+    font-weight: var(--weight-normal);
+    line-height: 1.5;
+}
+
+.text-sidebar-menu {
+    font-size: var(--text-sidebar);
+    font-weight: var(--weight-sidebar);
+    line-height: 1.4;
+}
+
+.text-table-cell {
+    font-size: var(--text-table);
+    font-weight: var(--weight-table);
+    line-height: 1.4;
+}
+
+.text-small-label {
+    font-size: var(--text-label);
+    font-weight: var(--weight-label);
+    line-height: 1.4;
+    letter-spacing: 0.01em;
+}
+
+.text-btn {
+    font-size: var(--text-button);
+    font-weight: var(--weight-button);
+    line-height: 1.4;
+}
+
+.text-chat-msg {
+    font-size: var(--text-chat);
+    font-weight: var(--weight-chat);
+    line-height: 1.55;
+}
+
+.text-input-field {
+    font-size: var(--text-input);
+    font-weight: var(--weight-input);
+    line-height: 1.5;
+}
 
 /* Smooth theme transitions */
 *,

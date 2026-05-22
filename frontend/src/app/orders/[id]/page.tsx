@@ -359,6 +359,57 @@ export default function OrderDetailsPage() {
                             </div>
                         </div>
 
+                        {/* Logistic Info */}
+                        {order.courier_provider && (
+                            <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-gray-200 dark:border-slate-700 shadow-sm">
+                                <h2 className="text-[15px] font-bold text-slate-400 dark:text-slate-500 uppercase mb-3 flex items-center gap-2">
+                                    <Truck size={16} className="text-emerald-500" /> Logistic Info
+                                </h2>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="text-[13px] text-slate-500 block">Partner</label>
+                                        <p className="text-slate-900 dark:text-white capitalize font-medium">
+                                            {order.courier_provider === 'self' ? 'Self Delivered' : 
+                                             order.courier_provider === 'ncm' ? 'Nepal Can Move (NCM)' :
+                                             order.courier_provider === 'pickdrop' ? 'Pick & Drop' :
+                                             order.courier_provider === 'pathao' ? 'Pathao Parcel' :
+                                             order.courier_provider}
+                                        </p>
+                                    </div>
+                                    {(order.delivery_branch || order.ncm_to_branch || order.pickdrop_destination_branch) && (
+                                        <div>
+                                            <label className="text-[13px] text-slate-500 block">Destination Branch</label>
+                                            <p className="text-slate-900 dark:text-white font-medium">
+                                                {order.delivery_branch || order.ncm_to_branch || order.pickdrop_destination_branch}
+                                            </p>
+                                        </div>
+                                    )}
+                                    {order.ncm_from_branch && (
+                                        <div>
+                                            <label className="text-[13px] text-slate-500 block">From Branch</label>
+                                            <p className="text-slate-900 dark:text-white font-medium">
+                                                {order.ncm_from_branch}
+                                            </p>
+                                        </div>
+                                    )}
+                                    {order.ncm_delivery_type && (
+                                        <div>
+                                            <label className="text-[13px] text-slate-500 block">Delivery Type</label>
+                                            <p className="text-slate-900 dark:text-white font-medium">
+                                                {order.ncm_delivery_type === 'Door2Door' ? 'Door to Door' : order.ncm_delivery_type}
+                                            </p>
+                                        </div>
+                                    )}
+                                    <div>
+                                        <label className="text-[13px] text-slate-500 block">Est. Delivery Charge</label>
+                                        <p className="text-slate-900 dark:text-white font-bold text-emerald-600 dark:text-emerald-400">
+                                            Rs. {order.courier_delivery_fee || 0}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Audit Trail - Scrollable with auto-scroll */}
                         <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-gray-200 dark:border-slate-700 shadow-sm flex flex-col max-h-[500px]">
                             <h2 className="text-[19px] font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2 flex-shrink-0">

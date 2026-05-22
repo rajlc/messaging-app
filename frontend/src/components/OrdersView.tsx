@@ -5,10 +5,54 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import {
     Package, Plus, Search, Filter, Check, X, Truck, List, Clock, CheckCircle2, FileText, ChevronDown, RefreshCw,
-    ArrowLeftRight, ArrowLeft, User, UserMinus
+    ArrowLeftRight, ArrowLeft, User, UserMinus, Hash
 } from 'lucide-react';
 import OrderModal from './OrderModal';
 import RiderAssignmentModal from './RiderAssignmentModal';
+
+const getStatusBadgeStyle = (status: string) => {
+    switch (status) {
+        case 'Confirmed Order': return 'bg-[#ECFDF3] text-[#027A48]';
+        case 'New Order':
+        case 'Follow up again':
+        case 'Pending': return 'bg-[#FEF3C7] text-[#D97706]';
+        case 'Ready to Ship':
+        case 'Packed': return 'bg-[#EEF2FF] text-[#4338CA]';
+        case 'Shipped':
+        case 'Arrived at Branch':
+        case 'Delivery Process': return 'bg-[#EFF6FF] text-[#2563EB]';
+        case 'Cancel':
+        case 'Cancelled':
+        case 'Delivery Failed': return 'bg-[#FEF2F2] text-[#EF4444]';
+        case 'Delivered': return 'bg-[#ECFDF3] text-[#059669]';
+        case 'Hold':
+        case 'Return Process': return 'bg-[#FFF7ED] text-[#EA580C]';
+        case 'Returned Delivered': return 'bg-[#F3F4F6] text-[#4B5563]';
+        default: return 'bg-gray-100 text-gray-700';
+    }
+};
+
+const getStatusLeftBarColor = (status: string) => {
+    switch (status) {
+        case 'Confirmed Order': return 'bg-[#22C55E]';
+        case 'New Order':
+        case 'Follow up again':
+        case 'Pending': return 'bg-[#F59E0B]';
+        case 'Ready to Ship':
+        case 'Packed': return 'bg-[#6366F1]';
+        case 'Shipped':
+        case 'Arrived at Branch':
+        case 'Delivery Process': return 'bg-[#3B82F6]';
+        case 'Cancel':
+        case 'Cancelled':
+        case 'Delivery Failed': return 'bg-[#EF4444]';
+        case 'Delivered': return 'bg-[#10B981]';
+        case 'Hold':
+        case 'Return Process': return 'bg-[#F97316]';
+        case 'Returned Delivered': return 'bg-[#6B7280]';
+        default: return 'bg-[#9CA3AF]';
+    }
+};
 
 export default function OrdersView() {
     const router = useRouter();
@@ -51,6 +95,7 @@ export default function OrdersView() {
 
     // Selection State
     const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+    const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
 
     const [orders, setOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
@@ -139,6 +184,16 @@ export default function OrdersView() {
         }
         localStorage.setItem('reportDetailStatusFilter', reportDetailStatusFilter);
     }, [activeTab, todaySubTab, orderListSubTab, summaryReportView, selectedDateForReport, reportDetailStatusFilter]);
+
+
+    // Click outside to close status menu
+    useEffect(() => {
+        const handleClickOutside = () => {
+            if (statusMenuOrderId) setStatusMenuOrderId(null);
+        };
+        document.addEventListener('click', handleClickOutside);
+        return () => document.removeEventListener('click', handleClickOutside);
+    }, [statusMenuOrderId]);
 
     // Reset selection and filter when tabs change
     useEffect(() => {
@@ -357,7 +412,7 @@ export default function OrdersView() {
         fetchOrders();
     };
 
-    const handleSyncPickDrop = async (orderId: string) => {
+    const handleSyncLogisticOrder = async (orderId: string, provider: string) => {
         if (userRole !== 'admin' && userRole !== 'editor') {
             alert('You do not have permission to sync orders.');
             return;
@@ -366,13 +421,27 @@ export default function OrdersView() {
         setSyncingOrderId(orderId);
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/pickdrop/status-sync`,
-                { orderId },
-                { headers: { 'Authorization': `Bearer ${token}` } }
-            );
+            let response;
+            
+            if (provider === 'pickdrop') {
+                response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/pickdrop/status-sync`,
+                    { orderId }, { headers: { 'Authorization': `Bearer ${token}` } }
+                );
+            } else if (provider === 'ncm') {
+                response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/ncm/status-sync`,
+                    { orderId }, { headers: { 'Authorization': `Bearer ${token}` } }
+                );
+            } else if (provider === 'pathao') {
+                response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/orders/${orderId}/pathao-info`,
+                    { headers: { 'Authorization': `Bearer ${token}` } }
+                );
+                alert('✅ Sync complete for Pathao!');
+                fetchOrders();
+                return;
+            }
 
-            if (response.data.success) {
-                const data = response.data.data;
+            if (response?.data?.success || response?.data?.status) {
+                const data = response.data.data || response.data;
                 if (data.newStatus) {
                     alert(`✅ Sync complete! Status updated to: ${data.newStatus}`);
                     fetchOrders();
@@ -380,50 +449,18 @@ export default function OrdersView() {
                     alert('ℹ️ Status is already up to date.');
                 }
             } else {
-                alert('❌ Sync failed: ' + (response.data.error || 'Unknown error'));
+                alert('❌ Sync failed: ' + (response?.data?.error || response?.data?.message || 'Unknown error'));
             }
         } catch (error: any) {
-            console.error('Failed to sync order', error);
+            console.error(`Failed to sync ${provider} order`, error);
             alert('❌ Failed to sync order: ' + (error.response?.data?.message || error.message));
         } finally {
             setSyncingOrderId(null);
         }
     };
 
-    const handleSyncNcm = async (orderId: string) => {
-        if (userRole !== 'admin' && userRole !== 'editor') {
-            alert('You do not have permission to sync orders.');
-            return;
-        }
-
-        setSyncingOrderId(orderId);
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/ncm/status-sync`,
-                { orderId },
-                { headers: { 'Authorization': `Bearer ${token}` } }
-            );
-
-            if (response.data.success) {
-                if (response.data.newStatus) {
-                    alert(`✅ Sync complete! Status updated to: ${response.data.newStatus}`);
-                    fetchOrders();
-                } else {
-                    alert(`ℹ️ ${response.data.message || 'Status is already up to date.'}`);
-                }
-            } else {
-                alert('❌ Sync failed: ' + (response.data.error || 'Unknown error'));
-            }
-        } catch (error: any) {
-            console.error('Failed to sync NCM order', error);
-            alert('❌ Failed to sync order: ' + (error.response?.data?.message || error.message));
-        } finally {
-            setSyncingOrderId(null);
-        }
-    };
-
-    const handleUnassignRider = async (orderId: string) => {
-        if (!window.confirm('Are you sure you want to unassign the rider? The order status will revert to Confirmed Order.')) return;
+    const handleUnassignRider = async (orderId: string, riderName: string) => {
+        if (!window.confirm(`Are you sure you want to unassign this order from rider ${riderName}?`)) return;
 
         try {
             const token = localStorage.getItem('token');
@@ -1232,329 +1269,387 @@ export default function OrdersView() {
                     </div>
 
                     {activeTab !== 'orderSummary' && (
-                        <div className="grid grid-cols-[40px_40px_80px_110px_140px_120px_1fr_150px_80px_120px_120px_90px] gap-3 p-4 text-[15px] font-semibold text-slate-500 dark:text-slate-400 uppercase border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/50 items-center">
-                            <div className="w-5">
+                        <div className="flex items-center justify-between p-3 mb-2">
+                            <div className="flex items-center gap-3">
                                 <input
                                     type="checkbox"
                                     checked={displayOrders.length > 0 && selectedOrders.size === displayOrders.length}
                                     onChange={(e) => handleSelectAll(e.target.checked)}
-                                    className="rounded border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900/50 text-indigo-600 focus:ring-indigo-500"
+                                    className="rounded border-gray-300 bg-white text-indigo-600 focus:ring-indigo-500 w-5 h-5 cursor-pointer"
                                 />
+                                <span className="text-[14px] font-semibold text-slate-600 dark:text-slate-300">Select All ({selectedOrders.size})</span>
                             </div>
-                            <div className="w-8 text-center text-[12px]">#</div>
-                            <div>Date</div>
-                            <div>Order ID</div>
-                            <div>Customer</div>
-                            <div>Phone</div>
-                            <div>Products</div>
-                            <div>{todaySubTab === 'pending' ? 'Address' : 'Branch / City'}</div>
-                            <div className="text-left">Amount</div>
-                            <div>Remarks</div>
-                            <div className="text-center">Status</div>
-                            <div className="text-right">Action</div>
                         </div>
                     )}
 
-                    {/* Table Body / Content */}
-                    <div className="flex-1 overflow-y-auto custom-scrollbar">
+                    {/* Table Body / Content replaced with Card View */}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar px-2 bg-[#F5F7FA] dark:bg-slate-900 pb-10 pt-2">
                         {activeTab !== 'orderSummary' ? (
                             loading ? (
                                 <div className="flex items-center justify-center h-full">
                                     <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                                 </div>
                             ) : displayOrders.length > 0 ? (
-                                displayOrders.map((order, index) => (
-                                    <div key={order.id} className="grid grid-cols-[40px_40px_80px_110px_140px_120px_1fr_150px_80px_120px_120px_90px] gap-3 p-5 text-[17px] border-b border-gray-100 dark:border-slate-700 items-center hover:bg-blue-50/50 dark:hover:bg-slate-700/50 transition-colors group">
-                                        <div className="w-5">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedOrders.has(order.id)}
-                                                onChange={(e) => handleSelectRow(order.id, e.target.checked)}
-                                                className="rounded border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900/50 text-indigo-600 focus:ring-indigo-500"
-                                            />
-                                        </div>
-                                        <div className="w-8 text-center text-slate-500 text-[14px] font-mono">{index + 1}</div>
-                                        <div className="text-slate-600 dark:text-slate-400 text-[14px]">{new Date(order.created_at || order.order_date).toLocaleDateString()}</div>
-                                        <div className="flex flex-col">
-                                            <span className="font-mono text-black dark:text-slate-300 text-[14px] font-medium">#{order.order_number}</span>
-                                            {!['New Order', 'Cancel', 'Cancelled'].includes(order.order_status) && (
-                                                <>
-                                                    {order.courier_provider === 'local' ? (
-                                                        <span className="text-[12px] text-emerald-600 dark:text-emerald-400 uppercase font-bold mt-0.5">
-                                                            {order.logistic_name || 'Local'}
-                                                        </span>
-                                                    ) : order.courier_provider === 'pathao' ? (
-                                                        <span className="text-[12px] text-red-600 dark:text-red-400 uppercase font-bold mt-0.5">
-                                                            Pathao
-                                                        </span>
-                                                    ) : order.courier_provider === 'pickdrop' ? (
-                                                        <span className="text-[12px] text-orange-600 dark:text-orange-400 uppercase font-bold mt-0.5">
-                                                            Pick &amp; Drop
-                                                        </span>
-                                                    ) : order.courier_provider === 'ncm' ? (
-                                                        <span className="text-[12px] text-blue-600 dark:text-blue-400 uppercase font-bold mt-0.5">
-                                                            NCM
-                                                        </span>
-                                                    ) : order.courier_provider === 'self' ? (
-                                                        <span className="text-[12px] text-emerald-600 dark:text-emerald-400 uppercase font-bold mt-0.5">
-                                                            Self Delivered
-                                                        </span>
-                                                    ) : null}
-                                                </>
-                                            )}
-                                        </div>
-                                        <div className="font-semibold text-slate-800 dark:text-white truncate text-[14px] text-left">{order.customer_name}</div>
-                                        <div className="text-[14px] text-slate-600 dark:text-slate-300 text-left flex flex-col">
-                                            <span>{order.phone_number}</span>
-                                            {order.alternative_phone && (
-                                                <span className="text-[11px] text-indigo-500 dark:text-indigo-400 font-bold mt-0.5">+Alt Num</span>
-                                            )}
-                                        </div>
+                                <div className="flex flex-col gap-[10px]">
+                                    {displayOrders.map((order, index) => (
+                                        <div 
+                                            key={order.id} 
+                                            className="relative bg-white dark:bg-slate-800 rounded-[16px] min-h-[180px] p-[16px_18px] flex flex-col md:flex-row md:items-start gap-4 transition-all duration-200 ease-in hover:-translate-y-[1px] hover:shadow-[0_6px_18px_rgba(0,0,0,0.05)] border border-gray-100 dark:border-slate-700/50"
+                                        >
+                                            {/* Status Line Indicator */}
+                                            <div className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-full ${getStatusLeftBarColor(order.order_status)}`}></div>
 
-                                        <div className="relative group/product cursor-help text-left">
-                                            <div className="flex items-center gap-1.5">
-                                                {order.items && order.items.length > 0 && (
-                                                    <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded text-[12px] font-bold min-w-[24px] text-center border border-blue-200 dark:border-blue-800/50" title="Total Quantity">
-                                                        {order.items.reduce((sum: number, item: any) => sum + (item.qty || 0), 0)}
+                                            {/* Section 1: LEFT SIDE (26%) - Customer Identity */}
+                                            <div className="flex flex-col w-full md:w-[26%] pl-2 shrink-0 border-b md:border-b-0 border-gray-100 pb-3 md:pb-0">
+                                                <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedOrders.has(order.id)}
+                                                        onChange={(e) => handleSelectRow(order.id, e.target.checked)}
+                                                        className="rounded border-gray-300 bg-white text-indigo-600 focus:ring-indigo-500 w-[18px] h-[18px] cursor-pointer"
+                                                    />
+                                                    <span 
+                                                        onClick={() => window.open(`/orders/${order.id}`, '_blank')}
+                                                        className="text-[12px] font-[600] text-indigo-600 dark:text-indigo-400 cursor-pointer hover:underline"
+                                                    >
+                                                        Order No. {order.order_number}
                                                     </span>
-                                                )}
-                                                <span className="text-slate-600 dark:text-slate-300 truncate max-w-[130px] inline-block" title={order.items?.[0]?.product_name}>
-                                                    {order.items?.[0]?.product_name || 'No Items'}
-                                                </span>
-                                                {order.items && order.items.length > 1 && (
-                                                    <span className="text-[12px] bg-gray-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                                                        +{order.items.length - 1} more
-                                                    </span>
-                                                )}
-                                            </div>
-                                            {order.items && order.items.length > 0 && (
-                                                <div className="absolute left-0 top-full mt-2 w-72 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-xl p-3 hidden group-hover/product:block z-[100] max-h-60 overflow-y-auto pointer-events-none">
-                                                    <div className="relative z-[101]">
-                                                        <p className="text-[14px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase border-b border-gray-100 dark:border-slate-700 pb-1">Order Items</p>
-                                                        <ul className="space-y-1.5">
-                                                            {order.items.map((item: any, idx: number) => (
-                                                                <li key={idx} className="flex justify-between items-start text-[14px] text-slate-700 dark:text-slate-200 gap-2">
-                                                                    <span className="flex-1 break-words leading-tight">{item.product_name}</span>
-                                                                    <span className="text-black dark:text-slate-400 min-w-[24px] text-right font-mono bg-gray-100 dark:bg-slate-900/50 px-1 rounded">x{item.qty}</span>
-                                                                </li>
-                                                            ))}
-                                                        </ul>
+                                                    {order.platform === 'Website' && (
+                                                        <span className="text-[10px] bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 px-1.5 py-0.5 rounded uppercase font-bold">
+                                                            Website
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="flex flex-col gap-1.5 ml-[26px]">
+                                                    <div className="text-[13px] text-[#667085] dark:text-slate-400">
+                                                        {new Date(order.created_at || order.order_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    </div>
+                                                    <div className="text-[14px] font-[500] text-slate-800 dark:text-slate-200">
+                                                        {order.customer_name}
+                                                    </div>
+                                                    <div className="text-[18px] font-[700] text-[#111827] dark:text-white mt-0.5 tracking-tight">
+                                                        {order.phone_number}
+                                                        {order.alternative_phone && (
+                                                            <span className="text-[11px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded ml-2 font-bold align-middle">ALT</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-[14px] font-[600] leading-[1.4] text-slate-700 dark:text-slate-300 mt-1 line-clamp-2" title={order.address}>
+                                                        <span className="opacity-80">📍</span> {order.address}
                                                     </div>
                                                 </div>
-                                            )}
-                                        </div>
+                                            </div>
 
-                                        <div className="text-[14px] text-black dark:text-slate-300 text-left">
-                                            {todaySubTab === 'pending' ? (
-                                                <span className="text-black dark:text-slate-400 truncate max-w-[150px] inline-block" title={order.address}>{order.address}</span>
-                                            ) : (
-                                                <>
-                                                    {order.courier_provider === 'local' ? (
-                                                        <span className="text-emerald-600 dark:text-emerald-300">{order.delivery_branch || '-'}</span>
-                                                    ) : order.courier_provider === 'pathao' ? (
-                                                        <span className="text-red-600 dark:text-red-300">{order.city_name || order.city || 'Kathmandu'}</span>
-                                                    ) : order.courier_provider === 'pickdrop' ? (
-                                                        <span className="text-orange-600 dark:text-orange-400 truncate max-w-[120px] inline-block" title={order.pickdrop_city_area || order.address}>{order.pickdrop_destination_branch ? `${order.pickdrop_destination_branch}` : ''}{order.pickdrop_city_area ? ` · ${order.pickdrop_city_area}` : ''}</span>
-                                                    ) : order.courier_provider === 'ncm' ? (
-                                                        <span className="text-blue-600 dark:text-blue-300">{order.ncm_to_branch || order.city_name || '-'}</span>
-                                                    ) : order.courier_provider === 'self' ? (
-                                                        <span className="text-emerald-600 dark:text-emerald-300">Self Delivered</span>
+                                            {/* Section 2: PRODUCT SECTION (34%) */}
+                                            <div className="flex flex-col w-full md:w-[34%] shrink-0 pr-0 md:pr-4">
+                                                {/* Header Row */}
+                                                <div className="grid grid-cols-[1fr_50px_80px] gap-2 mb-2 text-[12px] font-[600] text-[#667085] dark:text-slate-400 uppercase tracking-wide">
+                                                    <div>Product Name</div>
+                                                    <div className="text-center">Qty</div>
+                                                    <div className="text-right">Amount</div>
+                                                </div>
+                                                
+                                                {/* Product List */}
+                                                <div className="flex flex-col gap-[4px]">
+                                                    {order.items && order.items.length > 0 ? (
+                                                        order.items.map((item: any, idx: number) => (
+                                                            <div key={idx} className="grid grid-cols-[1fr_50px_80px] gap-2 items-center">
+                                                                <div className="text-[14px] font-[500] leading-[1.3] text-slate-800 dark:text-slate-200 break-words line-clamp-2">
+                                                                    {item.product_name}
+                                                                </div>
+                                                                <div className="flex justify-center">
+                                                                    <div className="bg-[#EEF2FF] text-[#4338CA] dark:bg-indigo-900/30 dark:text-indigo-300 h-[28px] min-w-[28px] px-2 rounded-[8px] text-[13px] font-[700] flex items-center justify-center">
+                                                                        {item.qty}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex justify-end">
+                                                                    <div className="bg-[#EFF6FF] text-[#2563EB] dark:bg-blue-900/30 dark:text-blue-300 py-[6px] px-[10px] rounded-[8px] text-[13px] font-[700] whitespace-nowrap">
+                                                                        Rs. {item.total_amount || (item.price * item.qty) || order.total_amount}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))
                                                     ) : (
-                                                        <span className="text-black dark:text-slate-500 truncate max-w-[100px] inline-block" title={order.address}>{order.address}</span>
+                                                        <div className="text-slate-400 italic text-[13px]">No products listed</div>
                                                     )}
-                                                </>
-                                            )}
-                                        </div>
+                                                </div>
 
-                                        <div className="text-black dark:text-slate-300 font-mono text-left text-[14px]">Rs. {order.total_amount}</div>
-                                        <div className="text-[13px] text-black dark:text-slate-400 truncate max-w-[120px]" title={order.remarks}>
-                                            {(order.order_status === 'New Order' || order.order_status === 'Confirmed Order') ? (order.remarks || '-') : ''}
-                                        </div>
+                                                {/* Package Description (Only if exists) */}
+                                                {order.package_description && (
+                                                    <div className="mt-3 bg-[#F8FAFC] dark:bg-slate-700/50 border border-[#E2E8F0] dark:border-slate-600 p-[10px_12px] rounded-[10px]">
+                                                        <div className="text-[11px] font-bold text-slate-500 uppercase mb-1">Package Description</div>
+                                                        <div className={`text-[13px] text-[#475467] dark:text-slate-300 ${expandedDescriptions.has(order.id) ? '' : 'line-clamp-2'}`} title={expandedDescriptions.has(order.id) ? '' : order.package_description}>
+                                                            {order.package_description}
+                                                        </div>
+                                                        {order.package_description.length > 80 && (
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const next = new Set(expandedDescriptions);
+                                                                    if (next.has(order.id)) next.delete(order.id);
+                                                                    else next.add(order.id);
+                                                                    setExpandedDescriptions(next);
+                                                                }}
+                                                                className="text-[11px] font-bold text-blue-600 hover:text-blue-700 mt-1 uppercase"
+                                                            >
+                                                                {expandedDescriptions.has(order.id) ? 'View Less' : 'View More'}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
 
-                                        <div className="text-center flex flex-col items-center justify-center">
-                                            <span className={`text-[12px] px-2 py-0.5 rounded-full border whitespace-nowrap ${order.order_status === 'New Order' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 border-blue-200 dark:border-blue-700' :
-                                                order.order_status === 'Confirmed Order' ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-200 border-indigo-200 dark:border-indigo-700' :
-                                                    order.order_status === 'Ready to Ship' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-200 border-amber-200 dark:border-amber-700' :
-                                                        order.order_status === 'Packed' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-200 border-orange-200 dark:border-orange-700' :
-                                                            order.order_status === 'Shipped' ? 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-200 border-cyan-200 dark:border-cyan-700' :
-                                                                order.order_status === 'Arrived at Branch' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 border-blue-200 dark:border-blue-700' :
-                                                                    order.order_status === 'Delivery Process' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-200 border-purple-200 dark:border-purple-700' :
-                                                                        order.order_status === 'Delivered' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-200 border-green-200 dark:border-green-700' :
-                                                                            order.order_status === 'Delivery Failed' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-200 border-red-200 dark:border-red-700' :
-                                                                                order.order_status === 'Hold' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-200 border-orange-200 dark:border-orange-700' :
-                                                                                    order.order_status === 'Return Process' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-200 border-emerald-200 dark:border-emerald-700' :
-                                                                                        order.order_status === 'Return Delivered' ? 'bg-slate-100 dark:bg-slate-700 text-black dark:text-slate-300 border-slate-200 dark:border-slate-600' :
-                                                                                            order.order_status === 'Cancel' || order.order_status === 'Cancelled' ? 'bg-gray-100 dark:bg-gray-900/30 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700' :
-                                                                                                order.order_status === 'Follow up again' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700' :
-                                                                                                    'bg-slate-100 dark:bg-slate-700 text-black dark:text-slate-300 border-slate-200 dark:border-slate-600'
-                                                }`}>
-                                                {order.order_status === 'Ready to Ship' ? 'Packed' : order.order_status}
-                                            </span>
-                                            {order.status_reason && (
-                                                <span className="text-[11px] text-red-500 dark:text-red-300 mt-1 max-w-[120px] leading-tight block break-words">
-                                                    {order.status_reason}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="text-right flex items-center justify-end gap-2">
-                                            {(order.order_status === 'New Order' || order.order_status === 'Follow up again') && (
-                                                <>
-                                                    <button
-                                                        onClick={() => handleConfirmAction(order)}
-                                                        className="text-green-600 dark:text-green-400 hover:text-green-500 dark:hover:text-green-300 transition-colors mr-1"
-                                                        title="Confirm Order"
-                                                    >
-                                                        <Check size={16} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleCancelAction(order.id)}
-                                                        className="text-red-600 dark:text-red-400 hover:text-red-500 dark:hover:text-red-300 transition-colors mr-2"
-                                                        title="Cancel Order"
-                                                    >
-                                                        <X size={16} />
-                                                    </button>
-                                                </>
-                                            )}
+                                                {/* Remarks */}
+                                                {order.remarks && (
+                                                    <div className="mt-2 text-[13px] font-[700] text-[#B42318] dark:text-red-400 line-clamp-2" title={order.remarks}>
+                                                        Remarks: {order.remarks}
+                                                    </div>
+                                                )}
+                                                
+                                                {order.status_reason && (
+                                                    <div className="mt-1 text-[12px] font-medium text-red-500 line-clamp-2">
+                                                        Reason: {order.status_reason}
+                                                    </div>
+                                                )}
+                                            </div>
 
-                                            {/* Manual Status Change for Local/Self */}
-                                            {['local', 'self'].includes(order.courier_provider) &&
-                                                ['Confirmed Order', 'Ready to Ship', 'Packed', 'Shipped'].includes(order.order_status) && 
-                                                !(order.courier_provider === 'self' && order.order_status === 'Packed') && (
-                                                    <div className="relative inline-block mr-2">
+                                            {/* Section 3: TOTAL + SHIPPING (17%) */}
+                                            <div className="flex flex-col w-full md:w-[17%] shrink-0 border-t md:border-t-0 md:border-l border-gray-100 dark:border-slate-700/50 pt-3 md:pt-0 md:pl-4 justify-center md:justify-start">
+                                                <div className="text-[12px] text-[#667085] dark:text-slate-400 uppercase font-semibold">Grand Total</div>
+                                                <div className="text-[34px] font-[800] tracking-[-0.02em] text-[#111827] dark:text-white leading-none mt-1">
+                                                    Rs. {order.total_amount}
+                                                </div>
+                                                
+                                                <div className="h-[1px] bg-[#EAECF0] dark:bg-slate-700 my-[14px]"></div>
+                                                
+                                                <div className="flex flex-col gap-2 text-[14px] font-[600] text-[#344054] dark:text-slate-300">
+                                                    {order.courier_provider === 'local' ? (
+                                                        <>
+                                                            <div className="flex items-center gap-2"><Truck size={16} className="text-slate-400" /> {order.logistic_name || 'Local'}</div>
+                                                            <div className="flex items-center gap-2"><span className="opacity-70 text-[16px]">📍</span> {order.delivery_branch || '-'}</div>
+                                                        </>
+                                                    ) : order.courier_provider === 'pathao' ? (
+                                                        <>
+                                                            <div className="flex items-center gap-2"><Truck size={16} className="text-red-500" /> Pathao</div>
+                                                            <div className="flex items-center gap-2"><span className="opacity-70 text-[16px]">📍</span> {order.city_name || order.city || 'Kathmandu'}</div>
+                                                            {order.courier_consignment_id && (
+                                                                <div className="flex items-center gap-2 mt-0.5 text-[12px] font-[500] text-slate-500 dark:text-slate-400">
+                                                                    <Hash size={14} className="text-slate-400" /> {order.courier_consignment_id}
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    ) : order.courier_provider === 'pickdrop' ? (
+                                                        <>
+                                                            <div className="flex items-center gap-2"><Truck size={16} className="text-orange-500" /> Pick & Drop</div>
+                                                            <div className="flex items-center gap-2"><span className="opacity-70 text-[16px]">📍</span> {order.pickdrop_destination_branch || '-'}</div>
+                                                            {(order.courier_consignment_id || order.pickdrop_order_id) && (
+                                                                <div className="flex items-center gap-2 mt-0.5 text-[12px] font-[500] text-slate-500 dark:text-slate-400">
+                                                                    <Hash size={14} className="text-slate-400" /> {order.courier_consignment_id || order.pickdrop_order_id}
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    ) : order.courier_provider === 'ncm' ? (
+                                                        <>
+                                                            <div className="flex items-center gap-2"><Truck size={16} className="text-blue-500" /> NCM</div>
+                                                            <div className="flex items-center gap-2"><span className="opacity-70 text-[16px]">📍</span> {order.ncm_to_branch || order.city_name || '-'}</div>
+                                                            {order.courier_consignment_id && (
+                                                                <div className="flex items-center gap-2 mt-0.5 text-[12px] font-[500] text-slate-500 dark:text-slate-400">
+                                                                    <Hash size={14} className="text-slate-400" /> {order.courier_consignment_id}
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    ) : order.courier_provider === 'self' ? (
+                                                        <>
+                                                            <div className="flex items-center gap-2"><Truck size={16} className="text-emerald-500" /> Self Delivered</div>
+                                                        </>
+                                                    ) : (
+                                                        <div className="text-slate-400 font-normal italic text-[13px]">Unassigned Courier</div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Section 4: ACTIONS (17%) */}
+                                            <div className="flex flex-col w-full md:w-[17%] shrink-0 pt-3 md:pt-0 items-start md:items-end justify-between min-h-[148px] md:pr-2">
+                                                {/* Status Badge */}
+                                                <div className={`h-[32px] px-[14px] rounded-full text-[13px] font-[700] flex items-center justify-center whitespace-nowrap self-start md:self-end ${getStatusBadgeStyle(order.order_status)}`}>
+                                                    <div className="flex items-center gap-1.5">
+                                                        {order.order_status === 'Confirmed Order' && <CheckCircle2 size={14} />}
+                                                        {order.order_status === 'Ready to Ship' ? 'Packed' : order.order_status}
+                                                    </div>
+                                                </div>
+
+                                                {/* Action Buttons */}
+                                                <div className="flex flex-col gap-2 w-full mt-auto pt-4 relative">
+                                                    {/* Primary Button */}
+                                                    {(order.order_status === 'New Order' || order.order_status === 'Follow up again') && (
+                                                        <button
+                                                            onClick={() => handleConfirmAction(order)}
+                                                            className="h-[38px] bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-[12px] text-[13px] font-[600] transition-colors w-full flex items-center justify-center gap-2 shadow-sm"
+                                                        >
+                                                            <Check size={16} />
+                                                            Confirm Order
+                                                        </button>
+                                                    )}
+                                                    
+                                                    {order.order_status === 'Confirmed Order' && order.courier_provider === 'pathao' && !order.courier_consignment_id && (
+                                                        <button
+                                                            onClick={() => handleShipOrder(order.id)}
+                                                            className="h-[38px] bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-[12px] text-[13px] font-[600] transition-colors w-full flex items-center justify-center gap-2 shadow-sm"
+                                                        >
+                                                            <Truck size={16} />
+                                                            Ship Pathao
+                                                        </button>
+                                                    )}
+
+                                                    {order.order_status === 'Confirmed Order' && order.courier_provider === 'pickdrop' && !order.pickdrop_order_id && (
+                                                        <button
+                                                            onClick={() => handlePickDropShip(order.id)}
+                                                            className="h-[38px] bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-[12px] text-[13px] font-[600] transition-colors w-full flex items-center justify-center gap-2 shadow-sm"
+                                                        >
+                                                            <Truck size={16} />
+                                                            Ship Pick & Drop
+                                                        </button>
+                                                    )}
+
+                                                    {order.order_status === 'Confirmed Order' && order.courier_provider === 'ncm' && !order.courier_consignment_id && (
+                                                        <button
+                                                            onClick={async () => {
+                                                                if (userRole !== 'admin' && userRole !== 'editor') {
+                                                                    alert('You do not have permission to ship orders.');
+                                                                    return;
+                                                                }
+                                                                if (!window.confirm('Ship this order via Nepal Can Move (NCM)?')) return;
+                                                                try {
+                                                                    const token = localStorage.getItem('token');
+                                                                    const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/ncm/ship`, { orderId: order.id }, {
+                                                                        headers: { 'Authorization': `Bearer ${token}` }
+                                                                    });
+                                                                    if (res.data?.success) {
+                                                                        alert(`✅ Shipped via NCM!\nConsignment ID: ${res.data.orderId}`);
+                                                                        fetchOrders();
+                                                                    } else {
+                                                                        alert('❌ Failed: ' + (res.data?.error || 'Unknown error'));
+                                                                    }
+                                                                } catch (error: any) {
+                                                                    console.error('Failed to ship via NCM', error);
+                                                                    alert('❌ Failed: ' + (error.response?.data?.message || error.message));
+                                                                }
+                                                            }}
+                                                            className="h-[38px] bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-[12px] text-[13px] font-[600] transition-colors w-full flex items-center justify-center gap-2 shadow-sm"
+                                                        >
+                                                            <Truck size={16} />
+                                                            Ship NCM
+                                                        </button>
+                                                    )}
+                                                    
+                                                    {order.order_status === 'Confirmed Order' && order.courier_provider === 'self' && (
+                                                        <button
+                                                            onClick={() => setAssigningOrder(order)}
+                                                            className="h-[38px] bg-[#FEF3C7] hover:bg-[#FDE68A] text-[#92400E] rounded-[12px] text-[13px] font-[700] transition-colors w-full flex items-center justify-center gap-2 shadow-sm"
+                                                        >
+                                                            <User size={16} />
+                                                            Assign Rider
+                                                        </button>
+                                                    )}
+
+                                                    {/* Sync Status Buttons (Primary when Shipped/Packed) */}
+                                                    {['Packed', 'Ready to Ship', 'Shipped', 'Arrived at Branch', 'Delivery Process', 'Delivery Failed', 'Hold', 'Return Process'].includes(order.order_status) && 
+                                                     ['ncm', 'pickdrop', 'pathao'].includes(order.courier_provider) && (
+                                                        <button
+                                                            onClick={() => handleSyncLogisticOrder(order.id, order.courier_provider)}
+                                                            disabled={syncingOrderId === order.id}
+                                                            className="h-[38px] bg-[#4F46E5] hover:bg-[#4338CA] text-white rounded-[12px] text-[13px] font-[600] transition-colors w-full flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+                                                        >
+                                                            <RefreshCw size={16} className={syncingOrderId === order.id ? 'animate-spin' : ''} />
+                                                            Sync Status
+                                                        </button>
+                                                    )}
+
+                                                    {['Packed', 'Ready to Ship'].includes(order.order_status) && order.courier_provider === 'self' && (
+                                                        <button
+                                                            onClick={() => handleUnassignRider(order.id, order.assigned_rider?.full_name || 'Rider')}
+                                                            className="h-[38px] bg-red-500 hover:bg-red-600 text-white rounded-[12px] text-[13px] font-[600] transition-colors w-full flex items-center justify-center gap-2 shadow-sm"
+                                                        >
+                                                            <UserMinus size={16} />
+                                                            Unassign Rider
+                                                        </button>
+                                                    )}
+
+                                                    {/* Secondary "More" Dropdown */}
+                                                    <div className="relative w-full">
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 setStatusMenuOrderId(statusMenuOrderId === order.id ? null : order.id);
                                                             }}
-                                                            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 transition-colors"
-                                                            title="Change Status"
+                                                            className="h-[38px] w-full border border-[#D0D5DD] dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-[12px] text-[13px] font-[600] transition-colors flex items-center justify-center gap-2 shadow-sm"
                                                         >
-                                                            <ArrowLeftRight size={16} />
+                                                            More <ChevronDown size={16} />
                                                         </button>
 
                                                         {statusMenuOrderId === order.id && (
-                                                            <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl z-[150] py-1 animate-in fade-in zoom-in duration-200">
-                                                                <div className="px-3 py-2 text-[12px] font-bold text-slate-500 dark:text-slate-400 uppercase border-b border-gray-100 dark:border-slate-700">
-                                                                    Change Status
-                                                                </div>
-                                                                <div className="max-h-60 overflow-y-auto">
-                                                                    {orderStatuses.map(status => (
-                                                                        <button
-                                                                            key={status}
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                onManualStatusChange(order.id, status);
-                                                                            }}
-                                                                            className={`w-full text-left px-4 py-2 text-[13px] hover:bg-indigo-50 dark:hover:bg-slate-700 transition-colors ${order.order_status === status ? 'text-indigo-600 dark:text-indigo-400 font-bold' : 'text-slate-700 dark:text-slate-200'
-                                                                                }`}
-                                                                        >
-                                                                            {status}
-                                                                        </button>
-                                                                    ))}
-                                                                </div>
+                                                            <div 
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className="absolute right-0 bottom-full mb-2 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl z-[9999] py-1 animate-in fade-in zoom-in duration-200"
+                                                            >
+                                                                
+                                                                <button
+                                                                    onClick={() => window.open(`/orders/${order.id}`, '_blank')}
+                                                                    className="w-full text-left px-4 py-2.5 text-[14px] hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors text-slate-700 dark:text-slate-200 flex items-center gap-2"
+                                                                >
+                                                                    <FileText size={14} /> View Order
+                                                                </button>
+
+                                                                {(order.order_status === 'New Order' || order.order_status === 'Follow up again' || order.order_status === 'Packed') && (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            if (order.order_status === 'Packed') {
+                                                                                onManualStatusChange(order.id, 'Cancelled');
+                                                                            } else {
+                                                                                handleCancelAction(order.id);
+                                                                            }
+                                                                        }}
+                                                                        className="w-full text-left px-4 py-2.5 text-[14px] hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-red-600 dark:text-red-400 flex items-center gap-2 border-t border-gray-100 dark:border-slate-700"
+                                                                    >
+                                                                        <X size={14} /> Cancel Order
+                                                                    </button>
+                                                                )}
+
+                                                                {['local', 'self'].includes(order.courier_provider) &&
+                                                                    ['Confirmed Order', 'Ready to Ship', 'Packed', 'Shipped'].includes(order.order_status) && 
+                                                                    !(order.courier_provider === 'self' && order.order_status === 'Packed') && (
+                                                                    <>
+                                                                        <div className="px-3 py-1.5 mt-1 text-[11px] font-bold text-slate-400 uppercase border-y border-gray-100 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/50">
+                                                                            Change Status
+                                                                        </div>
+                                                                        <div className="max-h-48 overflow-y-auto custom-scrollbar">
+                                                                            {orderStatuses.map(status => (
+                                                                                <button
+                                                                                    key={status}
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        onManualStatusChange(order.id, status);
+                                                                                    }}
+                                                                                    className={`w-full text-left px-4 py-2 text-[13px] hover:bg-indigo-50 dark:hover:bg-slate-700 transition-colors ${order.order_status === status ? 'text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50/50' : 'text-slate-700 dark:text-slate-200'
+                                                                                        }`}
+                                                                                >
+                                                                                    {status}
+                                                                                </button>
+                                                                            ))}
+                                                                        </div>
+                                                                    </>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
-                                                )}
-                                            {order.order_status === 'Confirmed Order' && order.courier_provider === 'pathao' && !order.courier_consignment_id && (
-                                                <button
-                                                    onClick={() => handleShipOrder(order.id)}
-                                                    className="text-red-400 hover:text-red-300 transition-colors mr-1"
-                                                    title="Ship with Pathao"
-                                                >
-                                                    <Truck size={16} />
-                                                </button>
-                                            )}
-                                            {order.order_status === 'Confirmed Order' && order.courier_provider === 'pickdrop' && !order.pickdrop_order_id && (
-                                                <button
-                                                    onClick={() => handlePickDropShip(order.id)}
-                                                    className="text-orange-500 hover:text-orange-400 transition-colors mr-1"
-                                                    title="Ship with Pick & Drop"
-                                                >
-                                                    <Truck size={16} />
-                                                </button>
-                                            )}
-                                            {order.order_status === 'Confirmed Order' && order.courier_provider === 'ncm' && !order.courier_consignment_id && (
-                                                <button
-                                                    onClick={async () => {
-                                                        if (userRole !== 'admin' && userRole !== 'editor') {
-                                                            alert('You do not have permission to ship orders.');
-                                                            return;
-                                                        }
-                                                        if (!window.confirm('Ship this order via Nepal Can Move (NCM)?')) return;
-                                                        try {
-                                                            const token = localStorage.getItem('token');
-                                                            const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/ncm/ship`, { orderId: order.id }, {
-                                                                headers: { 'Authorization': `Bearer ${token}` }
-                                                            });
-                                                            if (res.data?.success) {
-                                                                alert(`✅ Shipped via NCM!\nConsignment ID: ${res.data.orderId}`);
-                                                                fetchOrders();
-                                                            } else {
-                                                                alert('❌ Failed: ' + (res.data?.error || 'Unknown error'));
-                                                            }
-                                                        } catch (error: any) {
-                                                            console.error('Failed to ship via NCM', error);
-                                                            alert('❌ Failed: ' + (error.response?.data?.message || error.message));
-                                                        }
-                                                    }}
-                                                    className="text-blue-500 hover:text-blue-400 transition-colors mr-1"
-                                                    title="Ship with NCM"
-                                                >
-                                                    <Truck size={16} />
-                                                </button>
-                                            )}
-                                            {order.order_status === 'Ready to Ship' && order.courier_provider === 'pickdrop' && (
-                                                <button
-                                                    onClick={() => handleSyncPickDrop(order.id)}
-                                                    disabled={syncingOrderId === order.id}
-                                                    className={`text-orange-600 dark:text-orange-400 hover:text-orange-500 dark:hover:text-orange-300 transition-colors mr-2 ${syncingOrderId === order.id ? 'animate-spin' : ''}`}
-                                                    title="Sync Pick & Drop Status"
-                                                >
-                                                    <RefreshCw size={16} />
-                                                </button>
-                                            )}
-                                            {order.order_status === 'Shipped' && order.courier_provider === 'ncm' && (
-                                                <button
-                                                    onClick={() => handleSyncNcm(order.id)}
-                                                    disabled={syncingOrderId === order.id}
-                                                    className={`text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 transition-colors mr-2 ${syncingOrderId === order.id ? 'animate-spin' : ''}`}
-                                                    title="Sync NCM Status"
-                                                >
-                                                    <RefreshCw size={16} />
-                                                </button>
-                                            )}
-                                            {order.order_status === 'Confirmed Order' && order.courier_provider === 'self' && (
-                                                <button
-                                                    onClick={() => setAssigningOrder(order)}
-                                                    className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 dark:hover:text-emerald-300 transition-colors mr-1"
-                                                    title="Assign to Rider"
-                                                >
-                                                    <User size={16} />
-                                                </button>
-                                            )}
-                                            {order.order_status === 'Packed' && order.courier_provider === 'self' && (
-                                                <button
-                                                    onClick={() => handleUnassignRider(order.id)}
-                                                    className="text-red-500 hover:text-red-400 transition-colors mr-1"
-                                                    title="Unassign Rider"
-                                                >
-                                                    <UserMinus size={16} />
-                                                </button>
-                                            )}
-                                            <button
-                                                onClick={() => router.push(`/orders/${order.id}`)}
-                                                className="text-blue-400 hover:text-blue-300 text-[14px] font-medium"
-                                            >
-                                                View
-                                            </button>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))
+                                    ))}
+                                </div>
                             ) : (
-                                <div className="flex flex-col items-center justify-center h-full text-slate-500">
-                                    <Package size={48} className="mb-2 opacity-20" />
-                                    <p>{activeTab === 'orderList' ? "No orders found" : `No ${todaySubTab} orders for today`}</p>
+                                <div className="flex flex-col items-center justify-center h-full text-slate-500 py-20">
+                                    <Package size={48} className="mb-3 opacity-20 text-slate-400" />
+                                    <p className="text-[15px] font-medium text-slate-600">{activeTab === 'orderList' ? "No orders found" : `No ${todaySubTab} orders for today`}</p>
+                                    <p className="text-[13px] text-slate-400 mt-1">Try adjusting your filters or search query.</p>
                                 </div>
                             )
                         ) : (
@@ -1563,6 +1658,7 @@ export default function OrdersView() {
                                 {summaryReportView === 'daily' && (
                                     selectedDateForReport ? (
                                         <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-slate-900">
+
                                             {/* Detailed View Header */}
                                             <div className="p-4 border-b border-gray-200 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800/50 flex items-center justify-between">
                                                 <div className="flex items-center gap-4">

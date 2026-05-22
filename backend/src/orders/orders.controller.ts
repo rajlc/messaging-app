@@ -7,6 +7,7 @@ export class OrdersController {
     constructor(private readonly ordersService: OrdersService) { }
 
     @UseGuards(AuthGuard('jwt'))
+    @UseGuards(AuthGuard('jwt'))
     @Post()
     async createOrder(@Request() req, @Body() orderData: any) {
         // Add user metadata to order  
@@ -15,6 +16,33 @@ export class OrdersController {
             created_by: req.user.full_name || req.user.email
         };
         return this.ordersService.createExternalOrder(enrichedData);
+    }
+
+    // Webhook for Ecommerce Admin to push new orders
+    @Post('ecommerce/webhook')
+    async handleEcommerceOrder(@Body() orderData: any, @Query('api_key') apiKey?: string) {
+        console.log("== WEBHOOK RECEIVED FROM ECOMMERCE ==");
+        console.log(JSON.stringify(orderData.items, null, 2));
+        if (orderData.debug_info) {
+            console.log("== DEBUG INFO ==");
+            console.log(JSON.stringify(orderData.debug_info, null, 2));
+        }
+        
+        const validApiKey = process.env.INVENTORY_APP_API_KEY;
+        if (apiKey !== validApiKey && orderData.api_key !== validApiKey) {
+            return { error: 'Unauthorized', status: 401 };
+        }
+        return this.ordersService.createEcommerceOrder(orderData);
+    }
+
+    // Webhook for Ecommerce Admin to push edits
+    @Put('ecommerce/:order_number')
+    async handleEcommerceEdit(@Param('order_number') orderNumber: string, @Body() orderData: any, @Query('api_key') apiKey?: string) {
+        const validApiKey = process.env.INVENTORY_APP_API_KEY;
+        if (apiKey !== validApiKey && orderData.api_key !== validApiKey) {
+            return { error: 'Unauthorized', status: 401 };
+        }
+        return this.ordersService.updateEcommerceOrder(orderNumber, orderData);
     }
 
     @UseGuards(AuthGuard('jwt'))

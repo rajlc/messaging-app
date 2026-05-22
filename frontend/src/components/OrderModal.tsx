@@ -144,7 +144,8 @@ export default function OrderModal({
     const PAGE_PLATFORM_MAPPING: { [key: string]: string } = {
         '104508142519049': 'Facebook',
         '107953682325493': 'Facebook',
-        'Others': 'Others'
+        'Others': 'Others',
+        'Website': 'Website'
     };
 
     useEffect(() => {
@@ -163,7 +164,7 @@ export default function OrderModal({
 
                     if (user.role === 'admin' || user.role === 'editor') {
                         // Admin/Editor: See All + Others
-                        setAllowedPlatforms(['Facebook', 'Instagram', 'Tiktok', 'Others']);
+                        setAllowedPlatforms(['Facebook', 'Instagram', 'Tiktok', 'Others', 'Website']);
                         // All known pages + Others
                         const allPageIds = Object.keys(PAGE_MAPPING).filter(k => k !== 'Others');
                         setAllowedAccounts([...allPageIds, 'Others']);
@@ -1064,7 +1065,7 @@ export default function OrderModal({
                                                     updateItem(index, 'qty', val);
                                                 }}
                                                 readOnly={isReadOnly}
-                                                className="w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded p-2 text-sm text-slate-900 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                className={`w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded p-2 text-sm text-slate-900 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none outline-none ${!isReadOnly ? 'focus:border-indigo-500' : ''}`}
                                             />
                                         </div>
                                         <div>
@@ -1078,7 +1079,7 @@ export default function OrderModal({
                                                     updateItem(index, 'amount', val);
                                                 }}
                                                 readOnly={isReadOnly}
-                                                className="w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded p-2 text-sm text-slate-900 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                className={`w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded p-2 text-sm text-slate-900 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none outline-none ${!isReadOnly ? 'focus:border-indigo-500' : ''}`}
                                             />
                                         </div>
                                     </div>

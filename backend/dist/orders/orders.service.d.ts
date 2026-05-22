@@ -25,6 +25,19 @@ export declare class OrdersService {
         error: string;
         data?: undefined;
     }>;
+    createEcommerceOrder(orderData: any): Promise<{
+        success: boolean;
+        data: any;
+        error?: undefined;
+    } | {
+        success: boolean;
+        error: string;
+        data?: undefined;
+    }>;
+    updateEcommerceOrder(orderNumber: string, orderData: any): Promise<{
+        success: boolean;
+        data: any;
+    }>;
     private saveOrderToDatabase;
     recordStatusHistory(orderId: string, status: string, changedBy: string, remarks?: string): Promise<void>;
     private getCaseVariations;
@@ -36,6 +49,7 @@ export declare class OrdersService {
         data: any;
     }>;
     private canUserEditOrder;
+    private handleEcommerceSync;
     private handleInventorySync;
     private syncToInventory;
     private updateInventoryStatus;
