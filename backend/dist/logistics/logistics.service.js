@@ -503,8 +503,9 @@ let LogisticsService = LogisticsService_1 = class LogisticsService {
                 this.logger.warn(`Pathao: UNMAPPED event '${payload.event}' — full payload: ${JSON.stringify(payload)}`);
                 break;
         }
+        let statusChanged = false;
         if (newStatus !== order.order_status) {
-            updateData.order_status = newStatus;
+            statusChanged = true;
         }
         updateData.updated_at = new Date().toISOString();
         if (Object.keys(updateData).length > 1) {
@@ -512,7 +513,9 @@ let LogisticsService = LogisticsService_1 = class LogisticsService {
                 .from('orders')
                 .update(updateData)
                 .eq('id', order.id);
-            await this.ordersService.recordStatusHistory(order.id, newStatus, 'Pathao', `Pathao Webhook: ${payload.event}${payload.reason ? ` (${payload.reason})` : ''}`);
+        }
+        if (statusChanged) {
+            await this.ordersService.updateDeliveryStatus(order.id, newStatus, 'Pathao', `Pathao Webhook: ${payload.event}${payload.reason ? ` (${payload.reason})` : ''}`);
             this.logger.log(`Updated order ${order.order_number} status to ${newStatus}`);
         }
         return { success: true };

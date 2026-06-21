@@ -86,7 +86,7 @@ export declare class OrdersService {
         error: any;
         data?: undefined;
     }>;
-    updateDeliveryStatus(orderId: string, status: string, actorName: string): Promise<{
+    updateDeliveryStatus(orderId: string, status: string, actorName: string, customRemarks?: string): Promise<{
         success: boolean;
         data: any;
         error?: undefined;

@@ -93,9 +93,15 @@ export class OrdersService {
             const savedOrder = await this.saveOrderToDatabase(orderData);
             this.logger.log(`✅ Order saved to Supabase with ID: ${savedOrder.id}`);
 
-            // Trigger sync if confirmed
+            // Trigger sync if confirmed (skip for Marketplace)
             if (savedOrder.order_status === 'Confirmed Order') {
-                await this.syncToInventory(savedOrder);
+                if (savedOrder.platform !== 'Facebook Marketplace' && 
+                    savedOrder.platform !== 'Marketplace' && 
+                    !(savedOrder.platform === 'Facebook' && savedOrder.page_name === 'Others')) {
+                    await this.syncToInventory(savedOrder);
+                } else {
+                    this.logger.log(`Skipping inventory sync for Marketplace order: ${savedOrder.order_number}`);
+                }
             }
 
             return { success: true, data: savedOrder };
@@ -243,6 +249,24 @@ export class OrdersService {
                 if (conv) {
                     this.logger.log(`✅ Found conversation UUID ${conv.id} for PSID ${orderData.customer_id}`);
                     orderData.conversation_id = conv.id;
+                    
+                    // Auto-update conversation name to real order name if it is currently 'Customer'
+                    try {
+                        const { data: currentConv } = await supabaseService.getSupabaseClient()
+                            .from('conversations')
+                            .select('customer_name')
+                            .eq('id', conv.id)
+                            .single();
+                        if (currentConv && (!currentConv.customer_name || currentConv.customer_name === 'Customer' || currentConv.customer_name === orderData.customer_id)) {
+                            this.logger.log(`Updating conversation customer_name to real order name: "${orderData.customer_name}"`);
+                            await supabaseService.getSupabaseClient()
+                                .from('conversations')
+                                .update({ customer_name: orderData.customer_name })
+                                .eq('id', conv.id);
+                        }
+                    } catch (updateErr: any) {
+                        this.logger.error(`Failed to update conversation customer_name on order mapping: ${updateErr.message}`);
+                    }
                 } else if (convError) {
                     this.logger.error(`Error looking up conversation for PSID: ${convError.message}`);
                 } else {
@@ -645,6 +669,7 @@ export class OrdersService {
             ncm_delivery_type: orderData.ncm_delivery_type,
             package_description: orderData.package_description,
             order_type: orderData.order_type,
+            invoice_printed: orderData.invoice_printed,
 
             updated_by: user?.full_name || 'System'
         };
@@ -804,6 +829,14 @@ export class OrdersService {
     }
 
     private async handleInventorySync(order: any, previousStatus: string) {
+        // Skip inventory sync if this is a Marketplace order
+        if (order.platform === 'Facebook Marketplace' || 
+            order.platform === 'Marketplace' || 
+            (order.platform === 'Facebook' && order.page_name === 'Others')) {
+            this.logger.log(`Skipping inventory sync status transitions for Marketplace order: ${order.order_number}`);
+            return;
+        }
+
         // Condition 1: Newly Confirmed (Transition from anything -> Confirmed Order)
         if (order.order_status === 'Confirmed Order' && previousStatus !== 'Confirmed Order') {
             await this.syncToInventory(order);
@@ -1259,7 +1292,7 @@ export class OrdersService {
         }
     }
 
-    async updateDeliveryStatus(orderId: string, status: string, actorName: string) {
+    async updateDeliveryStatus(orderId: string, status: string, actorName: string, customRemarks?: string) {
         try {
             // Fetch current order to get old status for sync comparisons
             const { data: currentOrder, error: fetchError } = await supabaseService.getSupabaseClient()
@@ -1284,7 +1317,8 @@ export class OrdersService {
 
             if (error) throw error;
 
-            await this.recordStatusHistory(orderId, status, actorName, `Delivery status updated to ${status} by ${actorName}`);
+            const remarks = customRemarks || `Delivery status updated to ${status} by ${actorName}`;
+            await this.recordStatusHistory(orderId, status, actorName, remarks);
 
             this.messagingGateway.server.emit('orderUpdated', {
                 orderId: orderId,

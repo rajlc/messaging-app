@@ -212,7 +212,7 @@ function UnifiedInboxContent() {
   const [currentCustomerId, setCurrentCustomerId] = useState<string>('');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string>(''); // This will now store the UUID or CustomerID depending on migration. Ideally UUID.
-  const [conversationType, setConversationType] = useState<'messages' | 'comments'>('messages');
+  const [conversationType, setConversationType] = useState<'messages' | 'comments' | 'marketplace'>('messages');
 
   // Image upload state
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -322,8 +322,8 @@ function UnifiedInboxContent() {
 
   // Sync conversationType with URL 'type' parameter
   useEffect(() => {
-    const type = searchParams.get('type') as 'messages' | 'comments';
-    if (type === 'messages' || type === 'comments') {
+    const type = searchParams.get('type') as 'messages' | 'comments' | 'marketplace';
+    if (type === 'messages' || type === 'comments' || type === 'marketplace') {
       setConversationType(type);
     } else {
       setConversationType('messages');
@@ -457,6 +457,7 @@ function UnifiedInboxContent() {
             orderCount: conv.order_count,
             pageName: resolvedPageName,
             pageId: conv.page_id,
+            platform: conv.platform,
             hasPhoneNumber: !!conv.has_phone_number,
             customerProfilePic: conv.customer_profile_pic
           };
@@ -675,16 +676,93 @@ function UnifiedInboxContent() {
     return phoneRegex.test(text);
   };
 
-
-  // Auto-select first conversation if none is selected
-  useEffect(() => {
-    if (!activeConversationId && conversations.length > 0) {
-      const firstConv = conversations[0];
-      console.log('Auto-selecting first conversation:', firstConv.id);
-      setActiveConversationId(firstConv.id!);
-      setCurrentCustomerId(firstConv.customerId);
+  // Helper to clean page name
+  const cleanPageName = (name: string) => {
+    if (!name) return '';
+    let cleaned = name;
+    
+    // Case 1: "Marketplace Profile (Profile-1)" -> "Profile-1"
+    const match = name.match(/Marketplace Profile \(([^)]+)\)/i);
+    if (match && match[1]) {
+      cleaned = match[1];
+    } else {
+      // Case 2: replace "Marketplace Profile" with "" or clean it
+      cleaned = cleaned.replace(/Marketplace Profile/gi, '').trim();
     }
-  }, [conversations, activeConversationId]);
+    
+    // If it's empty or still contains parentheses, strip them
+    cleaned = cleaned.replace(/[()]/g, '').trim();
+    
+    return cleaned || name;
+  };
+
+
+  // Auto-select first conversation of active tab if current selection doesn't match
+  useEffect(() => {
+    // Re-filter conversations locally to find the first match
+    const tabConvs = conversations.filter(conv => {
+      if (conversationType === 'messages') {
+        if (conv.platform === 'facebook_marketplace') return false;
+        if (!(conv.messages.length === 0 || conv.messages.some(msg => msg.type !== 'comment'))) return false;
+      } else if (conversationType === 'marketplace') {
+        if (conv.platform !== 'facebook_marketplace') return false;
+      } else {
+        if (!conv.messages.some(msg => msg.type === 'comment')) return false;
+      }
+      if (filterPlatform && conv.pageId !== filterPlatform) return false;
+      if (filterOrderStatus && conv.orderStatus !== filterOrderStatus) return false;
+      return true;
+    });
+
+    if (tabConvs.length > 0) {
+      const isCurrentActiveInFilter = tabConvs.some(c => c.id === activeConversationId || c.customerId === activeConversationId);
+      if (!isCurrentActiveInFilter) {
+        const firstConv = tabConvs[0];
+        setActiveConversationId(firstConv.id!);
+        setCurrentCustomerId(firstConv.customerId);
+        fetchCustomerOrders(firstConv.customerId);
+
+        if (firstConv.id) {
+          fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/conversations/${firstConv.id}/messages`)
+            .then(res => res.json())
+            .then(messagesData => {
+              if (messagesData && messagesData.length > 0) {
+                const loadedMessages: Message[] = messagesData.map((msg: any) => ({
+                  id: msg.id,
+                  text: msg.text,
+                  sender: msg.sender,
+                  platform: msg.platform,
+                  pageId: msg.page_id,
+                  senderId: msg.sender === 'customer' ? firstConv.customerId : 'agent',
+                  conversationId: msg.conversation_id,
+                  timestamp: new Date(msg.created_at),
+                  metadata: msg.metadata
+                }));
+                setMessages(loadedMessages);
+                setConversations(prev => prev.map(conv =>
+                  conv.id === firstConv.id ? { ...conv, messages: loadedMessages } : conv
+                ));
+              } else {
+                setMessages([]);
+              }
+            }).catch(err => console.error(err));
+        }
+      }
+    } else {
+      // If there are no conversations in this tab, reset selection
+      if (activeConversationId) {
+        const currentInConvs = conversations.some(c => c.id === activeConversationId || c.customerId === activeConversationId);
+        if (currentInConvs) {
+          const activeInAny = tabConvs.some(c => c.id === activeConversationId || c.customerId === activeConversationId);
+          if (!activeInAny) {
+            setActiveConversationId('');
+            setCurrentCustomerId('');
+            setMessages([]);
+          }
+        }
+      }
+    }
+  }, [conversationType, conversations, filterPlatform, filterOrderStatus]);
 
   const handleSend = async (text: string) => {
     if ((!text.trim() && selectedFiles.length === 0) || !activeConversationId) return;
@@ -1047,11 +1125,14 @@ function UnifiedInboxContent() {
     return 'bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800';
   };
 
-  // Filter conversations based on conversation type (messages vs comments) + platform + order status
+  // Filter conversations based on conversation type (messages vs comments vs marketplace) + platform + order status
   const filteredConversations = conversations.filter(conv => {
     // Type filter
     if (conversationType === 'messages') {
+      if (conv.platform === 'facebook_marketplace') return false;
       if (!(conv.messages.length === 0 || conv.messages.some(msg => msg.type !== 'comment'))) return false;
+    } else if (conversationType === 'marketplace') {
+      if (conv.platform !== 'facebook_marketplace') return false;
     } else {
       if (!conv.messages.some(msg => msg.type === 'comment')) return false;
     }
@@ -1065,8 +1146,9 @@ function UnifiedInboxContent() {
 
   const isFilterActive = !!(filterPlatform || filterOrderStatus);
 
-  const messagesCount = conversations.filter(c => c.messages.some(m => m.type !== 'comment')).length;
+  const messagesCount = conversations.filter(c => c.platform !== 'facebook_marketplace' && c.messages.some(m => m.type !== 'comment')).length;
   const commentsCount = conversations.filter(c => c.messages.some(m => m.type === 'comment')).length;
+  const marketplaceCount = conversations.filter(c => c.platform === 'facebook_marketplace').length;
 
 
 
@@ -1118,10 +1200,10 @@ function UnifiedInboxContent() {
     }
 
     // 2. Must match the active tab type
-    if (conversationType === 'messages') {
-      return msg.type !== 'comment';
-    } else {
+    if (conversationType === 'comments') {
       return msg.type === 'comment';
+    } else {
+      return msg.type !== 'comment';
     }
   });
 
@@ -1156,9 +1238,17 @@ function UnifiedInboxContent() {
           <div className="relative">
             <div className="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-slate-900 dark:text-white">Messages</h1>
-                {messagesCount > 0 && (
+                <h1 className="text-base font-bold text-slate-900 dark:text-white">
+                  {conversationType === 'messages' ? 'Messages' : conversationType === 'marketplace' ? 'Marketplace' : 'Comments'}
+                </h1>
+                {conversationType === 'messages' && messagesCount > 0 && (
                   <span className="bg-blue-500 text-white text-[10px] rounded-full min-w-[1.25rem] h-4 flex items-center justify-center px-1">{messagesCount}</span>
+                )}
+                {conversationType === 'marketplace' && marketplaceCount > 0 && (
+                  <span className="bg-blue-500 text-white text-[10px] rounded-full min-w-[1.25rem] h-4 flex items-center justify-center px-1">{marketplaceCount}</span>
+                )}
+                {conversationType === 'comments' && commentsCount > 0 && (
+                  <span className="bg-blue-500 text-white text-[10px] rounded-full min-w-[1.25rem] h-4 flex items-center justify-center px-1">{commentsCount}</span>
                 )}
               </div>
               <div className="flex items-center gap-1">
@@ -1231,13 +1321,16 @@ function UnifiedInboxContent() {
           <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
             {filteredConversations.map((conv) => {
               const convKey = conv.id || conv.customerId;
+              const isSameCustomer = activeConversation && conv.customerId === activeConversation.customerId && conv.id !== activeConversation.id;
               return (
                 <div
                   key={convKey}
                   onClick={() => handleConversationClick(conv)}
                   className={`py-6 px-5 border-b border-gray-100 dark:border-slate-800 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors ${activeConversationId === convKey
                     ? 'bg-blue-50 dark:bg-slate-700/50 border-l-4 border-l-blue-600 pl-[15px]'
-                    : 'border-l-4 border-l-transparent pl-[19px]'
+                    : isSameCustomer
+                      ? 'bg-indigo-50/20 dark:bg-indigo-950/10 border-l-4 border-l-indigo-400 dark:border-l-indigo-500 pl-[15px]'
+                      : 'border-l-4 border-l-transparent pl-[19px]'
                     }`}
                 >
                   <div className="flex items-center gap-4">
@@ -1259,10 +1352,15 @@ function UnifiedInboxContent() {
                     <div className="flex-1 min-w-0 flex flex-col gap-1.5">
                       {/* Line 1: Name and Time */}
                       <div className="flex justify-between items-center">
-                        <h3 className={`text-[16px] truncate ${conv.unreadCount > 0
+                        <h3 className={`text-[16px] truncate flex items-center gap-1.5 ${conv.unreadCount > 0
                           ? 'font-[850] text-black dark:text-white'
                           : 'font-semibold text-slate-700 dark:text-slate-300'}`}>
-                          {conv.customerName}
+                          <span className="truncate">{conv.customerName}</span>
+                          {(conv.hasPhoneNumber || hasPhoneNumber(conv.lastMessage) || hasPhoneNumber(conv.customerName)) && (
+                            <span className="inline-flex items-center justify-center w-4.5 h-4.5 text-[10px] font-black bg-emerald-500 text-white rounded-full shadow-sm flex-shrink-0 animate-pulse" title="Phone number available">
+                              N
+                            </span>
+                          )}
                         </h3>
                         <span className={`text-[11px] tabular-nums whitespace-nowrap ml-2 ${conv.unreadCount > 0
                           ? 'text-blue-600 dark:text-blue-400 font-bold'
@@ -1274,13 +1372,22 @@ function UnifiedInboxContent() {
                       {/* Line 2: Badges and Status */}
                       <div className="flex items-center gap-2 flex-nowrap overflow-hidden">
                         {(conv.pageName || connectedPages.find(p => p.page_id === conv.pageId)?.page_name) && (
-                          <span className="text-[10px] px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold rounded-md uppercase tracking-tighter border border-blue-100 dark:border-blue-800/30 truncate max-w-[65%] flex-shrink-0">
-                            {conv.pageName || connectedPages.find(p => p.page_id === conv.pageId)?.page_name}
+                          <span className={`text-[10px] px-2 py-0.5 font-bold rounded-md uppercase tracking-tighter border truncate max-w-[65%] flex-shrink-0 ${
+                            isSameCustomer 
+                              ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700/50' 
+                              : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800/30'
+                          }`}>
+                            {cleanPageName(conv.pageName || connectedPages.find(p => p.page_id === conv.pageId)?.page_name || '')}
                           </span>
                         )}
                         {conv.hasOrders && conv.orderStatus && (
                           <span className={`text-[11px] px-2 py-0.5 rounded-md font-extrabold shadow-sm flex items-center gap-1 flex-shrink-0 ${getStatusColor(conv.orderStatus)}`}>
                             {conv.orderNumber ? `#${conv.orderNumber}` : getStatusShortcode(conv.orderStatus)}
+                          </span>
+                        )}
+                        {isSameCustomer && (
+                          <span className="text-[10px] px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 font-extrabold rounded-md uppercase tracking-tighter border border-indigo-200 dark:border-indigo-800/50 flex-shrink-0 animate-pulse">
+                            Same Buyer
                           </span>
                         )}
                       </div>
@@ -1293,9 +1400,6 @@ function UnifiedInboxContent() {
                           {conv.lastMessage}
                         </p>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
-                          {(conv.hasPhoneNumber || hasPhoneNumber(conv.lastMessage) || hasPhoneNumber(conv.customerName)) && (
-                            <span className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.6)]" title="Contains phone number" />
-                          )}
                           {conv.unreadCount > 0 && (
                             <span className="w-3 h-3 bg-blue-600 dark:bg-blue-500 rounded-full shadow-sm shadow-blue-500/50" />
                           )}
@@ -1309,7 +1413,7 @@ function UnifiedInboxContent() {
 
             {filteredConversations.length === 0 && (
               <div className="p-8 text-center text-slate-500 dark:text-slate-400">
-                <p className="text-sm">No {conversationType === 'messages' ? 'messages' : 'comments'} yet</p>
+                <p className="text-sm">No {conversationType === 'messages' ? 'messages' : conversationType === 'marketplace' ? 'marketplace chats' : 'comments'} yet</p>
               </div>
             )}
           </div>
@@ -1347,6 +1451,11 @@ function UnifiedInboxContent() {
                     )}
                   </div>
                 </div>
+                {activeConversation && (activeConversation.pageName || connectedPages.find(p => p.page_id === activeConversation.pageId)?.page_name) && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
+                    {cleanPageName(activeConversation.pageName || connectedPages.find(p => p.page_id === activeConversation.pageId)?.page_name || '')}
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex gap-2">
@@ -1357,8 +1466,10 @@ function UnifiedInboxContent() {
           </div>
 
           <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-4">
-            {displayMessages.map((msg, index) => (
-              <div key={msg.id || index} className={`flex group ${msg.sender === 'agent' ? 'justify-end' : 'justify-start'} gap-2`}>
+            {displayMessages.map((msg, index) => {
+              const hasPhone = msg.sender === 'customer' && hasPhoneNumber(msg.text);
+              return (
+                <div key={msg.id || index} className={`flex group ${msg.sender === 'agent' ? 'justify-end' : 'justify-start'} gap-2`}>
                 {msg.sender !== 'agent' && (
                   <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 self-start mt-1 shadow-sm">
                     {activeConversation?.customerProfilePic ? (
@@ -1381,7 +1492,9 @@ function UnifiedInboxContent() {
                 )}
                 <div className={`max-w-[80%] rounded-2xl shadow-sm border ${msg.sender === 'agent'
                   ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-br-none border-blue-500 shadow-blue-500/10'
-                  : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-bl-none border-gray-100 dark:border-slate-700'
+                  : hasPhone
+                    ? 'bg-emerald-50/80 dark:bg-emerald-950/20 text-emerald-950 dark:text-emerald-50 rounded-bl-none border-emerald-300 dark:border-emerald-800 shadow-sm shadow-emerald-500/5 ring-2 ring-emerald-500/10'
+                    : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-bl-none border-gray-100 dark:border-slate-700'
                   }`}>
 
                   {/* Replied Message Context */}
@@ -1407,7 +1520,14 @@ function UnifiedInboxContent() {
                       </div>
                     )}
                     {msg.text && (
-                      <p className="text-[15px] whitespace-pre-wrap break-words leading-relaxed">{msg.text}</p>
+                      <p className="text-[15px] whitespace-pre-wrap break-words leading-relaxed">
+                        {msg.text}
+                        {hasPhone && (
+                          <span className="inline-flex items-center justify-center w-5 h-5 ml-2 text-[11px] font-extrabold bg-emerald-600 dark:bg-emerald-500 text-white rounded-full shadow-sm align-middle select-none animate-pulse" title="Nepali Phone Number Detected">
+                            N
+                          </span>
+                        )}
+                      </p>
                     )}
                     <div className="flex items-center gap-2 mt-1.5 opacity-80">
                       <p className={`text-[11px] font-medium ${msg.sender === 'agent' ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'}`}>
@@ -1431,7 +1551,8 @@ function UnifiedInboxContent() {
                   </button>
                 )}
               </div>
-            ))}
+            );
+          })}
             <div ref={messagesEndRef} />
             {displayMessages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 opacity-60">
@@ -1441,14 +1562,16 @@ function UnifiedInboxContent() {
             )}
           </div>
 
-          <MessageInput
-            onSend={handleSend}
-            isUploading={isUploading}
-            onFileClick={() => fileInputRef.current?.click()}
-            selectedFiles={selectedFiles}
-            onFileRemove={(i) => setSelectedFiles(prev => prev.filter((_, idx) => idx !== i))}
-            chatInputRef={chatInputRef}
-          />
+          {conversationType !== 'marketplace' && (
+            <MessageInput
+              onSend={handleSend}
+              isUploading={isUploading}
+              onFileClick={() => fileInputRef.current?.click()}
+              selectedFiles={selectedFiles}
+              onFileRemove={(i) => setSelectedFiles(prev => prev.filter((_, idx) => idx !== i))}
+              chatInputRef={chatInputRef}
+            />
+          )}
         </div>
 
         {/* Right Panel */}
@@ -1463,9 +1586,14 @@ function UnifiedInboxContent() {
                     customerName.charAt(0).toUpperCase()
                   )}
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <h2 className="text-base font-bold text-slate-900 dark:text-white truncate">{customerName}</h2>
-                  <span className="text-[13px] text-slate-500 dark:text-slate-400">Customer Details</span>
+                  {(activeConversation?.pageName || connectedPages.find(p => p.page_id === activeConversation?.pageId)?.page_name) && (
+                    <span className="text-[12px] font-semibold text-indigo-600 dark:text-indigo-400 block truncate">
+                      {cleanPageName(activeConversation?.pageName || connectedPages.find(p => p.page_id === activeConversation?.pageId)?.page_name || '')}
+                    </span>
+                  )}
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5">Customer Details</span>
                 </div>
               </div>
 

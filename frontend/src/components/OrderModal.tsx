@@ -670,7 +670,7 @@ export default function OrderModal({
     const handleProductSelect = (index: number, product: any) => {
         const newItems = [...items];
         newItems[index].product_name = product.product_name;
-        newItems[index].product_id = product.product_id;
+        newItems[index].product_id = product.id;
         // Do not auto-populate amount as per user request
         setItems(newItems);
         setActiveSearchIndex(null);

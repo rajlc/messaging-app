@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Bot, Save, Shield, RefreshCw, Zap, Check, AlertCircle, Edit2, X } from 'lucide-react';
+import { Bot, Save, Shield, RefreshCw, Zap, Check, AlertCircle, Edit2, X, Upload, Trash2, Search, FileText } from 'lucide-react';
 
 type Page = {
     id: string;
@@ -17,6 +17,7 @@ type Page = {
 export default function AIAgentSettings() {
     // Global Settings State
     const [isGlobalEnabled, setIsGlobalEnabled] = useState(false);
+    const [isMarketplaceEnabled, setIsMarketplaceEnabled] = useState(false);
     const [apiKey, setApiKey] = useState('');
     const [geminiApiKey, setGeminiApiKey] = useState('');
     const [aiProvider, setAiProvider] = useState('openai'); // 'openai' | 'gemini'
@@ -35,18 +36,118 @@ export default function AIAgentSettings() {
     const [cutoffInput, setCutoffInput] = useState('');
     const [isSavingPage, setIsSavingPage] = useState(false);
 
+    // Catalog State
+    const [catalogProducts, setCatalogProducts] = useState<{ id: string; product_name: string; price: number }[]>([]);
+    const [catalogSearch, setCatalogSearch] = useState('');
+    const [isCatalogLoading, setIsCatalogLoading] = useState(false);
+    const [uploadingFile, setUploadingFile] = useState(false);
+    const [catalogMessage, setCatalogMessage] = useState('');
+    const [catalogError, setCatalogError] = useState('');
+
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
     useEffect(() => {
         fetchSettings();
         fetchPages();
+        fetchCatalog();
     }, []);
+
+    const fetchCatalog = async () => {
+        setIsCatalogLoading(true);
+        setCatalogError('');
+        try {
+            const res = await fetch(`${API_URL}/api/settings/marketplace-products`);
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                setCatalogProducts(data);
+            } else {
+                setCatalogProducts([]);
+            }
+        } catch (err) {
+            console.error('Failed to fetch catalog:', err);
+            setCatalogError('Failed to load marketplace product catalog');
+        } finally {
+            setIsCatalogLoading(false);
+        }
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploadingFile(true);
+        setCatalogMessage('');
+        setCatalogError('');
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const res = await fetch(`${API_URL}/api/settings/marketplace-products/upload`, {
+                method: 'POST',
+                body: formData,
+            });
+            const data = await res.json();
+            if (data.success) {
+                setCatalogMessage(`Successfully imported ${data.count} products!`);
+                fetchCatalog();
+                setTimeout(() => setCatalogMessage(''), 4000);
+            } else {
+                setCatalogError(data.error || 'Failed to upload spreadsheet.');
+            }
+        } catch (err) {
+            console.error('Upload error:', err);
+            setCatalogError('Error uploading file. Please try again.');
+        } finally {
+            setUploadingFile(false);
+            if (e.target) e.target.value = '';
+        }
+    };
+
+    const handleDeleteProduct = async (id: string) => {
+        if (!confirm('Are you sure you want to delete this product from the catalog?')) return;
+        try {
+            const res = await fetch(`${API_URL}/api/settings/marketplace-products/${id}`, {
+                method: 'DELETE',
+            });
+            const data = await res.json();
+            if (data.success) {
+                setCatalogProducts(catalogProducts.filter(p => p.id !== id));
+            } else {
+                alert(data.error || 'Failed to delete product.');
+            }
+        } catch (err) {
+            console.error('Delete error:', err);
+            alert('Error deleting product.');
+        }
+    };
+
+    const handleClearCatalog = async () => {
+        if (!confirm('Are you sure you want to clear the entire marketplace product catalog? This cannot be undone.')) return;
+        try {
+            const res = await fetch(`${API_URL}/api/settings/marketplace-products/clear`, {
+                method: 'POST',
+            });
+            const data = await res.json();
+            if (data.success) {
+                setCatalogProducts([]);
+                setCatalogMessage('Catalog cleared successfully.');
+                setTimeout(() => setCatalogMessage(''), 3000);
+            } else {
+                alert(data.error || 'Failed to clear catalog.');
+            }
+        } catch (err) {
+            console.error('Clear catalog error:', err);
+            alert('Error clearing catalog.');
+        }
+    };
 
     const fetchSettings = async () => {
         try {
             const res = await fetch(`${API_URL}/api/settings`);
             const data = await res.json();
             setIsGlobalEnabled(data.is_ai_global_enabled === 'true');
+            setIsMarketplaceEnabled(data.is_ai_marketplace_enabled === 'true');
             setApiKey(data.openai_api_key || '');
             setGeminiApiKey(data.gemini_api_key || '');
             setAiProvider(data.ai_provider || 'openai');
@@ -77,6 +178,7 @@ export default function AIAgentSettings() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     is_ai_global_enabled: String(isGlobalEnabled),
+                    is_ai_marketplace_enabled: String(isMarketplaceEnabled),
                     openai_api_key: apiKey,
                     gemini_api_key: geminiApiKey,
                     ai_provider: aiProvider
@@ -170,6 +272,23 @@ export default function AIAgentSettings() {
                                 className="sr-only peer"
                                 checked={isGlobalEnabled}
                                 onChange={(e) => setIsGlobalEnabled(e.target.checked)}
+                            />
+                            <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
+
+                    {/* Marketplace Switch */}
+                    <div className="flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700/50">
+                        <div>
+                            <h4 className="font-bold text-slate-900 dark:text-white">Enable AI for Facebook Marketplace</h4>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Autonomously reply to Facebook Marketplace personal messages using AI</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={isMarketplaceEnabled}
+                                onChange={(e) => setIsMarketplaceEnabled(e.target.checked)}
                             />
                             <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                         </label>
@@ -297,6 +416,158 @@ export default function AIAgentSettings() {
                         )}
                     </div>
                 )}
+            </div>
+
+            {/* Marketplace Product Catalog Section */}
+            <div className="bg-white dark:bg-slate-800 rounded-[2rem] border border-gray-200 dark:border-slate-700/50 p-8 mt-8 shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                    <div>
+                        <h3 className="text-lg font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
+                            Marketplace Product Catalog
+                        </h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+                            Upload a spreadsheet (.xlsx, .xls, or .csv) to train the AI on product pricing. The AI queries this catalog dynamically to reply to buyers.
+                        </p>
+                    </div>
+                    {catalogProducts.length > 0 && (
+                        <button
+                            onClick={handleClearCatalog}
+                            className="text-xs text-red-500 hover:text-white hover:bg-red-500 border border-red-500 px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 self-start md:self-auto"
+                        >
+                            <Trash2 size={14} />
+                            Clear Catalog
+                        </button>
+                    )}
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* Left Panel: Upload spreadsheet */}
+                    <div className="lg:col-span-1 space-y-6">
+                        <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-6 flex flex-col items-center justify-center text-center relative hover:bg-slate-100/50 dark:hover:bg-slate-900 transition-colors group">
+                            <input
+                                type="file"
+                                accept=".xlsx,.xls,.csv"
+                                onChange={handleFileUpload}
+                                disabled={uploadingFile}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                            />
+                            {uploadingFile ? (
+                                <RefreshCw className="animate-spin text-indigo-500 mb-4" size={36} />
+                            ) : (
+                                <Upload className="text-slate-400 group-hover:text-indigo-500 transition-colors mb-4" size={36} />
+                            )}
+                            <h4 className="font-bold text-slate-800 dark:text-slate-200 mb-1">
+                                {uploadingFile ? 'Uploading & parsing sheet...' : 'Upload catalog file'}
+                            </h4>
+                            <p className="text-xs text-slate-400 font-medium mb-3">
+                                Drag & drop or click to choose
+                            </p>
+                            <span className="px-3 py-1 bg-slate-200 dark:bg-slate-800 text-[10px] font-bold text-slate-600 dark:text-slate-400 rounded-lg">
+                                Supports Excel / CSV
+                            </span>
+                        </div>
+
+                        {/* Formatting instructions */}
+                        <div className="p-5 bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-2xl">
+                            <h5 className="text-xs font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-wider mb-2 flex items-center gap-1.5">
+                                <AlertCircle size={14} />
+                                Sheet Guidelines
+                            </h5>
+                            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">
+                                Ensure your file contains headers similar to:
+                            </p>
+                            <ul className="text-xs text-slate-500 space-y-1 list-disc list-inside">
+                                <li><strong>Product Name</strong> (or Name / Product)</li>
+                                <li><strong>Price</strong> (or Rate / Cost / Amount)</li>
+                            </ul>
+                            <p className="text-[10px] text-slate-400 mt-3 leading-relaxed">
+                                Uploading a new catalog will overwrite any existing catalog products in the database.
+                            </p>
+                        </div>
+
+                        {/* Status Message */}
+                        {catalogMessage && (
+                            <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl text-xs font-medium flex items-center gap-2">
+                                <Check size={16} />
+                                {catalogMessage}
+                            </div>
+                        )}
+                        {catalogError && (
+                            <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 rounded-xl text-xs font-medium flex items-center gap-2">
+                                <AlertCircle size={16} />
+                                {catalogError}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Right Panel: Catalog List & Search */}
+                    <div className="lg:col-span-2 flex flex-col h-[350px] bg-slate-50 dark:bg-slate-900/50 rounded-3xl border border-slate-100 dark:border-slate-700/50 p-6">
+                        <div className="relative mb-4">
+                            <input
+                                type="text"
+                                placeholder="Search catalog products..."
+                                value={catalogSearch}
+                                onChange={(e) => setCatalogSearch(e.target.value)}
+                                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl py-2.5 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                            />
+                            <Search className="absolute left-3 top-3 text-slate-400" size={16} />
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                            {isCatalogLoading ? (
+                                <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-2">
+                                    <RefreshCw className="animate-spin text-indigo-500" size={24} />
+                                    <span className="text-xs font-medium">Loading catalog items...</span>
+                                </div>
+                            ) : catalogProducts.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-full text-slate-400 p-6 text-center">
+                                    <FileText size={32} className="mb-2 text-slate-300 dark:text-slate-700" />
+                                    <span className="text-xs font-bold mb-1 text-slate-500 dark:text-slate-400">No Catalog Products</span>
+                                    <p className="text-[10px] text-slate-400 max-w-[240px]">
+                                        Upload a spreadsheet on the left to add items to your AI-assisted sales catalog.
+                                    </p>
+                                </div>
+                            ) : (() => {
+                                const filtered = catalogProducts.filter(p =>
+                                    p.product_name.toLowerCase().includes(catalogSearch.toLowerCase())
+                                );
+                                if (filtered.length === 0) {
+                                    return (
+                                        <div className="text-center py-8 text-slate-400 text-xs font-medium">
+                                            No products match your search.
+                                        </div>
+                                    );
+                                }
+                                return filtered.map(product => (
+                                    <div key={product.id} className="flex justify-between items-center bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/80 px-5 py-3 rounded-xl border border-slate-200/50 dark:border-slate-700/30 transition-all group">
+                                        <div className="flex-1 min-w-0 pr-4">
+                                            <h5 className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">
+                                                {product.product_name}
+                                            </h5>
+                                            <span className="text-[10px] font-black text-indigo-500 dark:text-indigo-400 uppercase tracking-wider">
+                                                Rs {product.price}
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={() => handleDeleteProduct(product.id)}
+                                            className="opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition-all"
+                                            title="Delete product"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
+                                ));
+                            })()}
+                        </div>
+
+                        {catalogProducts.length > 0 && (
+                            <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                <span>Total Products</span>
+                                <span>{catalogProducts.length} items</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
 
             {/* Edit Modal */}

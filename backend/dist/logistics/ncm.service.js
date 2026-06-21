@@ -236,7 +236,6 @@ let NcmService = NcmService_1 = class NcmService {
                     await this.ordersService.recordStatusHistory(order.id, order.order_status, 'Nepal Can Move', `NCM Webhook: ${chargeLogEntry}`);
                 }
                 if (internalStatus !== order.order_status) {
-                    updateData.order_status = internalStatus;
                     updateData.courier_status = status || event;
                     const { error: updateError } = await supabase_service_1.supabaseService.getSupabaseClient()
                         .from('orders')
@@ -246,7 +245,7 @@ let NcmService = NcmService_1 = class NcmService {
                         this.logger.error(`Failed to update order ${order.id} status/data via NCM webhook: ${updateError.message}`);
                         continue;
                     }
-                    await this.ordersService.recordStatusHistory(order.id, internalStatus, 'Nepal Can Move', `NCM Webhook (${event || 'status update'}): ${status || event}${remarks ? ` (${remarks})` : ''}`);
+                    await this.ordersService.updateDeliveryStatus(order.id, internalStatus, 'Nepal Can Move', `NCM Webhook (${event || 'status update'}): ${status || event}${remarks ? ` (${remarks})` : ''}`);
                     this.logger.log(`Updated order ${order.order_number} (Consignment: ${consignmentId}) status to ${internalStatus} (NCM: ${status || event})`);
                 }
                 else if (isModified) {
@@ -343,17 +342,7 @@ let NcmService = NcmService_1 = class NcmService {
             this.logger.log(`Latest NCM status for ${consignmentId}: ${latestNcmStatus} -> Mapped: ${internalStatus}`);
             if (internalStatus !== order.order_status) {
                 this.logger.log(`Status changed for order ${orderId}. Updating...`);
-                const { error: updateError } = await supabase_service_1.supabaseService.getSupabaseClient()
-                    .from('orders')
-                    .update({
-                    order_status: internalStatus,
-                    updated_at: new Date().toISOString()
-                })
-                    .eq('id', orderId);
-                if (updateError) {
-                    throw new Error(`Failed to update order status: ${updateError.message}`);
-                }
-                await this.ordersService.recordStatusHistory(orderId, internalStatus, 'Nepal Can Move', `NCM Sync: ${latestNcmStatus}`);
+                await this.ordersService.updateDeliveryStatus(orderId, internalStatus, 'Nepal Can Move', `NCM Sync: ${latestNcmStatus}`);
                 return {
                     success: true,
                     newStatus: internalStatus,

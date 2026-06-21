@@ -12,35 +12,42 @@ export class PagesController {
     }
 
     @Post()
-    async addPage(@Body() body: { pageId: string; accessToken: string; platform?: string }) {
-        if (!body.pageId || !body.accessToken) {
-            throw new HttpException('Page ID and Access Token are required', HttpStatus.BAD_REQUEST);
+    async addPage(@Body() body: { pageId: string; accessToken?: string; platform?: string; pageName?: string }) {
+        if (!body.pageId) {
+            throw new HttpException('Page ID is required', HttpStatus.BAD_REQUEST);
         }
 
-        // Validate token (Only for Facebook for now)
-        let pageName = 'Social Account';
-        if (!body.platform || body.platform === 'facebook') {
-            const isValid = await this.facebookService.validatePageToken(body.pageId, body.accessToken);
+        const platform = body.platform || 'facebook';
+        const isFacebookPage = platform === 'facebook';
+
+        if (isFacebookPage && !body.accessToken) {
+            throw new HttpException('Access Token is required for Facebook Pages', HttpStatus.BAD_REQUEST);
+        }
+
+        let pageName = body.pageName || 'Social Account';
+
+        if (isFacebookPage) {
+            const isValid = await this.facebookService.validatePageToken(body.pageId, body.accessToken!);
             if (!isValid) {
                 throw new HttpException('Invalid Facebook Page ID or Access Token', HttpStatus.BAD_REQUEST);
             }
 
-            // Get page name
-            try {
-                pageName = await this.facebookService.getPageName(body.pageId, body.accessToken);
-            } catch (error) {
-                console.warn('Could not fetch page name, using default');
+            if (!body.pageName) {
+                try {
+                    pageName = await this.facebookService.getPageName(body.pageId, body.accessToken!);
+                } catch (error) {
+                    console.warn('Could not fetch page name, using default');
+                }
             }
-        } else {
-            // For TikTok and others, we use the pageId as the name for now if not provided
-            pageName = `${body.platform.charAt(0).toUpperCase() + body.platform.slice(1)} Account (${body.pageId})`;
+        } else if (!body.pageName) {
+            pageName = `${platform.charAt(0).toUpperCase() + platform.slice(1)} Account (${body.pageId})`;
         }
 
         const page = await supabaseService.createPage({
-            platform: body.platform || 'facebook',
+            platform: platform,
             pageName: pageName,
             pageId: body.pageId,
-            accessToken: body.accessToken
+            accessToken: body.accessToken || 'none'
         });
 
         return page;

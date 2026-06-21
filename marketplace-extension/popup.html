@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 320px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 16px;
+      background-color: #0f172a;
+      color: #f8fafc;
+    }
+    h2 {
+      font-size: 18px;
+      font-weight: 800;
+      margin-top: 0;
+      margin-bottom: 16px;
+      color: #6366f1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .form-group {
+      margin-bottom: 12px;
+    }
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+      color: #94a3b8;
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 12px;
+      background-color: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #f8fafc;
+      font-size: 13px;
+      outline: none;
+      transition: all 0.2s;
+    }
+    input:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      background-color: #6366f1;
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      margin-top: 8px;
+    }
+    button:hover {
+      background-color: #4f46e5;
+    }
+    button.secondary {
+      background-color: #334155;
+      color: #f8fafc;
+    }
+    button.secondary:hover {
+      background-color: #475569;
+    }
+    .status {
+      font-size: 12px;
+      margin-top: 12px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background-color: #1e293b;
+      border: 1px solid #334155;
+    }
+    .status-value {
+      font-weight: 700;
+    }
+    .status-connected {
+      color: #10b981;
+    }
+    .status-disconnected {
+      color: #f43f5e;
+    }
+    .info {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 12px;
+      text-align: center;
+    }
+    #login-section, #app-section {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h2>
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-zap"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+    Marketplace Assistant
+  </h2>
+
+  <!-- Backend Configuration -->
+  <div class="form-group">
+    <label for="backend-url">Backend API URL</label>
+    <input type="text" id="backend-url" value="http://localhost:3002">
+  </div>
+
+  <div class="form-group">
+    <label for="chrome-profile">Chrome Profile Tag</label>
+    <input type="text" id="chrome-profile" placeholder="e.g. Profile 1, Bagmati-1">
+  </div>
+
+  <hr style="border: 0; border-top: 1px solid #334155; margin: 16px 0;">
+
+  <!-- Login Section -->
+  <div id="login-section">
+    <h3 style="font-size: 13px; margin: 0 0 10px 0; color: #94a3b8;">Login to Messaging App</h3>
+    <div class="form-group">
+      <label for="email">Email</label>
+      <input type="email" id="email" placeholder="email@example.com">
+    </div>
+    <div class="form-group">
+      <label for="password">Password</label>
+      <input type="password" id="password" placeholder="••••••••">
+    </div>
+    <button id="btn-login">Login</button>
+  </div>
+
+  <!-- Authenticated App Section -->
+  <div id="app-section">
+    <div class="status" style="margin-bottom: 12px;">
+      <div style="margin-bottom: 4px;">User: <span id="logged-in-user" class="status-value" style="color: #6366f1;">-</span></div>
+      <div>Role: <span id="logged-in-role" class="status-value">-</span></div>
+    </div>
+    <button id="btn-logout" class="secondary">Logout</button>
+  </div>
+
+  <div class="status" style="margin-top: 12px;">
+    Connection: <span id="connection-status" class="status-value status-disconnected">Checking...</span>
+  </div>
+
+  <div class="info">
+    FB Marketplace Order & Auto-Reply Assistant v1.0
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -10,6 +10,8 @@ export declare class SupabaseService {
         pageId?: string;
         pageName?: string;
         customerProfilePic?: string;
+        productName?: string;
+        productPrice?: string;
     }): Promise<any>;
     saveMessage(data: {
         conversationId: string;
@@ -27,6 +29,7 @@ export declare class SupabaseService {
     }): Promise<any>;
     getConversations(limit?: number, offset?: number, customerId?: string, user?: any): Promise<any[]>;
     getMessages(conversationId: string, limit?: number, offset?: number): Promise<any[]>;
+    getLastMessages(conversationId: string, limit?: number): Promise<any[]>;
     getPages(): Promise<any[]>;
     createPage(data: {
         platform: string;
@@ -44,5 +47,8 @@ export declare class SupabaseService {
     markConversationAsRead(id: string): Promise<boolean>;
     uploadFile(file: Buffer, fileName: string, mimeType: string, bucket?: string): Promise<string>;
     getSupabaseClient(): SupabaseClient<any, "public", "public", any, any>;
+    extractCustomerNameFromMessage(text: string): string | null;
+    autoFixCustomerNames(): Promise<void>;
+    autoFixPhoneNumbers(): Promise<void>;
 }
 export declare const supabaseService: SupabaseService;

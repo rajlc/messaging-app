@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
     MessageCircle, MessageSquare, User, ShoppingBag,
-    Settings, LogOut, BarChart3, Truck, Home
+    Settings, LogOut, BarChart3, Truck, Home, Store
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -83,9 +83,10 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
 
             {/* Top Nav Group */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 10px' }}>
-                <NavButton label="Home"     icon={<Home size={18} />}         active={activeView === 'home'}                                          onClick={() => navigateTo('home')} />
-                <NavButton label="Messages" icon={<MessageCircle size={18} />} active={activeView === 'messages' && activeType === 'messages'}         onClick={() => navigateTo('messages', 'messages')} />
-                <NavButton label="Comments" icon={<MessageSquare size={18} />} active={activeView === 'messages' && activeType === 'comments'}         onClick={() => navigateTo('messages', 'comments')} />
+                <NavButton label="Home"        icon={<Home size={18} />}          active={activeView === 'home'}                                          onClick={() => navigateTo('home')} />
+                <NavButton label="Messages"    icon={<MessageCircle size={18} />} active={activeView === 'messages' && activeType === 'messages'}         onClick={() => navigateTo('messages', 'messages')} />
+                <NavButton label="Marketplace" icon={<Store size={18} />}         active={activeView === 'messages' && activeType === 'marketplace'}      onClick={() => navigateTo('messages', 'marketplace')} />
+                <NavButton label="Comments"    icon={<MessageSquare size={18} />} active={activeView === 'messages' && activeType === 'comments'}         onClick={() => navigateTo('messages', 'comments')} />
             </div>
 
             {/* Section Label */}

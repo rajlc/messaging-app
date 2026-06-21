@@ -39,21 +39,25 @@ export class SupabaseService {
         pageId?: string;
         pageName?: string;
         customerProfilePic?: string;
+        productName?: string;
+        productPrice?: string;
     }) {
-        // Check if conversation exists - scope by Customer, Platform AND Page
+        // Check if conversation exists by customer_id (since customer_id is a unique key)
         const { data: existing, error: fetchError } = await this.getClient()
             .from('conversations')
             .select('*')
             .eq('customer_id', data.customerId)
-            .eq('platform', data.platform)
-            .eq('page_id', data.pageId)
             .single();
 
         if (existing) {
             // Update customer name/metadata if provided and different
             const updates: any = {};
             if (data.customerName && data.customerName !== data.customerId && existing.customer_name !== data.customerName) {
-                updates.customer_name = data.customerName;
+                const isIncomingPlaceholder = data.customerName === 'Customer';
+                const hasExistingRealName = existing.customer_name && existing.customer_name !== 'Customer' && existing.customer_name !== existing.customer_id;
+                if (!(isIncomingPlaceholder && hasExistingRealName)) {
+                    updates.customer_name = data.customerName;
+                }
             }
             if (data.pageId && existing.page_id !== data.pageId) {
                 updates.page_id = data.pageId;
@@ -67,16 +71,34 @@ export class SupabaseService {
             if (data.customerProfilePic && existing.customer_profile_pic !== data.customerProfilePic) {
                 updates.customer_profile_pic = data.customerProfilePic;
             }
+            if (data.productName && existing.product_name !== data.productName) {
+                updates.product_name = data.productName;
+            }
+            if (data.productPrice && existing.product_price !== data.productPrice) {
+                updates.product_price = data.productPrice;
+            }
 
             if (data.customerName && this.hasPhoneNumber(data.customerName)) {
                 updates.has_phone_number = true;
             }
 
             if (Object.keys(updates).length > 0) {
-                await this.getClient()
+                const { error: updateError } = await this.getClient()
                     .from('conversations')
                     .update(updates)
                     .eq('id', existing.id);
+                
+                if (updateError && (updateError.message?.includes('product_name') || updateError.message?.includes('product_price') || updateError.code === '42703')) {
+                    console.warn('[Supabase] conversations table lacks product_name/product_price columns. Retrying update without them.');
+                    delete updates.product_name;
+                    delete updates.product_price;
+                    if (Object.keys(updates).length > 0) {
+                        await this.getClient()
+                            .from('conversations')
+                            .update(updates)
+                            .eq('id', existing.id);
+                    }
+                }
                 // Merge updates into existing object for return
                 Object.assign(existing, updates);
             }
@@ -84,21 +106,41 @@ export class SupabaseService {
         }
 
         // Create new conversation
+        const insertData: any = {
+            customer_id: data.customerId,
+            customer_name: data.customerName,
+            platform: data.platform,
+            page_id: data.pageId,
+            page_name: data.pageName,
+            customer_profile_pic: data.customerProfilePic,
+            has_phone_number: data.customerName ? this.hasPhoneNumber(data.customerName) : false
+        };
+
+        if (data.productName) insertData.product_name = data.productName;
+        if (data.productPrice) insertData.product_price = data.productPrice;
+
         const { data: newConversation, error: createError } = await this.getClient()
             .from('conversations')
-            .insert({
-                customer_id: data.customerId,
-                customer_name: data.customerName,
-                platform: data.platform,
-                page_id: data.pageId,
-                page_name: data.pageName,
-                customer_profile_pic: data.customerProfilePic,
-                has_phone_number: data.customerName ? this.hasPhoneNumber(data.customerName) : false
-            })
+            .insert(insertData)
             .select()
             .single();
 
         if (createError) {
+            if (createError.message?.includes('product_name') || createError.message?.includes('product_price') || createError.code === '42703') {
+                console.warn('[Supabase] conversations table lacks product_name/product_price columns. Retrying insert without them.');
+                delete insertData.product_name;
+                delete insertData.product_price;
+                const { data: retryConv, error: retryError } = await this.getClient()
+                    .from('conversations')
+                    .insert(insertData)
+                    .select()
+                    .single();
+                if (retryError) {
+                    console.error('Error creating conversation on retry:', retryError);
+                    throw retryError;
+                }
+                return retryConv;
+            }
             console.error('Error creating conversation:', createError);
             throw createError;
         }
@@ -175,6 +217,13 @@ export class SupabaseService {
                 last_msg: data.text
             });
 
+        if (!updateError && isCustomer && this.hasPhoneNumber(data.text)) {
+            await this.getClient()
+                .from('conversations')
+                .update({ has_phone_number: true })
+                .eq('id', data.conversationId);
+        }
+
         // Fallback if RPC doesn't exist yet or fails - just update metadata
         if (updateError) {
             console.warn(`[Supabase] RPC increment_unread_count failed: ${updateError.message}. Falling back to manual update.`);
@@ -195,6 +244,29 @@ export class SupabaseService {
                 .eq('id', data.conversationId);
         } else {
             console.log(`[Supabase] Conversation ${data.conversationId} updated successfully (RPC).`);
+        }
+
+        // If a name was parsed from the system message, update the conversation's customer name
+        const extractedName = this.extractCustomerNameFromMessage(data.text);
+        if (extractedName) {
+            console.log(`[Supabase] Extracted original customer name "${extractedName}" from system message.`);
+            try {
+                const { data: conv } = await this.getClient()
+                    .from('conversations')
+                    .select('customer_name')
+                    .eq('id', data.conversationId)
+                    .single();
+                
+                if (conv && (conv.customer_name === 'Customer' || conv.customer_name === '' || !conv.customer_name)) {
+                    await this.getClient()
+                        .from('conversations')
+                        .update({ customer_name: extractedName })
+                        .eq('id', data.conversationId);
+                    console.log(`[Supabase] Auto-updated conversation ${data.conversationId} customer_name to "${extractedName}"`);
+                }
+            } catch (err: any) {
+                console.error('[Supabase] Failed to update customer_name from extracted name:', err.message);
+            }
         }
 
         return message;
@@ -279,6 +351,14 @@ export class SupabaseService {
             };
         });
 
+        // Trigger auto-fix asynchronously for any 'Customer' conversation records in the fetched list
+        const hasCustomerPlaceholder = conversations.some(c => c.customer_name === 'Customer');
+        if (hasCustomerPlaceholder) {
+            this.autoFixCustomerNames().catch(err => {
+                console.error('[Supabase] Error running async auto-fix in getConversations:', err.message);
+            });
+        }
+
         return enrichedConversations;
     }
 
@@ -299,6 +379,25 @@ export class SupabaseService {
         }
 
         return data;
+    }
+
+    /**
+     * Get recent messages for context (in chronological order: oldest first)
+     */
+    async getLastMessages(conversationId: string, limit = 5) {
+        const { data, error } = await this.getClient()
+            .from('messages')
+            .select('*')
+            .eq('conversation_id', conversationId)
+            .order('created_at', { ascending: false })
+            .limit(limit);
+
+        if (error) {
+            console.error('Error fetching last messages:', error);
+            throw error;
+        }
+
+        return data.reverse();
     }
 
     /**
@@ -455,6 +554,171 @@ export class SupabaseService {
      */
     getSupabaseClient() {
         return this.getClient();
+    }
+
+    /**
+     * Parse system interest or joined messages to extract the customer's true name
+     */
+    extractCustomerNameFromMessage(text: string): string | null {
+        if (!text) return null;
+        
+        // English matches
+        const interestMatch = text.match(/^(.+?)\s+is interested in this listing\b/i);
+        if (interestMatch && interestMatch[1]) return interestMatch[1].trim();
+
+        const interestMatchItem = text.match(/^(.+?)\s+is interested in this item\b/i);
+        if (interestMatchItem && interestMatchItem[1]) return interestMatchItem[1].trim();
+
+        const joinMatch = text.match(/^(.+?)\s+joined the conversation\b/i);
+        if (joinMatch && joinMatch[1]) return joinMatch[1].trim();
+
+        const sendMatch = text.match(/^(.+?)\s+sent a message\b/i);
+        if (sendMatch && sendMatch[1]) return sendMatch[1].trim();
+
+        const unsentMatch = text.match(/^(.+?)\s+(?:unsent|deleted|removed)\s+a\s+message\b/i);
+        if (unsentMatch && unsentMatch[1]) return unsentMatch[1].trim();
+
+        // Nepali matches
+        const interestMatchNe = text.match(/^(.+?)\s+ले यो वस्तुमा चासो राख्नुभयो\b/);
+        if (interestMatchNe && interestMatchNe[1]) return interestMatchNe[1].trim();
+
+        const joinMatchNe = text.match(/^(.+?)\s+कुराकानीमा सामेल हुनुभयो\b/);
+        if (joinMatchNe && joinMatchNe[1]) return joinMatchNe[1].trim();
+
+        const unsentMatchNe = text.match(/^(.+?)\s+ले सन्देश पठाउन रद्द गर्नुभयो\b/);
+        if (unsentMatchNe && unsentMatchNe[1]) return unsentMatchNe[1].trim();
+
+        return null;
+    }
+
+    /**
+     * Scan conversations with placeholder name 'Customer' and restore original names
+     */
+    async autoFixCustomerNames() {
+        try {
+            console.log('[Supabase] Running auto-fix task for "Customer" conversation names...');
+            
+            const { data: conversations, error } = await this.getClient()
+                .from('conversations')
+                .select('id, customer_id')
+                .eq('customer_name', 'Customer');
+
+            if (error) {
+                console.error('[Supabase] Failed to fetch conversations for auto-fix:', error.message);
+                return;
+            }
+
+            if (!conversations || conversations.length === 0) {
+                return;
+            }
+
+            console.log(`[Supabase] Found ${conversations.length} conversations named "Customer" to check.`);
+
+            let fixedCount = 0;
+
+            for (const conv of conversations) {
+                let realName: string | null = null;
+
+                // A. Check if the customer has an order in the orders table
+                const { data: order } = await this.getClient()
+                    .from('orders')
+                    .select('customer_name')
+                    .eq('customer_id', conv.customer_id)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (order && order.customer_name) {
+                    realName = order.customer_name;
+                }
+
+                // B. If no order, search messages for system interest/join notes containing the name
+                if (!realName) {
+                    const { data: messages } = await this.getClient()
+                        .from('messages')
+                        .select('text')
+                        .eq('conversation_id', conv.id)
+                        .or('text.ilike.%deleted%,text.ilike.%unsent%,text.ilike.%removed%,text.ilike.%सन्देश%,text.ilike.%सामेल%,text.ilike.%interested%')
+                        .order('created_at', { ascending: true });
+
+                    if (messages && messages.length > 0) {
+                        for (const msg of messages) {
+                            const parsedName = this.extractCustomerNameFromMessage(msg.text);
+                            if (parsedName) {
+                                realName = parsedName;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // C. Update conversation in DB if name found
+                if (realName && realName !== 'Customer') {
+                    const { error: updateError } = await this.getClient()
+                        .from('conversations')
+                        .update({ customer_name: realName })
+                        .eq('id', conv.id);
+
+                    if (!updateError) {
+                        fixedCount++;
+                        console.log(`[Supabase] Auto-fixed conversation ${conv.id}: "Customer" -> "${realName}"`);
+                    } else {
+                        console.error(`[Supabase] Failed to update name for conversation ${conv.id}:`, updateError.message);
+                    }
+                }
+            }
+
+            if (fixedCount > 0) {
+                console.log(`[Supabase] Finished auto-fix: ${fixedCount} names updated successfully.`);
+            }
+
+            // Trigger phone numbers auto-fix
+            await this.autoFixPhoneNumbers();
+        } catch (err: any) {
+            console.error('[Supabase] Error running autoFixCustomerNames:', err.message);
+        }
+    }
+
+    async autoFixPhoneNumbers() {
+        try {
+            console.log('[Supabase] Running auto-fix task for phone numbers...');
+            const { data: conversations, error } = await this.getClient()
+                .from('conversations')
+                .select('id')
+                .or('has_phone_number.eq.false,has_phone_number.is.null');
+
+            if (error) {
+                console.error('[Supabase] Failed to fetch conversations for phone number auto-fix:', error.message);
+                return;
+            }
+
+            if (!conversations || conversations.length === 0) return;
+
+            let fixedCount = 0;
+            for (const conv of conversations) {
+                const { data: messages } = await this.getClient()
+                    .from('messages')
+                    .select('text')
+                    .eq('conversation_id', conv.id)
+                    .eq('sender', 'customer');
+
+                if (messages && messages.length > 0) {
+                    const hasPhone = messages.some(m => this.hasPhoneNumber(m.text));
+                    if (hasPhone) {
+                        await this.getClient()
+                            .from('conversations')
+                            .update({ has_phone_number: true })
+                            .eq('id', conv.id);
+                        fixedCount++;
+                    }
+                }
+            }
+            if (fixedCount > 0) {
+                console.log(`[Supabase] Auto-fix completed: marked ${fixedCount} conversations as containing phone numbers.`);
+            }
+        } catch (err: any) {
+            console.error('[Supabase] Error running autoFixPhoneNumbers:', err.message);
+        }
     }
 }
 

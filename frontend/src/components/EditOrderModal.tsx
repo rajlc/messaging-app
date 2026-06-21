@@ -431,7 +431,7 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
     const handleProductSelect = (index: number, product: any) => {
         const newItems = [...editedOrder.items];
         newItems[index].product_name = product.product_name;
-        // newItems[index].product_id = product.product_id; // If needed backend wise
+        newItems[index].product_id = product.id;
         // Do not auto-populate amount as per user request
         setEditedOrder((prev: any) => ({ ...prev, items: newItems }));
         setActiveSearchIndex(null);

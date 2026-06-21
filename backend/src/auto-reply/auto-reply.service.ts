@@ -5,7 +5,7 @@ import { supabaseService } from '../supabase/supabase.service';
 export class AutoReplyService {
     async createRule(data: {
         page_id: string;
-        trigger_type: 'exact' | 'phone';
+        trigger_type: 'exact' | 'keyword' | 'phone';
         trigger_text?: string;
         reply_text: string;
         is_active?: boolean;
@@ -63,30 +63,50 @@ export class AutoReplyService {
     async findMatchingRule(pageId: string, text: string) {
         const normalizedText = text.trim().toLowerCase();
 
+        // Check if page belongs to facebook_marketplace platform to fallback to 'facebook_marketplace' page rules
+        let targetPageIds = [pageId];
+        try {
+            const page = await supabaseService.getPageByFacebookId(pageId);
+            if (page && page.platform === 'facebook_marketplace' && pageId !== 'facebook_marketplace') {
+                targetPageIds.push('facebook_marketplace');
+            }
+        } catch (e) {
+            console.error('Failed to lookup page for fallback targetPageIds:', e.message);
+        }
+
         // 1. Check for active exact matches first (strict string equality)
-        const { data: exactMatch } = await supabaseService.getSupabaseClient()
+        const { data: exactMatches } = await supabaseService.getSupabaseClient()
             .from('auto_reply_rules')
             .select('*')
-            .eq('page_id', pageId)
+            .in('page_id', targetPageIds)
             .eq('trigger_type', 'exact')
             .eq('is_active', true)
-            .ilike('trigger_text', text.trim())
-            .limit(1)
-            .maybeSingle();
+            .ilike('trigger_text', text.trim());
 
-        if (exactMatch) return exactMatch;
+        if (exactMatches && exactMatches.length > 0) {
+            // Prioritize specific profile rules over general marketplace rules
+            const specificMatch = exactMatches.find(r => r.page_id === pageId);
+            if (specificMatch) return specificMatch;
+            return exactMatches[0];
+        }
 
         // 2. Check for active keyword matches (message contains keyword)
         const { data: keywordRules } = await supabaseService.getSupabaseClient()
             .from('auto_reply_rules')
             .select('*')
-            .eq('page_id', pageId)
+            .in('page_id', targetPageIds)
             .eq('trigger_type', 'keyword')
             .eq('is_active', true);
 
         if (keywordRules && keywordRules.length > 0) {
+            // Sort to prioritize specific profile rules over general marketplace rules
+            const sortedRules = [...keywordRules].sort((a, b) => {
+                if (a.page_id === pageId && b.page_id !== pageId) return -1;
+                if (a.page_id !== pageId && b.page_id === pageId) return 1;
+                return 0;
+            });
             // Find the first rule where the trigger_text is contained within the message text
-            const match = keywordRules.find(rule =>
+            const match = sortedRules.find(rule =>
                 rule.trigger_text && normalizedText.includes(rule.trigger_text.trim().toLowerCase())
             );
             if (match) return match;
@@ -95,16 +115,18 @@ export class AutoReplyService {
         // 3. Check for phone number trigger if text contains a 10-digit number
         const phoneRegex = /\b\d{10}\b/;
         if (phoneRegex.test(text)) {
-            const { data: phoneMatch } = await supabaseService.getSupabaseClient()
+            const { data: phoneMatches } = await supabaseService.getSupabaseClient()
                 .from('auto_reply_rules')
                 .select('*')
-                .eq('page_id', pageId)
+                .in('page_id', targetPageIds)
                 .eq('trigger_type', 'phone')
-                .eq('is_active', true)
-                .limit(1)
-                .maybeSingle();
+                .eq('is_active', true);
 
-            if (phoneMatch) return phoneMatch;
+            if (phoneMatches && phoneMatches.length > 0) {
+                const specificMatch = phoneMatches.find(r => r.page_id === pageId);
+                if (specificMatch) return specificMatch;
+                return phoneMatches[0];
+            }
         }
 
         return null;

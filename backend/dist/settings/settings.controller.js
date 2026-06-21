@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SettingsController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
 const settings_service_1 = require("./settings.service");
 let SettingsController = class SettingsController {
     settingsService;
@@ -64,6 +65,39 @@ let SettingsController = class SettingsController {
         try {
             const result = await this.settingsService.saveCourierSettings({ ...body, provider: 'ncm' });
             return { success: true, data: result };
+        }
+        catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+    async getMarketplaceProducts() {
+        return this.settingsService.getMarketplaceProducts();
+    }
+    async deleteMarketplaceProduct(id) {
+        try {
+            await this.settingsService.deleteMarketplaceProduct(id);
+            return { success: true };
+        }
+        catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+    async clearMarketplaceProducts() {
+        try {
+            await this.settingsService.clearMarketplaceProducts();
+            return { success: true };
+        }
+        catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+    async uploadMarketplaceProducts(file) {
+        if (!file) {
+            return { success: false, error: 'No file uploaded' };
+        }
+        try {
+            const result = await this.settingsService.importMarketplaceProducts(file.buffer);
+            return { success: true, count: result?.length || 0 };
         }
         catch (e) {
             return { success: false, error: e.message };
@@ -123,6 +157,33 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], SettingsController.prototype, "saveNcmSettings", null);
+__decorate([
+    (0, common_1.Get)('marketplace-products'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], SettingsController.prototype, "getMarketplaceProducts", null);
+__decorate([
+    (0, common_1.Delete)('marketplace-products/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], SettingsController.prototype, "deleteMarketplaceProduct", null);
+__decorate([
+    (0, common_1.Post)('marketplace-products/clear'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], SettingsController.prototype, "clearMarketplaceProducts", null);
+__decorate([
+    (0, common_1.Post)('marketplace-products/upload'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file')),
+    __param(0, (0, common_1.UploadedFile)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], SettingsController.prototype, "uploadMarketplaceProducts", null);
 exports.SettingsController = SettingsController = __decorate([
     (0, common_1.Controller)('api/settings'),
     __metadata("design:paramtypes", [settings_service_1.SettingsService])

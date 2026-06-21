@@ -1,7 +1,7 @@
 export declare class AutoReplyService {
     createRule(data: {
         page_id: string;
-        trigger_type: 'exact' | 'phone';
+        trigger_type: 'exact' | 'keyword' | 'phone';
         trigger_text?: string;
         reply_text: string;
         is_active?: boolean;

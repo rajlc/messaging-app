@@ -252,18 +252,17 @@ let PickDropService = PickDropService_1 = class PickDropService {
         }
         if (newStatus !== order.order_status) {
             this.logger.log(`Pick & Drop Sync: Changing status ${order.order_status} -> ${newStatus}`);
-            const updateFields = {
-                order_status: newStatus,
-                updated_at: new Date().toISOString()
-            };
+            const updateFields = {};
             if (newStatus === 'Shipped' && !order.shipped_at) {
                 updateFields.shipped_at = new Date().toISOString();
             }
-            await supabase_service_1.supabaseService.getSupabaseClient()
-                .from('orders')
-                .update(updateFields)
-                .eq('id', internalOrderId);
-            await this.ordersService.recordStatusHistory(internalOrderId, newStatus, 'system', `Pick & Drop Sync: ${rawStatus}`);
+            if (Object.keys(updateFields).length > 0) {
+                await supabase_service_1.supabaseService.getSupabaseClient()
+                    .from('orders')
+                    .update(updateFields)
+                    .eq('id', internalOrderId);
+            }
+            await this.ordersService.updateDeliveryStatus(internalOrderId, newStatus, 'system', `Pick & Drop Sync: ${rawStatus}`);
             return { success: true, oldStatus: order.order_status, newStatus };
         }
         return { success: true, message: 'Status is already up to date', status: order.order_status };
@@ -296,18 +295,17 @@ let PickDropService = PickDropService_1 = class PickDropService {
         const order = orders[0];
         if (newStatus !== order.order_status) {
             this.logger.log(`Pick & Drop Webhook: Updating order ${order.order_number} (${newStatus})`);
-            const updateFields = {
-                order_status: newStatus,
-                updated_at: new Date().toISOString()
-            };
+            const updateFields = {};
             if (newStatus === 'Shipped' && !order.shipped_at) {
                 updateFields.shipped_at = new Date().toISOString();
             }
-            await supabase_service_1.supabaseService.getSupabaseClient()
-                .from('orders')
-                .update(updateFields)
-                .eq('id', order.id);
-            await this.ordersService.recordStatusHistory(order.id, newStatus, 'Pick & Drop', `Pick & Drop Webhook: ${pndStatus}`);
+            if (Object.keys(updateFields).length > 0) {
+                await supabase_service_1.supabaseService.getSupabaseClient()
+                    .from('orders')
+                    .update(updateFields)
+                    .eq('id', order.id);
+            }
+            await this.ordersService.updateDeliveryStatus(order.id, newStatus, 'Pick & Drop', `Pick & Drop Webhook: ${pndStatus}`);
             return { success: true, message: `Updated status to ${newStatus}` };
         }
         return { success: true, message: 'Status already up to date' };

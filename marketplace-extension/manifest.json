@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "FB Marketplace Assistant",
+  "version": "1.0",
+  "description": "Auto-replies and order manager for Facebook Marketplace personal profiles.",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://*.facebook.com/*",
+    "https://*.messenger.com/*",
+    "http://localhost:3002/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.facebook.com/messages/*",
+        "https://*.facebook.com/marketplace/*",
+        "https://*.messenger.com/*"
+      ],
+      "js": [
+        "order-modal.js",
+        "content.js"
+      ],
+      "run_at": "document_end"
+    }
+  ]
+}

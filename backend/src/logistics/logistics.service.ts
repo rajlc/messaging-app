@@ -618,8 +618,9 @@ export class LogisticsService implements OnModuleInit {
                 break;
         }
 
+        let statusChanged = false;
         if (newStatus !== order.order_status) {
-            updateData.order_status = newStatus;
+            statusChanged = true;
         }
 
         // Always update updated_at
@@ -630,9 +631,11 @@ export class LogisticsService implements OnModuleInit {
                 .from('orders')
                 .update(updateData)
                 .eq('id', order.id);
+        }
 
-            // Record status history
-            await this.ordersService.recordStatusHistory(
+        if (statusChanged) {
+            // Update status and trigger syncs/hooks
+            await this.ordersService.updateDeliveryStatus(
                 order.id,
                 newStatus,
                 'Pathao',

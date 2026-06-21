@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { SettingsService } from './settings.service';
 
 @Controller('api/settings')
@@ -68,6 +69,47 @@ export class SettingsController {
         try {
             const result = await this.settingsService.saveCourierSettings({ ...body, provider: 'ncm' });
             return { success: true, data: result };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    // ─── Marketplace Products Catalog ──────────────────────────────────────────────
+
+    @Get('marketplace-products')
+    async getMarketplaceProducts() {
+        return this.settingsService.getMarketplaceProducts();
+    }
+
+    @Delete('marketplace-products/:id')
+    async deleteMarketplaceProduct(@Param('id') id: string) {
+        try {
+            await this.settingsService.deleteMarketplaceProduct(id);
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    @Post('marketplace-products/clear')
+    async clearMarketplaceProducts() {
+        try {
+            await this.settingsService.clearMarketplaceProducts();
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    @Post('marketplace-products/upload')
+    @UseInterceptors(FileInterceptor('file'))
+    async uploadMarketplaceProducts(@UploadedFile() file: any) {
+        if (!file) {
+            return { success: false, error: 'No file uploaded' };
+        }
+        try {
+            const result = await this.settingsService.importMarketplaceProducts(file.buffer);
+            return { success: true, count: result?.length || 0 };
         } catch (e) {
             return { success: false, error: e.message };
         }

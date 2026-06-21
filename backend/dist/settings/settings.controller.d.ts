@@ -39,4 +39,28 @@ export declare class SettingsController {
         error: any;
         data?: undefined;
     }>;
+    getMarketplaceProducts(): Promise<any[]>;
+    deleteMarketplaceProduct(id: string): Promise<{
+        success: boolean;
+        error?: undefined;
+    } | {
+        success: boolean;
+        error: any;
+    }>;
+    clearMarketplaceProducts(): Promise<{
+        success: boolean;
+        error?: undefined;
+    } | {
+        success: boolean;
+        error: any;
+    }>;
+    uploadMarketplaceProducts(file: any): Promise<{
+        success: boolean;
+        count: number;
+        error?: undefined;
+    } | {
+        success: boolean;
+        error: any;
+        count?: undefined;
+    }>;
 }

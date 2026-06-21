@@ -25,30 +25,37 @@ let PagesController = class PagesController {
         return await supabase_service_1.supabaseService.getPages();
     }
     async addPage(body) {
-        if (!body.pageId || !body.accessToken) {
-            throw new common_1.HttpException('Page ID and Access Token are required', common_1.HttpStatus.BAD_REQUEST);
+        if (!body.pageId) {
+            throw new common_1.HttpException('Page ID is required', common_1.HttpStatus.BAD_REQUEST);
         }
-        let pageName = 'Social Account';
-        if (!body.platform || body.platform === 'facebook') {
+        const platform = body.platform || 'facebook';
+        const isFacebookPage = platform === 'facebook';
+        if (isFacebookPage && !body.accessToken) {
+            throw new common_1.HttpException('Access Token is required for Facebook Pages', common_1.HttpStatus.BAD_REQUEST);
+        }
+        let pageName = body.pageName || 'Social Account';
+        if (isFacebookPage) {
             const isValid = await this.facebookService.validatePageToken(body.pageId, body.accessToken);
             if (!isValid) {
                 throw new common_1.HttpException('Invalid Facebook Page ID or Access Token', common_1.HttpStatus.BAD_REQUEST);
             }
-            try {
-                pageName = await this.facebookService.getPageName(body.pageId, body.accessToken);
-            }
-            catch (error) {
-                console.warn('Could not fetch page name, using default');
+            if (!body.pageName) {
+                try {
+                    pageName = await this.facebookService.getPageName(body.pageId, body.accessToken);
+                }
+                catch (error) {
+                    console.warn('Could not fetch page name, using default');
+                }
             }
         }
-        else {
-            pageName = `${body.platform.charAt(0).toUpperCase() + body.platform.slice(1)} Account (${body.pageId})`;
+        else if (!body.pageName) {
+            pageName = `${platform.charAt(0).toUpperCase() + platform.slice(1)} Account (${body.pageId})`;
         }
         const page = await supabase_service_1.supabaseService.createPage({
-            platform: body.platform || 'facebook',
+            platform: platform,
             pageName: pageName,
             pageId: body.pageId,
-            accessToken: body.accessToken
+            accessToken: body.accessToken || 'none'
         });
         return page;
     }

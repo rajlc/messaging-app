@@ -25,6 +25,8 @@ import { AdsManagementModule } from './ads-management/ads-management.module';
 import { SettlementsModule } from './settlements/settlements.module';
 import { RiderInventoryModule } from './rider-inventory/rider-inventory.module';
 
+import { AppService } from './app.service';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -47,6 +49,6 @@ import { RiderInventoryModule } from './rider-inventory/rider-inventory.module';
     AppController,
     TemplatesController,
   ],
-  providers: [],
+  providers: [AppService],
 })
 export class AppModule { }

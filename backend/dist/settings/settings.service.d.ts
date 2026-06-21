@@ -4,4 +4,8 @@ export declare class SettingsService {
     getAllSettings(): Promise<any>;
     getCourierSettings(provider: string): Promise<any>;
     saveCourierSettings(payload: any): Promise<any>;
+    getMarketplaceProducts(): Promise<any[]>;
+    deleteMarketplaceProduct(id: string): Promise<boolean>;
+    clearMarketplaceProducts(): Promise<boolean>;
+    importMarketplaceProducts(buffer: Buffer): Promise<any[]>;
 }

@@ -11,6 +11,7 @@ import PagesSettings from './settings/PagesSettings';
 import StaffSettings from './settings/StaffSettings';
 import AIAgentSettings from './settings/AIAgentSettings';
 import AutoReplySettings from './settings/AutoReplySettings';
+import GeneralSettings from './settings/GeneralSettings';
 import { useAuth } from '@/context/AuthContext';
 
 export default function SettingsView() {
@@ -48,7 +49,7 @@ export default function SettingsView() {
     const sections = allSections.filter(s => allowedSectionIds.includes(s.id));
 
     const isImplemented = (id: string) =>
-        ['ai-messages', 'integrations', 'products', 'team'].includes(id);
+        ['ai-messages', 'integrations', 'products', 'team', 'general'].includes(id);
 
     // Breadcrumb helper
     const Breadcrumb = ({ label }: { label: string }) => (
@@ -207,6 +208,10 @@ export default function SettingsView() {
                 ) : activeSection === 'team' ? (
                     <div className="flex-1 p-6 h-full overflow-hidden flex flex-col">
                         <StaffSettings />
+                    </div>
+                ) : activeSection === 'general' ? (
+                    <div className="flex-1 p-6 h-full overflow-y-auto custom-scrollbar">
+                        <GeneralSettings />
                     </div>
                 ) : (
                     /* Gallery View */

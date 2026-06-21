@@ -55,40 +55,61 @@ let AutoReplyService = class AutoReplyService {
     }
     async findMatchingRule(pageId, text) {
         const normalizedText = text.trim().toLowerCase();
-        const { data: exactMatch } = await supabase_service_1.supabaseService.getSupabaseClient()
+        let targetPageIds = [pageId];
+        try {
+            const page = await supabase_service_1.supabaseService.getPageByFacebookId(pageId);
+            if (page && page.platform === 'facebook_marketplace' && pageId !== 'facebook_marketplace') {
+                targetPageIds.push('facebook_marketplace');
+            }
+        }
+        catch (e) {
+            console.error('Failed to lookup page for fallback targetPageIds:', e.message);
+        }
+        const { data: exactMatches } = await supabase_service_1.supabaseService.getSupabaseClient()
             .from('auto_reply_rules')
             .select('*')
-            .eq('page_id', pageId)
+            .in('page_id', targetPageIds)
             .eq('trigger_type', 'exact')
             .eq('is_active', true)
-            .ilike('trigger_text', text.trim())
-            .limit(1)
-            .maybeSingle();
-        if (exactMatch)
-            return exactMatch;
+            .ilike('trigger_text', text.trim());
+        if (exactMatches && exactMatches.length > 0) {
+            const specificMatch = exactMatches.find(r => r.page_id === pageId);
+            if (specificMatch)
+                return specificMatch;
+            return exactMatches[0];
+        }
         const { data: keywordRules } = await supabase_service_1.supabaseService.getSupabaseClient()
             .from('auto_reply_rules')
             .select('*')
-            .eq('page_id', pageId)
+            .in('page_id', targetPageIds)
             .eq('trigger_type', 'keyword')
             .eq('is_active', true);
         if (keywordRules && keywordRules.length > 0) {
-            const match = keywordRules.find(rule => rule.trigger_text && normalizedText.includes(rule.trigger_text.trim().toLowerCase()));
+            const sortedRules = [...keywordRules].sort((a, b) => {
+                if (a.page_id === pageId && b.page_id !== pageId)
+                    return -1;
+                if (a.page_id !== pageId && b.page_id === pageId)
+                    return 1;
+                return 0;
+            });
+            const match = sortedRules.find(rule => rule.trigger_text && normalizedText.includes(rule.trigger_text.trim().toLowerCase()));
             if (match)
                 return match;
         }
         const phoneRegex = /\b\d{10}\b/;
         if (phoneRegex.test(text)) {
-            const { data: phoneMatch } = await supabase_service_1.supabaseService.getSupabaseClient()
+            const { data: phoneMatches } = await supabase_service_1.supabaseService.getSupabaseClient()
                 .from('auto_reply_rules')
                 .select('*')
-                .eq('page_id', pageId)
+                .in('page_id', targetPageIds)
                 .eq('trigger_type', 'phone')
-                .eq('is_active', true)
-                .limit(1)
-                .maybeSingle();
-            if (phoneMatch)
-                return phoneMatch;
+                .eq('is_active', true);
+            if (phoneMatches && phoneMatches.length > 0) {
+                const specificMatch = phoneMatches.find(r => r.page_id === pageId);
+                if (specificMatch)
+                    return specificMatch;
+                return phoneMatches[0];
+            }
         }
         return null;
     }

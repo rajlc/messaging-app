@@ -315,22 +315,21 @@ export class PickDropService {
         // 4. Update DB if changed
         if (newStatus !== order.order_status) {
             this.logger.log(`Pick & Drop Sync: Changing status ${order.order_status} -> ${newStatus}`);
-            const updateFields: any = {
-                order_status: newStatus,
-                updated_at: new Date().toISOString()
-            };
+            const updateFields: any = {};
 
             if (newStatus === 'Shipped' && !order.shipped_at) {
                 updateFields.shipped_at = new Date().toISOString();
             }
 
-            await supabaseService.getSupabaseClient()
-                .from('orders')
-                .update(updateFields)
-                .eq('id', internalOrderId);
+            if (Object.keys(updateFields).length > 0) {
+                await supabaseService.getSupabaseClient()
+                    .from('orders')
+                    .update(updateFields)
+                    .eq('id', internalOrderId);
+            }
 
-            // Record status history
-            await this.ordersService.recordStatusHistory(
+            // Update status and trigger syncs/hooks
+            await this.ordersService.updateDeliveryStatus(
                 internalOrderId,
                 newStatus,
                 'system',
@@ -386,22 +385,21 @@ export class PickDropService {
 
         if (newStatus !== order.order_status) {
             this.logger.log(`Pick & Drop Webhook: Updating order ${order.order_number} (${newStatus})`);
-            const updateFields: any = {
-                order_status: newStatus,
-                updated_at: new Date().toISOString()
-            };
+            const updateFields: any = {};
 
             if (newStatus === 'Shipped' && !order.shipped_at) {
                 updateFields.shipped_at = new Date().toISOString();
             }
 
-            await supabaseService.getSupabaseClient()
-                .from('orders')
-                .update(updateFields)
-                .eq('id', order.id);
+            if (Object.keys(updateFields).length > 0) {
+                await supabaseService.getSupabaseClient()
+                    .from('orders')
+                    .update(updateFields)
+                    .eq('id', order.id);
+            }
 
-            // Record status history
-            await this.ordersService.recordStatusHistory(
+            // Update status and trigger syncs/hooks
+            await this.ordersService.updateDeliveryStatus(
                 order.id,
                 newStatus,
                 'Pick & Drop',

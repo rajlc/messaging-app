@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Save, Globe, MessageSquare, Phone, ToggleLeft, ToggleRight, Loader2, ChevronRight, Facebook, Instagram } from 'lucide-react';
+import { Plus, Trash2, Save, Globe, MessageSquare, Phone, ToggleLeft, ToggleRight, Loader2, ChevronRight, Facebook, Instagram, Store } from 'lucide-react';
 
 type AutoReplyRule = {
     id: string;
@@ -73,7 +73,7 @@ export default function AutoReplySettings() {
     };
 
     const handleAddRule = async () => {
-        if (!selectedPageId || !newRule.reply_text || (newRule.trigger_type === 'exact' && !newRule.trigger_text)) return;
+        if (!selectedPageId || !newRule.reply_text || ((newRule.trigger_type === 'exact' || newRule.trigger_type === 'keyword') && !newRule.trigger_text)) return;
 
         setIsSaving(true);
         try {
@@ -163,9 +163,12 @@ export default function AutoReplySettings() {
                                 }`}
                         >
                             <div className="flex items-center gap-3">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${page.platform === 'facebook' ? 'bg-blue-600' : 'bg-pink-600'
-                                    }`}>
-                                    {page.platform === 'facebook' ? <Facebook size={14} /> : <Instagram size={14} />}
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${
+                                    page.platform === 'facebook' ? 'bg-blue-600' :
+                                    (page.platform === 'facebook_marketplace' || page.platform === 'marketplace') ? 'bg-sky-600' : 'bg-pink-600'
+                                }`}>
+                                    {page.platform === 'facebook' ? <Facebook size={14} /> :
+                                     (page.platform === 'facebook_marketplace' || page.platform === 'marketplace') ? <Store size={14} /> : <Instagram size={14} />}
                                 </div>
                                 <div className="text-left overflow-hidden">
                                     <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{page.page_name}</p>
@@ -245,7 +248,7 @@ export default function AutoReplySettings() {
                                             </button>
                                         </div>
                                     </div>
-                                    {(newRule.trigger_type === 'exact' || newRule.trigger_type === 'keyword') && (
+    {(newRule.trigger_type === 'exact' || newRule.trigger_type === 'keyword') && (
                                         <div>
                                             <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5 ml-1">
                                                 {newRule.trigger_type === 'exact' ? 'Exact Message' : 'Keyword to Match'}
@@ -257,6 +260,15 @@ export default function AutoReplySettings() {
                                                 onChange={(e) => setNewRule({ ...newRule, trigger_text: e.target.value })}
                                                 className="w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-white"
                                             />
+                                        </div>
+                                    )}
+                                    {newRule.trigger_type === 'phone' && (
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Trigger Condition</label>
+                                            <div className="w-full bg-slate-50 dark:bg-slate-900/50 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2 text-xs text-slate-500 flex items-center gap-2 h-[38px] font-medium">
+                                                <Phone size={14} className="text-emerald-500 animate-pulse" />
+                                                <span>Triggers when any 10-digit phone number is received in messages</span>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -295,8 +307,20 @@ export default function AutoReplySettings() {
                                         <div key={rule.id} className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-4 hover:shadow-md transition-all group">
                                             <div className="flex items-start justify-between gap-4">
                                                 <div className="flex items-start gap-4 flex-1">
-                                                    <div className={`mt-1 p-2 rounded-lg ${rule.trigger_type === 'exact' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'}`}>
-                                                        {rule.trigger_type === 'exact' ? <MessageSquare size={16} /> : <Phone size={16} />}
+                                                    <div className={`mt-1 p-2 rounded-lg ${
+                                                        rule.trigger_type === 'exact'
+                                                            ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400'
+                                                            : rule.trigger_type === 'keyword'
+                                                            ? 'bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400'
+                                                            : 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
+                                                    }`}>
+                                                        {rule.trigger_type === 'exact' ? (
+                                                            <MessageSquare size={16} />
+                                                        ) : rule.trigger_type === 'keyword' ? (
+                                                            <Globe size={16} />
+                                                        ) : (
+                                                            <Phone size={16} />
+                                                        )}
                                                     </div>
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex items-center gap-2 mb-1">
@@ -308,6 +332,9 @@ export default function AutoReplySettings() {
                                                         </div>
                                                         {(rule.trigger_type === 'exact' || rule.trigger_type === 'keyword') && (
                                                             <p className="text-sm font-bold text-slate-800 dark:text-white mb-1.5 underline decoration-indigo-300 decoration-2 underline-offset-4">"{rule.trigger_text}"</p>
+                                                        )}
+                                                        {rule.trigger_type === 'phone' && (
+                                                            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 italic">When 10-digit number is received from messages</p>
                                                         )}
                                                         <div className="bg-gray-50 dark:bg-slate-900/50 p-2.5 rounded-lg border border-gray-100 dark:border-slate-700/50">
                                                             <p className="text-xs text-slate-600 dark:text-slate-300 italic mb-1 opacity-60">Automatic Reply:</p>

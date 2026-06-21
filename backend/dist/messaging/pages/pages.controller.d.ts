@@ -5,8 +5,9 @@ export declare class PagesController {
     getPages(): Promise<any[]>;
     addPage(body: {
         pageId: string;
-        accessToken: string;
+        accessToken?: string;
         platform?: string;
+        pageName?: string;
     }): Promise<any>;
     removePage(id: string): Promise<boolean>;
     updatePage(id: string, body: {

@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import {
     Package, Plus, Search, Filter, Check, X, Truck, List, Clock, CheckCircle2, FileText, ChevronDown, RefreshCw,
-    ArrowLeftRight, ArrowLeft, User, UserMinus, Hash
+    ArrowLeftRight, ArrowLeft, User, UserMinus, Hash, Printer
 } from 'lucide-react';
 import OrderModal from './OrderModal';
 import RiderAssignmentModal from './RiderAssignmentModal';
@@ -65,12 +66,14 @@ export default function OrdersView() {
         }
         return 'todayOrder';
     });
-    const [todaySubTab, setTodaySubTab] = useState<'pending' | 'confirmed' | 'packed' | 'shipped'>(() => {
+    const [todaySubTab, setTodaySubTab] = useState<'pending' | 'confirmed' | 'packed' | 'shipped' | 'delivered'>(() => {
         if (typeof window !== 'undefined') {
             return (localStorage.getItem('ordersTodaySubTab') as any) || 'pending';
         }
         return 'pending';
     });
+    const [deliveredOption, setDeliveredOption] = useState<'all' | 'shipped_delivered' | 'delivered_only'>('all');
+    const [deliveredDropdownOpen, setDeliveredDropdownOpen] = useState(false);
     const [orderListSubTab, setOrderListSubTab] = useState<'all' | 'shipped' | 'delivered' | 'returnProcess' | 'returned'>(() => {
         if (typeof window !== 'undefined') {
             return (localStorage.getItem('ordersListSubTab') as any) || 'all';
@@ -100,6 +103,28 @@ export default function OrdersView() {
     const [orders, setOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
+
+    // Print States
+    const [storeName, setStoreName] = useState('Bagmati Online');
+    const [printLayout, setPrintLayout] = useState<'6' | '9'>('6');
+
+    // Fetch store name on mount
+    useEffect(() => {
+        const fetchStoreSettings = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/settings`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.data && res.data.store_name) {
+                    setStoreName(res.data.store_name);
+                }
+            } catch (err) {
+                console.error('Failed to fetch general settings store name:', err);
+            }
+        };
+        fetchStoreSettings();
+    }, []);
 
     // Derived State: Unique Branches
     const uniqueBranches = useMemo(() => {
@@ -161,6 +186,7 @@ export default function OrdersView() {
             const savedSummaryReportView = localStorage.getItem('ordersSummaryReportView');
             const savedSelectedDate = localStorage.getItem('selectedDateForReport');
             const savedReportFilter = localStorage.getItem('reportDetailStatusFilter');
+            const savedDeliveredOption = localStorage.getItem('ordersDeliveredOption');
 
             if (savedActiveTab) setActiveTab(savedActiveTab as any);
             if (savedTodaySubTab) setTodaySubTab(savedTodaySubTab as any);
@@ -168,6 +194,7 @@ export default function OrdersView() {
             if (savedSummaryReportView) setSummaryReportView(savedSummaryReportView as any);
             if (savedSelectedDate) setSelectedDateForReport(savedSelectedDate);
             if (savedReportFilter) setReportDetailStatusFilter(savedReportFilter);
+            if (savedDeliveredOption) setDeliveredOption(savedDeliveredOption as any);
         }
         fetchOrders();
     }, []);
@@ -177,13 +204,14 @@ export default function OrdersView() {
         localStorage.setItem('ordersTodaySubTab', todaySubTab);
         localStorage.setItem('ordersListSubTab', orderListSubTab);
         localStorage.setItem('ordersSummaryReportView', summaryReportView);
+        localStorage.setItem('ordersDeliveredOption', deliveredOption);
         if (selectedDateForReport) {
             localStorage.setItem('selectedDateForReport', selectedDateForReport);
         } else {
             localStorage.removeItem('selectedDateForReport');
         }
         localStorage.setItem('reportDetailStatusFilter', reportDetailStatusFilter);
-    }, [activeTab, todaySubTab, orderListSubTab, summaryReportView, selectedDateForReport, reportDetailStatusFilter]);
+    }, [activeTab, todaySubTab, orderListSubTab, summaryReportView, selectedDateForReport, reportDetailStatusFilter, deliveredOption]);
 
 
     // Click outside to close status menu
@@ -204,6 +232,7 @@ export default function OrdersView() {
         setBranchFilter('all');
         setStatusFilter('all');
         setSearchQuery('');
+        setDeliveredDropdownOpen(false);
         // Do not reset selectedDateForReport and reportDetailStatusFilter here
         // as they are managed by their own persistence and specific UI interactions.
     }, [activeTab, todaySubTab, orderListSubTab]);
@@ -288,6 +317,41 @@ export default function OrdersView() {
         await handleStatusUpdate(orderId, newStatus);
         setLoading(false);
         setStatusMenuOrderId(null);
+    };
+
+    const handleBulkPrint = async () => {
+        if (selectedOrders.size === 0) return;
+        
+        // Trigger window print dialog
+        setTimeout(async () => {
+            window.print();
+            
+            // Mark all selected orders as invoice printed
+            const token = localStorage.getItem('token');
+            const orderIds = Array.from(selectedOrders);
+            
+            try {
+                await Promise.all(
+                    orderIds.map(id => {
+                        const order = orders.find(o => o.id === id);
+                        if (!order) return Promise.resolve();
+                        return axios.put(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/orders/${id}`, {
+                            ...order,
+                            invoice_printed: true
+                        }, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                    })
+                );
+                
+                // Clear selection and refresh orders
+                setSelectedOrders(new Set());
+                fetchOrders();
+            } catch (err) {
+                console.error('Failed to update invoice print status:', err);
+                alert('Invoices printed, but failed to update print status in backend database.');
+            }
+        }, 300);
     };
 
     const handleConfirmAction = (order: any) => {
@@ -489,6 +553,9 @@ export default function OrdersView() {
                     // Show all "Packed" or "Ready to Ship" regardless of date
                     return order.order_status === 'Ready to Ship' || order.order_status === 'Packed';
                 } else if (todaySubTab === 'shipped') {
+                    const allowedShippedStatuses = ['Shipped', 'Arrived at Branch', 'Delivery Process', 'Hold', 'Delivery Failed', 'Return Process'];
+                    if (!allowedShippedStatuses.includes(order.order_status)) return false;
+
                     // For Shipped: show ONLY if it was shipped today
                     if (order.shipped_at) {
                         const shippedDate = new Date(order.shipped_at);
@@ -505,6 +572,47 @@ export default function OrdersView() {
                             actionDate.getMonth() === today.getMonth() &&
                             actionDate.getFullYear() === today.getFullYear();
                     });
+                } else if (todaySubTab === 'delivered') {
+                    const isSameDay = (d1: Date, d2: Date) =>
+                        d1.getDate() === d2.getDate() &&
+                        d1.getMonth() === d2.getMonth() &&
+                        d1.getFullYear() === d2.getFullYear();
+
+                    // 1. Delivered today check
+                    let deliveredToday = false;
+                    if (order.delivered_at) {
+                        if (isSameDay(new Date(order.delivered_at), today)) {
+                            deliveredToday = true;
+                        }
+                    } else {
+                        deliveredToday = (order.status_history || []).some((h: any) => {
+                            if (h.status.trim() !== 'Delivered') return false;
+                            return isSameDay(new Date(h.changed_at), today);
+                        });
+                    }
+
+                    if (!deliveredToday) return false;
+
+                    // 2. Shipped today check
+                    let shippedToday = false;
+                    if (order.shipped_at) {
+                        if (isSameDay(new Date(order.shipped_at), today)) {
+                            shippedToday = true;
+                        }
+                    } else {
+                        shippedToday = (order.status_history || []).some((h: any) => {
+                            if (h.status.trim() !== 'Shipped') return false;
+                            return isSameDay(new Date(h.changed_at), today);
+                        });
+                    }
+
+                    if (deliveredOption === 'all') {
+                        return true;
+                    } else if (deliveredOption === 'shipped_delivered') {
+                        return shippedToday;
+                    } else if (deliveredOption === 'delivered_only') {
+                        return !shippedToday;
+                    }
                 }
                 return false;
             }).filter(order => {
@@ -642,6 +750,7 @@ export default function OrdersView() {
         let confirmedCount = 0;
         let packedCount = 0;
         let shippedCount = 0;
+        let deliveredCount = 0;
 
         orders.forEach(order => {
             // Pending: All "New Order" or "Follow up again"
@@ -656,20 +765,35 @@ export default function OrdersView() {
             if (order.order_status === 'Ready to Ship' || order.order_status === 'Packed') {
                 packedCount++;
             }
-            // Shipped: ONLY if shipped today
-            if (order.shipped_at) {
-                const shippedDate = new Date(order.shipped_at);
-                if (isSameDay(shippedDate, today)) shippedCount++;
+            // Shipped: ONLY if shipped today and status is one of the allowed shipped statuses
+            const allowedShippedStatuses = ['Shipped', 'Arrived at Branch', 'Delivery Process', 'Hold', 'Delivery Failed', 'Return Process'];
+            if (allowedShippedStatuses.includes(order.order_status)) {
+                if (order.shipped_at) {
+                    const shippedDate = new Date(order.shipped_at);
+                    if (isSameDay(shippedDate, today)) shippedCount++;
+                } else {
+                    // Fallback: check status_history for 'Shipped' change today
+                    const wasShippedToday = (order.status_history || []).some((h: any) => {
+                        if (h.status.trim() !== 'Shipped') return false;
+                        return isSameDay(new Date(h.changed_at), today);
+                    });
+                    if (wasShippedToday) shippedCount++;
+                }
+            }
+            // Delivered: ONLY if delivered today
+            if (order.delivered_at) {
+                const deliveredDate = new Date(order.delivered_at);
+                if (isSameDay(deliveredDate, today)) deliveredCount++;
             } else {
-                // Fallback: check status_history for 'Shipped' change today
-                const wasShippedToday = (order.status_history || []).some((h: any) => {
-                    if (h.status.trim() !== 'Shipped') return false;
+                // Fallback: check status_history for 'Delivered' change today
+                const wasDeliveredToday = (order.status_history || []).some((h: any) => {
+                    if (h.status.trim() !== 'Delivered') return false;
                     return isSameDay(new Date(h.changed_at), today);
                 });
-                if (wasShippedToday) shippedCount++;
+                if (wasDeliveredToday) deliveredCount++;
             }
         });
-        return { pending: pendingCount, confirmed: confirmedCount, packed: packedCount, shipped: shippedCount };
+        return { pending: pendingCount, confirmed: confirmedCount, packed: packedCount, shipped: shippedCount, delivered: deliveredCount };
     }, [orders]);
 
     // Calculate Order List Stats
@@ -980,6 +1104,66 @@ export default function OrdersView() {
                                             Shipped
                                             <span className="bg-white dark:bg-slate-900/50 px-2 py-0.5 rounded text-xs ml-1 shadow-sm">{todayStats.shipped}</span>
                                         </button>
+                                        <div className="relative">
+                                            <button
+                                                onClick={() => {
+                                                    if (todaySubTab !== 'delivered') {
+                                                        setTodaySubTab('delivered');
+                                                        setDeliveredOption('all');
+                                                        setDeliveredDropdownOpen(true);
+                                                    } else {
+                                                        setDeliveredDropdownOpen(!deliveredDropdownOpen);
+                                                    }
+                                                }}
+                                                className={`px-5 py-2 rounded-full text-[15px] font-semibold transition-colors flex items-center gap-2 border ${todaySubTab === 'delivered'
+                                                    ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-500/30'
+                                                    : 'bg-white dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                                                    }`}
+                                            >
+                                                <CheckCircle2 size={14} />
+                                                <span>Delivered{todaySubTab === 'delivered' && `: ${deliveredOption === 'all' ? 'All Orders' : deliveredOption === 'shipped_delivered' ? 'Today Shipped Delivered' : 'Today Delivered Order'}`}</span>
+                                                <span className="bg-white dark:bg-slate-900/50 px-2 py-0.5 rounded text-xs ml-1 shadow-sm">{todayStats.delivered}</span>
+                                                <ChevronDown size={14} className={`transition-transform ${deliveredDropdownOpen ? 'rotate-180' : ''}`} />
+                                            </button>
+
+                                            {deliveredDropdownOpen && (
+                                                <>
+                                                    <div className="fixed inset-0 z-10" onClick={() => setDeliveredDropdownOpen(false)} />
+                                                    <div className="absolute left-0 mt-2 w-64 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl z-20 overflow-hidden">
+                                                        <button
+                                                            onClick={() => {
+                                                                setDeliveredOption('all');
+                                                                setDeliveredDropdownOpen(false);
+                                                            }}
+                                                            className={`w-full text-left px-4 py-2.5 text-[14px] hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-between ${deliveredOption === 'all' ? 'text-green-600 dark:text-green-400 font-bold bg-green-50/50 dark:bg-green-500/5' : 'text-slate-700 dark:text-slate-200'}`}
+                                                        >
+                                                            <span>All Orders</span>
+                                                            {deliveredOption === 'all' && <Check size={14} />}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setDeliveredOption('shipped_delivered');
+                                                                setDeliveredDropdownOpen(false);
+                                                            }}
+                                                            className={`w-full text-left px-4 py-2.5 text-[14px] hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-between ${deliveredOption === 'shipped_delivered' ? 'text-green-600 dark:text-green-400 font-bold bg-green-50/50 dark:bg-green-500/5' : 'text-slate-700 dark:text-slate-200'}`}
+                                                        >
+                                                            <span>Today Shipped Delivered</span>
+                                                            {deliveredOption === 'shipped_delivered' && <Check size={14} />}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setDeliveredOption('delivered_only');
+                                                                setDeliveredDropdownOpen(false);
+                                                            }}
+                                                            className={`w-full text-left px-4 py-2.5 text-[14px] hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-between ${deliveredOption === 'delivered_only' ? 'text-green-600 dark:text-green-400 font-bold bg-green-50/50 dark:bg-green-500/5' : 'text-slate-700 dark:text-slate-200'}`}
+                                                        >
+                                                            <span>Today Delivered Order</span>
+                                                            {deliveredOption === 'delivered_only' && <Check size={14} />}
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
 
@@ -1269,7 +1453,7 @@ export default function OrdersView() {
                     </div>
 
                     {activeTab !== 'orderSummary' && (
-                        <div className="flex items-center justify-between p-3 mb-2">
+                        <div className="flex items-center justify-between p-3 mb-2 bg-white dark:bg-slate-800 rounded-xl border border-gray-100 dark:border-slate-700/50 shadow-sm">
                             <div className="flex items-center gap-3">
                                 <input
                                     type="checkbox"
@@ -1279,6 +1463,29 @@ export default function OrdersView() {
                                 />
                                 <span className="text-[14px] font-semibold text-slate-600 dark:text-slate-300">Select All ({selectedOrders.size})</span>
                             </div>
+
+                            {selectedOrders.size > 0 && activeTab === 'todayOrder' && (todaySubTab === 'packed' || todaySubTab === 'shipped') && (
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[12px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Layout:</span>
+                                        <select
+                                            value={printLayout}
+                                            onChange={(e) => setPrintLayout(e.target.value as any)}
+                                            className="bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 outline-none"
+                                        >
+                                            <option value="6">6 per A4 page</option>
+                                            <option value="9">9 per A4 page</option>
+                                        </select>
+                                    </div>
+                                    <button
+                                        onClick={handleBulkPrint}
+                                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md shadow-green-500/10 active:scale-95 cursor-pointer"
+                                    >
+                                        <Printer size={14} />
+                                        Print Invoices ({selectedOrders.size})
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -1468,11 +1675,17 @@ export default function OrdersView() {
 
                                             {/* Section 4: ACTIONS (17%) */}
                                             <div className="flex flex-col w-full md:w-[17%] shrink-0 pt-3 md:pt-0 items-start md:items-end justify-between min-h-[148px] md:pr-2">
-                                                {/* Status Badge */}
-                                                <div className={`h-[32px] px-[14px] rounded-full text-[13px] font-[700] flex items-center justify-center whitespace-nowrap self-start md:self-end ${getStatusBadgeStyle(order.order_status)}`}>
-                                                    <div className="flex items-center gap-1.5">
-                                                        {order.order_status === 'Confirmed Order' && <CheckCircle2 size={14} />}
-                                                        {order.order_status === 'Ready to Ship' ? 'Packed' : order.order_status}
+                                                {/* Status Badge & Print Icon Row */}
+                                                <div className="flex items-center gap-2 self-start md:self-end">
+                                                    <Printer 
+                                                        size={16} 
+                                                        className={order.invoice_printed ? "text-green-500" : "text-slate-400 dark:text-slate-500"} 
+                                                    />
+                                                    <div className={`h-[32px] px-[14px] rounded-full text-[13px] font-[700] flex items-center justify-center whitespace-nowrap ${getStatusBadgeStyle(order.order_status)}`}>
+                                                        <div className="flex items-center gap-1.5">
+                                                            {order.order_status === 'Confirmed Order' && <CheckCircle2 size={14} />}
+                                                            {order.order_status === 'Ready to Ship' ? 'Packed' : order.order_status}
+                                                        </div>
                                                     </div>
                                                 </div>
 
@@ -1973,6 +2186,142 @@ export default function OrdersView() {
                     }}
                 />
             )}
+
+            {/* Print Section */}
+            {typeof window !== 'undefined' && createPortal(
+                <div id="print-section" className={printLayout === '9' ? 'layout-9' : 'layout-6'}>
+                    {displayOrders.filter(order => selectedOrders.has(order.id)).map(order => {
+                        const logisticId = order.courier_consignment_id || order.pickdrop_order_id || '-';
+                        const logisticName = order.courier_provider === 'local' ? (order.logistic_name || 'Local') 
+                                          : order.courier_provider === 'pathao' ? 'Pathao'
+                                          : order.courier_provider === 'pickdrop' ? 'Pick & Drop'
+                                          : order.courier_provider === 'ncm' ? 'Nepal Can Move'
+                                          : order.courier_provider === 'self' ? 'Self'
+                                          : 'Courier';
+
+                        const branchName = order.courier_provider === 'local' ? (order.delivery_branch || '-')
+                                         : order.courier_provider === 'pickdrop' ? (order.pickdrop_destination_branch || '-')
+                                         : order.courier_provider === 'ncm' ? (order.ncm_to_branch || '-')
+                                         : order.city_name || '-';
+
+                        return (
+                            <div key={order.id} className="print-card">
+                                <div className="print-header">
+                                    <div className="store-name">{storeName}</div>
+                                </div>
+                                <div className="print-row border-b pb-1 mb-1.5 flex justify-between">
+                                    <span className="logistic-name font-bold uppercase">{logisticName}</span>
+                                    <span className="logistic-id font-bold">{logisticId}</span>
+                                </div>
+                                <div className="print-body flex gap-3 flex-1 overflow-hidden my-1">
+                                    {/* Left Column: Customer Details */}
+                                    <div className="flex flex-col flex-1 gap-1 min-w-[52%]">
+                                        <div className="text-[10px] leading-tight">
+                                            <span className="branch-label font-semibold">Branch:</span> {branchName}
+                                        </div>
+                                        <div className="customer-name font-bold text-[13px] leading-tight">
+                                            {order.customer_name}
+                                        </div>
+                                        <div className="font-bold text-[12px] leading-none">
+                                            {order.phone_number}
+                                        </div>
+                                        <div className="text-[10px] text-gray-700 italic leading-snug break-words">
+                                            {order.address}
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Right Column: Full Package Description utilizing blank space */}
+                                    <div className="flex-1 text-right text-[9.5px] text-gray-700 italic leading-[1.25] overflow-hidden break-words font-semibold flex flex-col justify-start">
+                                        {order.package_description || 'No description'}
+                                    </div>
+                                </div>
+                                <div className="print-footer mt-auto pt-1.5 border-t border-dashed flex justify-between items-center">
+                                    <span className="text-[10px] text-gray-400 font-bold uppercase">Total Amt</span>
+                                    <span className="grand-total font-extrabold text-[15px]">Rs. {order.total_amount}</span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>,
+                document.body
+            )}
+
+            <style dangerouslySetInnerHTML={{ __html: `
+                #print-section {
+                    display: none !important;
+                }
+                @media print {
+                    body > *:not(#print-section) {
+                        display: none !important;
+                    }
+                    html, body {
+                        height: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: white !important;
+                    }
+                    #print-section {
+                        display: grid !important;
+                        width: 210mm !important;
+                        height: 297mm !important;
+                        padding: 5mm !important;
+                        box-sizing: border-box !important;
+                        background: white !important;
+                    }
+                    #print-section.layout-6 {
+                        grid-template-columns: 100mm 100mm !important;
+                        grid-auto-rows: 95mm !important;
+                        gap: 2mm !important;
+                    }
+                    #print-section.layout-9 {
+                        grid-template-columns: 66mm 66mm 66mm !important;
+                        grid-auto-rows: 95mm !important;
+                        gap: 1mm !important;
+                    }
+                    .print-card {
+                        border: 1px dashed #94a3b8 !important;
+                        padding: 10px !important;
+                        box-sizing: border-box !important;
+                        display: flex !important;
+                        flex-direction: column !important;
+                        height: 100% !important;
+                        overflow: hidden !important;
+                        background: white !important;
+                        color: black !important;
+                        font-family: 'Inter', sans-serif !important;
+                        font-size: 11px !important;
+                        page-break-inside: avoid !important;
+                    }
+                    .print-header {
+                        text-align: center !important;
+                        margin-bottom: 6px !important;
+                    }
+                    .store-name {
+                        font-size: 14px !important;
+                        font-weight: 900 !important;
+                        text-transform: uppercase !important;
+                        border-bottom: 2px solid black !important;
+                        padding-bottom: 2px !important;
+                        letter-spacing: 0.5px !important;
+                    }
+                    .logistic-name {
+                        font-weight: 800 !important;
+                        font-size: 12px !important;
+                    }
+                    .logistic-id {
+                        font-weight: 800 !important;
+                        font-size: 12px !important;
+                    }
+                    .grand-total {
+                        font-size: 16px !important;
+                        font-weight: 900 !important;
+                    }
+                    @page {
+                        size: A4 portrait;
+                        margin: 0 !important;
+                    }
+                }
+            `}} />
         </div>
     );
 }

@@ -282,7 +282,6 @@ export class NcmService {
 
                 // Update order status if it changed
                 if (internalStatus !== order.order_status) {
-                    updateData.order_status = internalStatus;
                     updateData.courier_status = status || event;
 
                     const { error: updateError } = await supabaseService.getSupabaseClient()
@@ -295,8 +294,8 @@ export class NcmService {
                         continue;
                     }
 
-                    // Record status history using OrdersService
-                    await this.ordersService.recordStatusHistory(
+                    // Update status and trigger syncs/hooks
+                    await this.ordersService.updateDeliveryStatus(
                         order.id,
                         internalStatus,
                         'Nepal Can Move',
@@ -418,20 +417,8 @@ export class NcmService {
             if (internalStatus !== order.order_status) {
                 this.logger.log(`Status changed for order ${orderId}. Updating...`);
 
-                const { error: updateError } = await supabaseService.getSupabaseClient()
-                    .from('orders')
-                    .update({
-                        order_status: internalStatus,
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', orderId);
-
-                if (updateError) {
-                    throw new Error(`Failed to update order status: ${updateError.message}`);
-                }
-
-                // Record status history using OrdersService
-                await this.ordersService.recordStatusHistory(
+                // Update status and trigger syncs/hooks
+                await this.ordersService.updateDeliveryStatus(
                     orderId,
                     internalStatus,
                     'Nepal Can Move',

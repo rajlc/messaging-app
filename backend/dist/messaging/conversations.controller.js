@@ -16,7 +16,12 @@ exports.ConversationsController = void 0;
 const common_1 = require("@nestjs/common");
 const supabase_service_1 = require("../supabase/supabase.service");
 const passport_1 = require("@nestjs/passport");
+const messaging_gateway_1 = require("../socket/messaging.gateway");
 let ConversationsController = class ConversationsController {
+    messagingGateway;
+    constructor(messagingGateway) {
+        this.messagingGateway = messagingGateway;
+    }
     async getConversations(req, limit, offset, customerId) {
         const limitNum = limit ? parseInt(limit) : 1000;
         const offsetNum = offset ? parseInt(offset) : 0;
@@ -33,6 +38,44 @@ let ConversationsController = class ConversationsController {
     async markAsRead(id) {
         await supabase_service_1.supabaseService.markConversationAsRead(id);
         return { success: true };
+    }
+    async syncCustomerName(body) {
+        const { customerId, customerName } = body;
+        if (!customerId || !customerName || customerName === 'Customer') {
+            return { success: false, error: 'Invalid customer name or ID' };
+        }
+        try {
+            const { data: conv, error: fetchError } = await supabase_service_1.supabaseService.getClient()
+                .from('conversations')
+                .select('id, customer_name')
+                .eq('customer_id', customerId)
+                .single();
+            if (fetchError || !conv) {
+                return { success: false, error: 'Conversation not found' };
+            }
+            if (conv.customer_name && conv.customer_name !== 'Customer' && conv.customer_name !== customerId) {
+                return { success: true, message: 'Name already set, skipped update' };
+            }
+            const { error: updateError } = await supabase_service_1.supabaseService.getClient()
+                .from('conversations')
+                .update({ customer_name: customerName })
+                .eq('id', conv.id);
+            if (updateError) {
+                console.error(`[Supabase] Failed to update customer name for ${customerId}:`, updateError.message);
+                return { success: false, error: updateError.message };
+            }
+            console.log(`[Supabase] Synced customer name: ${customerId} -> "${customerName}"`);
+            this.messagingGateway.server.emit('conversationNameUpdated', {
+                conversationId: conv.id,
+                customerId: customerId,
+                customerName: customerName,
+            });
+            return { success: true };
+        }
+        catch (err) {
+            console.error(`[Supabase] Exception in syncCustomerName:`, err.message);
+            return { success: false, error: err.message };
+        }
     }
 };
 exports.ConversationsController = ConversationsController;
@@ -64,7 +107,16 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], ConversationsController.prototype, "markAsRead", null);
+__decorate([
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
+    (0, common_1.Post)('sync-name'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], ConversationsController.prototype, "syncCustomerName", null);
 exports.ConversationsController = ConversationsController = __decorate([
-    (0, common_1.Controller)('api/conversations')
+    (0, common_1.Controller)('api/conversations'),
+    __metadata("design:paramtypes", [messaging_gateway_1.MessagingGateway])
 ], ConversationsController);
 //# sourceMappingURL=conversations.controller.js.map
