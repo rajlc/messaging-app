@@ -2213,7 +2213,7 @@ export default function OrdersView() {
                                     <span className="logistic-name font-bold uppercase">{logisticName}</span>
                                     <span className="logistic-id font-bold">{logisticId}</span>
                                 </div>
-                                <div className="print-body flex gap-3 flex-1 overflow-hidden my-1">
+                                <div className="print-body flex gap-3 overflow-hidden my-1">
                                     {/* Left Column: Customer Details */}
                                     <div className="flex flex-col flex-1 gap-1 min-w-[52%]">
                                         <div className="text-[10px] leading-tight">
@@ -2232,12 +2232,12 @@ export default function OrdersView() {
                                     
                                     {/* Right Column: Full Package Description utilizing blank space */}
                                     <div className="flex-1 text-right text-[9.5px] text-gray-700 italic leading-[1.25] overflow-hidden break-words font-semibold flex flex-col justify-start">
-                                        {order.package_description || 'No description'}
+                                        {order.package_description || ''}
                                     </div>
                                 </div>
-                                <div className="print-footer mt-auto pt-1.5 border-t border-dashed flex justify-between items-center">
-                                    <span className="text-[10px] text-gray-400 font-bold uppercase">Total Amt</span>
-                                    <span className="grand-total font-extrabold text-[15px]">Rs. {order.total_amount}</span>
+                                <div className="print-footer pt-1.5 border-t border-dashed flex justify-between items-center">
+                                    <span className="text-[10px] text-gray-400 font-normal uppercase">Total Amt</span>
+                                    <span className="grand-total font-normal text-[15px]">Rs. {order.total_amount}</span>
                                 </div>
                             </div>
                         );
@@ -2314,7 +2314,7 @@ export default function OrdersView() {
                     }
                     .grand-total {
                         font-size: 16px !important;
-                        font-weight: 900 !important;
+                        font-weight: normal !important;
                     }
                     @page {
                         size: A4 portrait;

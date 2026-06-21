@@ -26,6 +26,13 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
         } else {
             params.delete('type');
         }
+
+        // Reset settings view to gallery when clicking sidebar link
+        if (view === 'settings') {
+            params.delete('section');
+            params.delete('sub');
+        }
+
         router.push(`/?${params.toString()}`);
     };
 
