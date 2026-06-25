@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Colors, Spacing, Radius } from '../theme/theme';
 import { Bot, ChevronRight, LogOut, Truck, User, Package, Wallet, MoreHorizontal, FileText, Megaphone, TrendingUp } from 'lucide-react-native';
 
@@ -12,7 +12,11 @@ export default function MoreScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <View style={{ flex: 1 }}>
+      <ScrollView 
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + Spacing.xl }}
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.headerTitle}>More</Text>
 
         {user && (
@@ -20,10 +24,13 @@ export default function MoreScreen({ navigation }: any) {
             <View style={styles.userAvatar}>
               <Text style={styles.avatarText}>{user.full_name?.charAt(0) || user.email.charAt(0).toUpperCase()}</Text>
             </View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.userName}>{user.full_name || 'User'}</Text>
               <Text style={styles.userEmail}>{user.email}</Text>
             </View>
+            <TouchableOpacity onPress={logout} style={styles.profileLogoutButton}>
+              <LogOut size={22} color={Colors.danger} />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -87,6 +94,16 @@ export default function MoreScreen({ navigation }: any) {
                 <ChevronRight size={20} color={Colors.textSecondary} />
               </TouchableOpacity>
 
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => navigation.navigate('LogisticFinance')}
+              >
+                <View style={[styles.iconContainer, { backgroundColor: '#E0F2F1' }]}>
+                  <Truck size={24} color="#009688" />
+                </View>
+                <Text style={styles.menuText}>Logistic Finance</Text>
+                <ChevronRight size={20} color={Colors.textSecondary} />
+              </TouchableOpacity>
             </>
           )}
 
@@ -112,9 +129,9 @@ export default function MoreScreen({ navigation }: any) {
             <ChevronRight size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
         </View>
-      </View>
-
+      </ScrollView>
     </View>
+
   );
 }
 
@@ -156,6 +173,11 @@ const styles = StyleSheet.create({
   userEmail: {
     fontSize: 14,
     color: Colors.textSecondary,
+  },
+  profileLogoutButton: {
+    padding: Spacing.s,
+    borderRadius: Radius.s,
+    backgroundColor: '#FFEEF0',
   },
   footerTabs: {
     flexDirection: 'row',

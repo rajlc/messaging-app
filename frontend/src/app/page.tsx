@@ -22,6 +22,7 @@ import DailyReportView from '@/components/DailyReportView';
 import InventoryReportView from '@/components/InventoryReportView';
 import FinanceView from '@/components/FinanceView';
 import DeliveryView from '@/components/DeliveryView';
+import HomeView from '@/components/HomeView';
 import { useAuth } from '@/context/AuthContext';
 
 type PostComment = {
@@ -318,7 +319,7 @@ function UnifiedInboxContent() {
   const customerName = activeConversation?.customerName || 'Unknown Customer';
 
   // Derived state from URL
-  const activeView = (searchParams.get('view') as 'messages' | 'orders' | 'settings' | 'profile' | 'report' | 'daily-report' | 'inventory-report' | 'finance' | 'delivery') || 'messages';
+  const activeView = (searchParams.get('view') as 'home' | 'messages' | 'orders' | 'settings' | 'profile' | 'report' | 'daily-report' | 'inventory-report' | 'finance' | 'delivery') || 'home';
 
   // Sync conversationType with URL 'type' parameter
   useEffect(() => {
@@ -330,9 +331,14 @@ function UnifiedInboxContent() {
     }
   }, [searchParams]);
 
-  const setActiveView = (view: 'messages' | 'orders' | 'settings' | 'profile' | 'report' | 'daily-report' | 'inventory-report' | 'finance' | 'delivery') => {
+  const setActiveView = (view: 'home' | 'messages' | 'orders' | 'settings' | 'profile' | 'report' | 'daily-report' | 'inventory-report' | 'finance' | 'delivery', type?: string) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set('view', view);
+    if (type) {
+      params.set('type', type);
+    } else {
+      params.delete('type');
+    }
 
     // Clear section param if moving away from settings
     if (view !== 'settings') {
@@ -342,9 +348,9 @@ function UnifiedInboxContent() {
     router.push(`${pathname}?${params.toString()}`);
   };
 
-  // Fetch all orders when report view is active
+  // Fetch all orders when home or report/finance views are active
   useEffect(() => {
-    if (activeView === 'report' || activeView === 'daily-report' || activeView === 'inventory-report' || activeView === 'finance') {
+    if (activeView === 'home' || activeView === 'report' || activeView === 'daily-report' || activeView === 'inventory-report' || activeView === 'finance') {
       fetchAllOrders();
     }
   }, [activeView]);
@@ -1837,6 +1843,15 @@ function UnifiedInboxContent() {
 
   const renderMainContent = () => {
     switch (activeView) {
+      case 'home': return (
+        <HomeView
+          orders={allOrders}
+          conversations={conversations}
+          connectedPages={connectedPages}
+          user={user}
+          setActiveView={setActiveView as any}
+        />
+      );
       case 'daily-report': return <DailyReportView orders={allOrders} />;
       case 'inventory-report': return <InventoryReportView orders={allOrders} />;
       case 'report': return (

@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import { Alert } from 'react-native';
+import axios from 'axios';
 
 interface User {
     id: string;
@@ -28,10 +30,26 @@ const AuthContext = createContext<AuthContextType>({
     isAuthenticated: false,
 });
 
+let isAlertShown = false;
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
     const [token, setToken] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+
+    const logout = useCallback(async () => {
+        await SecureStore.deleteItemAsync('token');
+        await SecureStore.deleteItemAsync('user');
+        setToken(null);
+        setUser(null);
+    }, []);
+
+    const login = useCallback(async (token: string, userData: User) => {
+        await SecureStore.setItemAsync('token', token);
+        await SecureStore.setItemAsync('user', JSON.stringify(userData));
+        setToken(token);
+        setUser(userData);
+    }, []);
 
     useEffect(() => {
         const initAuth = async () => {
@@ -54,19 +72,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         initAuth();
     }, []);
 
-    const login = async (token: string, userData: User) => {
-        await SecureStore.setItemAsync('token', token);
-        await SecureStore.setItemAsync('user', JSON.stringify(userData));
-        setToken(token);
-        setUser(userData);
-    };
+    useEffect(() => {
+        const interceptor = axios.interceptors.response.use(
+            (response) => response,
+            async (error) => {
+                if (error.response && error.response.status === 401) {
+                    console.log('Unauthorized request (401), logging out...');
+                    if (!isAlertShown) {
+                        isAlertShown = true;
+                        Alert.alert(
+                            'Session Expired',
+                            'Your session has expired. Please log in again.',
+                            [{ text: 'OK', onPress: () => { isAlertShown = false; } }],
+                            { cancelable: false }
+                        );
+                    }
+                    await logout();
+                }
+                return Promise.reject(error);
+            }
+        );
 
-    const logout = async () => {
-        await SecureStore.deleteItemAsync('token');
-        await SecureStore.deleteItemAsync('user');
-        setToken(null);
-        setUser(null);
-    };
+        return () => {
+            axios.interceptors.response.eject(interceptor);
+        };
+    }, [logout]);
 
     return (
         <AuthContext.Provider value={{ user, token, loading, login, logout, isAuthenticated: !!user }}>

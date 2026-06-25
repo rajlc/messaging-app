@@ -1631,12 +1631,28 @@ export default function OrdersView() {
                                                     {order.courier_provider === 'local' ? (
                                                         <>
                                                             <div className="flex items-center gap-2"><Truck size={16} className="text-slate-400" /> {order.logistic_name || 'Local'}</div>
-                                                            <div className="flex items-center gap-2"><span className="opacity-70 text-[16px]">📍</span> {order.delivery_branch || '-'}</div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="opacity-70 text-[16px]">📍</span> 
+                                                                <span>{order.delivery_branch || '-'}</span>
+                                                                {order.courier_delivery_fee && (
+                                                                    <span className="text-[12px] font-[700] text-emerald-600 dark:text-emerald-400 ml-1.5 whitespace-nowrap">
+                                                                        (Est: Rs. {order.courier_delivery_fee})
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </>
                                                     ) : order.courier_provider === 'pathao' ? (
                                                         <>
                                                             <div className="flex items-center gap-2"><Truck size={16} className="text-red-500" /> Pathao</div>
-                                                            <div className="flex items-center gap-2"><span className="opacity-70 text-[16px]">📍</span> {order.city_name || order.city || 'Kathmandu'}</div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="opacity-70 text-[16px]">📍</span> 
+                                                                <span>{order.city_name || order.city || 'Kathmandu'}</span>
+                                                                {order.courier_delivery_fee && (
+                                                                    <span className="text-[12px] font-[700] text-emerald-600 dark:text-emerald-400 ml-1.5 whitespace-nowrap">
+                                                                        (Est: Rs. {order.courier_delivery_fee})
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                             {order.courier_consignment_id && (
                                                                 <div className="flex items-center gap-2 mt-0.5 text-[12px] font-[500] text-slate-500 dark:text-slate-400">
                                                                     <Hash size={14} className="text-slate-400" /> {order.courier_consignment_id}
@@ -1646,7 +1662,15 @@ export default function OrdersView() {
                                                     ) : order.courier_provider === 'pickdrop' ? (
                                                         <>
                                                             <div className="flex items-center gap-2"><Truck size={16} className="text-orange-500" /> Pick & Drop</div>
-                                                            <div className="flex items-center gap-2"><span className="opacity-70 text-[16px]">📍</span> {order.pickdrop_destination_branch || '-'}</div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="opacity-70 text-[16px]">📍</span> 
+                                                                <span>{order.pickdrop_destination_branch || '-'}</span>
+                                                                {order.courier_delivery_fee && (
+                                                                    <span className="text-[12px] font-[700] text-emerald-600 dark:text-emerald-400 ml-1.5 whitespace-nowrap">
+                                                                        (Est: Rs. {order.courier_delivery_fee})
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                             {(order.courier_consignment_id || order.pickdrop_order_id) && (
                                                                 <div className="flex items-center gap-2 mt-0.5 text-[12px] font-[500] text-slate-500 dark:text-slate-400">
                                                                     <Hash size={14} className="text-slate-400" /> {order.courier_consignment_id || order.pickdrop_order_id}
@@ -1656,7 +1680,15 @@ export default function OrdersView() {
                                                     ) : order.courier_provider === 'ncm' ? (
                                                         <>
                                                             <div className="flex items-center gap-2"><Truck size={16} className="text-blue-500" /> NCM</div>
-                                                            <div className="flex items-center gap-2"><span className="opacity-70 text-[16px]">📍</span> {order.ncm_to_branch || order.city_name || '-'}</div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="opacity-70 text-[16px]">📍</span> 
+                                                                <span>{order.ncm_to_branch || order.city_name || '-'}</span>
+                                                                {order.courier_delivery_fee && (
+                                                                    <span className="text-[12px] font-[700] text-emerald-600 dark:text-emerald-400 ml-1.5 whitespace-nowrap">
+                                                                        (Est: Rs. {order.courier_delivery_fee})
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                             {order.courier_consignment_id && (
                                                                 <div className="flex items-center gap-2 mt-0.5 text-[12px] font-[500] text-slate-500 dark:text-slate-400">
                                                                     <Hash size={14} className="text-slate-400" /> {order.courier_consignment_id}

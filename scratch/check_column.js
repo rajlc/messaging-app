@@ -1,23 +1,29 @@
 const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config({ path: '../backend/.env' });
 
 async function checkColumn() {
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+  const supabase = createClient(
+    'https://jrcluodakvudjkwlrrxi.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpyY2x1b2Rha3Z1ZGprd2xycnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxODQ3NzgsImV4cCI6MjA4NDc2MDc3OH0.XtZdrmmG1YUAj22GPCZB0E48TtY-CdPlmdIGZYECk0s'
+  );
   
   const { data, error } = await supabase
     .from('orders')
-    .select('package_description')
+    .select('*')
     .limit(1);
 
   if (error) {
     console.error('Column check failed:', error.message);
-    if (error.message.includes('column "package_description" does not exist')) {
-        console.log('MISSING COLUMN detected.');
-    }
   } else {
-    console.log('Column "package_description" exists.');
-    console.log('Sample data:', data);
+    console.log('Available columns in "orders":');
+    if (data && data.length > 0) {
+      console.log(Object.keys(data[0]));
+      console.log('Sample row:', data[0]);
+    } else {
+      console.log('No rows found in "orders" table.');
+    }
   }
 }
 
 checkColumn();
+
+

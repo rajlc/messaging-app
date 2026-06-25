@@ -44,6 +44,12 @@ import axios from 'axios';
 
 const { width } = Dimensions.get('window');
 
+const hasPhoneNumber = (text: string) => {
+    if (!text) return false;
+    const phoneRegex = /(?:\b9[78]\d{8}\b)|(?:\b\d{10}\b)/;
+    return phoneRegex.test(text);
+};
+
 export default function HomeScreen({ navigation }: any) {
     const insets = useSafeAreaInsets();
     const { user, token } = useAuth();
@@ -448,27 +454,37 @@ export default function HomeScreen({ navigation }: any) {
                             <Text style={styles.emptyText}>No recent chats</Text>
                         </View>
                     ) : (
-                        recentChats.map((chat) => (
-                            <TouchableOpacity 
-                                key={chat.id} 
-                                style={styles.chatCard}
-                                onPress={() => navigation.navigate('Messages', { screen: 'ChatDetail', params: { conversationId: chat.id, customerName: chat.customer_name } })}
-                            >
-                                <Image 
-                                    source={{ uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.customer_name)}&background=random` }} 
-                                    style={styles.chatAvatar} 
-                                />
-                                <View style={styles.chatInfo}>
-                                    <View style={styles.chatHeader}>
-                                        <Text style={styles.chatName}>{chat.customer_name}</Text>
-                                        <Text style={styles.chatTime}>
-                                            {chat.last_message_at ? new Date(chat.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                                        </Text>
+                        recentChats.map((chat) => {
+                            const containsPhone = chat.has_phone_number || hasPhoneNumber(chat.last_message) || hasPhoneNumber(chat.customer_name);
+                            return (
+                                <TouchableOpacity 
+                                    key={chat.id} 
+                                    style={styles.chatCard}
+                                    onPress={() => navigation.navigate('Messages', { screen: 'ChatDetail', params: { conversationId: chat.id, customerName: chat.customer_name, platform: chat.platform } })}
+                                >
+                                    <Image 
+                                        source={{ uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.customer_name)}&background=random` }} 
+                                        style={styles.chatAvatar} 
+                                    />
+                                    <View style={styles.chatInfo}>
+                                        <View style={styles.chatHeader}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                                                <Text style={styles.chatName} numberOfLines={1}>{chat.customer_name}</Text>
+                                                {containsPhone && (
+                                                    <View style={styles.phoneBadge}>
+                                                        <Text style={styles.phoneBadgeText}>N</Text>
+                                                    </View>
+                                                )}
+                                            </View>
+                                            <Text style={styles.chatTime}>
+                                                {chat.last_message_at ? new Date(chat.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                            </Text>
+                                        </View>
+                                        <Text style={styles.chatSnippet} numberOfLines={1}>{chat.last_message || 'No messages'}</Text>
                                     </View>
-                                    <Text style={styles.chatSnippet} numberOfLines={1}>{chat.last_message || 'No messages'}</Text>
-                                </View>
-                            </TouchableOpacity>
-                        ))
+                                </TouchableOpacity>
+                            );
+                        })
                     )}
                 </View>
             </ScrollView>
@@ -770,4 +786,19 @@ const styles = StyleSheet.create({
     chatSnippet: { fontSize: 13, color: Colors.textSecondary },
     emptyCard: { padding: 30, alignItems: 'center', backgroundColor: Colors.white, borderRadius: Radius.l, borderStyle: 'dashed', borderWidth: 1, borderColor: Colors.border },
     emptyText: { color: Colors.textSecondary, fontStyle: 'italic' },
+    phoneBadge: {
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: '#10B981',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 6,
+    },
+    phoneBadgeText: {
+        color: Colors.white,
+        fontSize: 9,
+        fontWeight: '900',
+        lineHeight: 11,
+    },
 });

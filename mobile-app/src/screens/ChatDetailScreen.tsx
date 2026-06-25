@@ -52,6 +52,7 @@ export default function ChatDetailScreen({ route, navigation }: any) {
     const [pageId, setPageId] = useState<string | null>(null);
     const [pageName, setPageName] = useState<string | null>(null);
     const [platformName, setPlatformName] = useState<string | null>(null);
+    const isMarketplace = platform === 'facebook_marketplace' || platformName === 'facebook_marketplace';
     const [showQuickReplies, setShowQuickReplies] = useState(false);
     const [quickReplies, setQuickReplies] = useState<{ title: string, message: string }[]>([]);
     const [loading, setLoading] = useState(true);
@@ -443,12 +444,20 @@ export default function ChatDetailScreen({ route, navigation }: any) {
         <View style={styles.container}>
             {/* Custom Header stays at the top */}
             <View style={[styles.header, { paddingTop: insets.top }]}>
-                <View style={{ width: 12 }} />
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                    <ChevronLeft size={24} color={Colors.primary} />
+                </TouchableOpacity>
                 <Image source={{ uri: avatarUrl }} style={styles.headerAvatar} />
                 <View style={styles.headerInfo}>
                     <Text style={styles.headerName} numberOfLines={1}>{customerName}</Text>
                     <Text style={styles.headerStatus}>Active now</Text>
                 </View>
+
+                {isMarketplace && (
+                    <TouchableOpacity onPress={handleCreateOrder} style={styles.headerPlusButton}>
+                        <Plus size={24} color={Colors.primary} />
+                    </TouchableOpacity>
+                )}
 
                 {latestOrder && (
                     <TouchableOpacity
@@ -510,7 +519,7 @@ export default function ChatDetailScreen({ route, navigation }: any) {
                     )}
 
                     {/* Quick Replies Modal/Sheet */}
-                    {showQuickReplies && (
+                    {!isMarketplace && showQuickReplies && (
                         <View style={styles.quickRepliesContainer}>
                             <Text style={styles.quickReplyTitle}>Quick Replies</Text>
                             <View style={styles.quickReplyGrid}>
@@ -530,40 +539,42 @@ export default function ChatDetailScreen({ route, navigation }: any) {
                         </View>
                     )}
 
-                    <View style={[
-                        styles.inputBar,
-                        { paddingBottom: Math.max(insets.bottom, Spacing.s) }
-                    ]}>
-                        <TouchableOpacity style={styles.inputAction} onPress={pickImage}>
-                            <Camera size={24} color={Colors.primary} />
-                        </TouchableOpacity>
-                        <View style={styles.inputContainer}>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Message..."
-                                value={inputText}
-                                onChangeText={setInputText}
-                                multiline
-                            />
-                        </View>
-
-                        <TouchableOpacity
-                            style={styles.inputAction}
-                            onPress={() => setShowQuickReplies(!showQuickReplies)}
-                        >
-                            <MessageCircle size={24} color={Colors.primary} />
-                        </TouchableOpacity>
-
-                        <TouchableOpacity style={styles.inputAction} onPress={handleCreateOrder}>
-                            <Plus size={24} color={Colors.primary} />
-                        </TouchableOpacity>
-
-                        {inputText.trim() ? (
-                            <TouchableOpacity onPress={() => handleSend()} disabled={sending} style={styles.sendButton}>
-                                <Send size={24} color={Colors.primary} />
+                    {!isMarketplace && (
+                        <View style={[
+                            styles.inputBar,
+                            { paddingBottom: Math.max(insets.bottom, Spacing.s) }
+                        ]}>
+                            <TouchableOpacity style={styles.inputAction} onPress={pickImage}>
+                                <Camera size={24} color={Colors.primary} />
                             </TouchableOpacity>
-                        ) : null}
-                    </View>
+                            <View style={styles.inputContainer}>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Message..."
+                                    value={inputText}
+                                    onChangeText={setInputText}
+                                    multiline
+                                />
+                            </View>
+
+                            <TouchableOpacity
+                                style={styles.inputAction}
+                                onPress={() => setShowQuickReplies(!showQuickReplies)}
+                            >
+                                <MessageCircle size={24} color={Colors.primary} />
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.inputAction} onPress={handleCreateOrder}>
+                                <Plus size={24} color={Colors.primary} />
+                            </TouchableOpacity>
+
+                            {inputText.trim() ? (
+                                <TouchableOpacity onPress={() => handleSend()} disabled={sending} style={styles.sendButton}>
+                                    <Send size={24} color={Colors.primary} />
+                                </TouchableOpacity>
+                            ) : null}
+                        </View>
+                    )}
                 </View>
             </KeyboardAvoidingView>
 
@@ -642,6 +653,10 @@ const styles = StyleSheet.create({
     },
     backButton: {
         padding: Spacing.s,
+    },
+    headerPlusButton: {
+        padding: Spacing.s,
+        marginRight: Spacing.xs,
     },
     headerAvatar: {
         width: 36,

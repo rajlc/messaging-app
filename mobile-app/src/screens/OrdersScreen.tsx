@@ -39,7 +39,7 @@ import { supabase } from '../api/supabase';
 import { format, startOfDay, endOfDay } from 'date-fns';
 
 type TabType = 'Today' | 'Order' | 'Summary' | 'Logistics';
-type SubTabType = 'Pending' | 'Confirmed' | 'Packed' | 'Shipped';
+type SubTabType = 'Pending' | 'Confirmed' | 'Packed' | 'Shipped' | 'Delivered';
 type ViewMode = 'dashboard' | 'list' | 'redirects';
 
 export default function OrdersScreen({ navigation }: any) {
@@ -48,6 +48,7 @@ export default function OrdersScreen({ navigation }: any) {
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const [activeTab, setActiveTab] = useState<TabType>('Today');
   const [activeSubTab, setActiveSubTab] = useState<SubTabType>('Pending');
+  const [deliveredOption, setDeliveredOption] = useState<'all' | 'shipped_delivered' | 'delivered_only'>('all');
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -124,23 +125,7 @@ export default function OrdersScreen({ navigation }: any) {
     } else {
       fetchDashboardStats();
     }
-
-    const channel = supabase
-      .channel('orders_realtime_main')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        if (viewMode === 'list' || viewMode === 'redirects') {
-          fetchOrders();
-          if (activeTab === 'Today') fetchDashboardStats();
-        } else {
-          fetchDashboardStats();
-        }
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [viewMode, activeTab, activeSubTab, statusFilter, logisticFilter, startDate, endDate, searchQuery, navigation]);
+  }, [viewMode, activeTab, activeSubTab, deliveredOption, statusFilter, logisticFilter, startDate, endDate, searchQuery]);
 
   useLayoutEffect(() => {
     // Signal tab bar visibility to parent navigator via params
@@ -204,18 +189,17 @@ export default function OrdersScreen({ navigation }: any) {
 
 
 
-  const fetchDashboardStats = async () => {
-    setLoading(true);
+  const fetchDashboardStats = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
       const todayStart = startOfDay(new Date()).toISOString();
-      const todayEnd = endOfDay(new Date()).toISOString();
       const today = new Date();
 
-      // Fetch orders that were either created or updated today to capture all "work done today"
+      // Fetch active orders and orders created or updated today
       const { data: allOrders, error } = await supabase
         .from('orders')
         .select('order_status, created_at, packed_at, shipped_at, delivered_at, order_status_history(*)')
-        .or(`created_at.gte.${todayStart},updated_at.gte.${todayStart}`);
+        .or(`order_status.in.("New Order","Follow up again","Confirmed Order","Ready to Ship","Packed"),created_at.gte.${todayStart},updated_at.gte.${todayStart}`);
 
       if (error) throw error;
 
@@ -226,48 +210,47 @@ export default function OrdersScreen({ navigation }: any) {
         d1.getFullYear() === d2.getFullYear();
 
       const counts = {
-        // 1. Today's Orders (Created Today)
+        // Pending: All "New Order" or "Follow up again" regardless of date
         pending: filtered.filter(o => 
-          (o.order_status === 'New Order' || o.order_status === 'Follow up again') && 
-          isSameDay(new Date(o.created_at), today)
+          o.order_status === 'New Order' || o.order_status === 'Follow up again'
         ).length,
+        // Confirmed: All "Confirmed Order" regardless of date
         confirmed: filtered.filter(o => 
-          o.order_status === 'Confirmed Order' && 
-          isSameDay(new Date(o.created_at), today)
+          o.order_status === 'Confirmed Order'
         ).length,
+        // Packed: All "Ready to Ship" or "Packed" regardless of date
         packed: filtered.filter(o => 
-          (o.order_status === 'Packed' || o.order_status === 'Ready to Ship') && 
-          isSameDay(new Date(o.created_at), today)
+          o.order_status === 'Ready to Ship' || o.order_status === 'Packed'
         ).length,
-        shipped: filtered.filter(o => 
-          o.order_status === 'Shipped' && 
-          isSameDay(new Date(o.created_at), today)
-        ).length,
-
-        // 2. Work Done Today (Action happened today)
-        shippedToday: filtered.filter(o => {
+        // Shipped: ONLY if shipped today
+        shipped: filtered.filter(o => {
+          const allowedShippedStatuses = ['Shipped', 'Arrived at Branch', 'Delivery Process', 'Hold', 'Delivery Failed', 'Return Process'];
+          if (!allowedShippedStatuses.includes(o.order_status)) return false;
           if (o.shipped_at) return isSameDay(new Date(o.shipped_at), today);
           return (o.order_status_history || []).some((h: any) => 
             h.status?.trim() === 'Shipped' && 
             isSameDay(new Date(h.changed_at), today)
           );
         }).length,
-        deliveredToday: filtered.filter(o => {
+        // Delivered: ONLY if delivered today
+        delivered: filtered.filter(o => {
           if (o.delivered_at) return isSameDay(new Date(o.delivered_at), today);
           return (o.order_status_history || []).some((h: any) => 
             h.status?.trim() === 'Delivered' && 
             isSameDay(new Date(h.changed_at), today)
           );
         }).length,
-        
-        delivered: filtered.filter(o => 
-          o.order_status === 'Delivered' && 
-          isSameDay(new Date(o.created_at), today)
-        ).length,
-        
+
+        // Backward compatibility properties:
+        shippedToday: 0,
+        deliveredToday: 0,
         totalToday: filtered.filter((o: any) => isSameDay(new Date(o.created_at), today)).length,
         redirectCount: filtered.filter((o: any) => ['Delivery Failed', 'Hold', 'Return Process'].includes(o.order_status)).length
       };
+
+      counts.shippedToday = counts.shipped;
+      counts.deliveredToday = counts.delivered;
+
       setStats(counts);
 
       // Fetch ALL redirects (not just today's) for the badge count to be accurate
@@ -325,7 +308,7 @@ export default function OrdersScreen({ navigation }: any) {
     } catch (err) {
       console.error('Error fetching dashboard stats:', err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -411,8 +394,8 @@ export default function OrdersScreen({ navigation }: any) {
     });
   }, [orders, selectedDateForSummary, detailedSummaryStatusFilter]);
 
-  const fetchOrders = async () => {
-    setLoading(true);
+  const fetchOrders = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
       let query = supabase.from('orders').select('*, order_status_history(*)');
 
@@ -426,7 +409,9 @@ export default function OrdersScreen({ navigation }: any) {
         } else if (activeSubTab === 'Packed') {
           query = query.in('order_status', ['Ready to Ship', 'Packed']);
         } else if (activeSubTab === 'Shipped') {
-          query = query.eq('order_status', 'Shipped');
+          query = query.in('order_status', ['Shipped', 'Arrived at Branch', 'Delivery Process', 'Hold', 'Delivery Failed', 'Return Process']);
+        } else if (activeSubTab === 'Delivered') {
+          query = query.eq('order_status', 'Delivered');
         }
       }
 
@@ -436,23 +421,6 @@ export default function OrdersScreen({ navigation }: any) {
       if (error) throw error;
 
       let finalData = data || [];
-
-      // Local filter for Packed sub-tab (history check)
-      if (activeTab === 'Today' && activeSubTab === 'Packed') {
-        const today = new Date();
-        const isSameDay = (d1: Date, d2: Date) =>
-          d1.getDate() === d2.getDate() &&
-          d1.getMonth() === d2.getMonth() &&
-          d1.getFullYear() === d2.getFullYear();
-
-        finalData = finalData.filter(o => {
-          if (o.packed_at) return isSameDay(new Date(o.packed_at), today);
-          return (o.order_status_history || []).some((h: any) => {
-            const hStatus = (h.status || '').trim();
-            return (hStatus === 'Ready to Ship' || hStatus === 'Packed') && isSameDay(new Date(h.changed_at), today);
-          });
-        });
-      }
 
       // Local filter for Shipped sub-tab — shipped_at OR status_history fallback
       if (activeTab === 'Today' && activeSubTab === 'Shipped') {
@@ -469,6 +437,52 @@ export default function OrdersScreen({ navigation }: any) {
           return (o.order_status_history || []).some((h: any) => {
             return (h.status || '').trim() === 'Shipped' && isSameDay(new Date(h.changed_at), today);
           });
+        });
+      }
+
+      // Local filter for Delivered sub-tab
+      if (activeTab === 'Today' && activeSubTab === 'Delivered') {
+        const today = new Date();
+        const isSameDay = (d1: Date, d2: Date) =>
+          d1.getDate() === d2.getDate() &&
+          d1.getMonth() === d2.getMonth() &&
+          d1.getFullYear() === d2.getFullYear();
+
+        finalData = finalData.filter(o => {
+          // 1. Delivered today check
+          let deliveredToday = false;
+          if (o.delivered_at) {
+            if (isSameDay(new Date(o.delivered_at), today)) {
+              deliveredToday = true;
+            }
+          } else {
+            deliveredToday = (o.order_status_history || []).some((h: any) => {
+              return (h.status || '').trim() === 'Delivered' && isSameDay(new Date(h.changed_at), today);
+            });
+          }
+
+          if (!deliveredToday) return false;
+
+          // 2. Shipped today check
+          let shippedToday = false;
+          if (o.shipped_at) {
+            if (isSameDay(new Date(o.shipped_at), today)) {
+              shippedToday = true;
+            }
+          } else {
+            shippedToday = (o.order_status_history || []).some((h: any) => {
+              return (h.status || '').trim() === 'Shipped' && isSameDay(new Date(h.changed_at), today);
+            });
+          }
+
+          if (deliveredOption === 'all') {
+            return true;
+          } else if (deliveredOption === 'shipped_delivered') {
+            return shippedToday;
+          } else if (deliveredOption === 'delivered_only') {
+            return !shippedToday;
+          }
+          return false;
         });
       }
 
@@ -495,9 +509,41 @@ export default function OrdersScreen({ navigation }: any) {
     } catch (err) {
       console.error('Error fetching orders:', err);
     } finally {
+      if (showLoading) setLoading(false);
+    }
+  };
+
+  const refreshData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([
+        fetchOrders(false),
+        fetchDashboardStats(false)
+      ]);
+    } catch (err) {
+      console.error('Error refreshing data:', err);
+    } finally {
       setLoading(false);
     }
   };
+
+  const refreshDataRef = React.useRef(refreshData);
+  useEffect(() => {
+    refreshDataRef.current = refreshData;
+  });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('orders_realtime_main')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        refreshDataRef.current();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const openFilterModal = (type: 'status' | 'branch' | 'logistics') => {
     setFilterType(type);
@@ -523,7 +569,7 @@ export default function OrdersScreen({ navigation }: any) {
 
               if (error) throw error;
               // Refresh list
-              fetchOrders();
+              refreshData();
             } catch (err: any) {
               Alert.alert('Error', err.message);
             } finally {
@@ -575,7 +621,7 @@ export default function OrdersScreen({ navigation }: any) {
               });
               if (response.data.success) {
                 Alert.alert('Success', 'Order shipped successfully! Consignment ID: ' + response.data.data.consignment_id);
-                fetchOrders();
+                refreshData();
               }
             } catch (error: any) {
               console.error('Failed to ship order', error);
@@ -611,7 +657,7 @@ export default function OrdersScreen({ navigation }: any) {
               if (res.data?.success) {
                 const d = res.data.data;
                 Alert.alert('Success', `✅ Shipped via Pick & Drop!\nPND Order ID: ${d.pndOrderId}`);
-                fetchOrders();
+                refreshData();
               } else {
                 Alert.alert('Error', 'Failed: ' + (res.data?.error || 'Unknown error'));
               }
@@ -648,7 +694,7 @@ export default function OrdersScreen({ navigation }: any) {
               });
               if (res.data?.success) {
                 Alert.alert('Success', `✅ Shipped via NCM!\nConsignment ID: ${res.data.orderId}`);
-                fetchOrders();
+                refreshData();
               } else {
                 Alert.alert('Error', 'Failed: ' + (res.data?.error || 'Unknown error'));
               }
@@ -680,7 +726,7 @@ export default function OrdersScreen({ navigation }: any) {
               }, {
                 headers: { 'Authorization': `Bearer ${token}` }
               });
-              fetchOrders();
+              refreshData();
               setStatusMenuOrder(null);
             } catch (error) {
               console.error('Failed to update status', error);
@@ -705,7 +751,7 @@ export default function OrdersScreen({ navigation }: any) {
       if (response.data.success) {
         if (response.data.data.newStatus) {
           Alert.alert('Success', `✅ Sync complete! Status updated to: ${response.data.data.newStatus}`);
-          fetchOrders();
+          refreshData();
         } else {
           Alert.alert('Info', 'ℹ️ Status is already up to date.');
         }
@@ -728,7 +774,7 @@ export default function OrdersScreen({ navigation }: any) {
       if (response.data.success) {
         if (response.data.newStatus) {
           Alert.alert('Success', `✅ Sync complete! Status updated to: ${response.data.newStatus}`);
-          fetchOrders();
+          refreshData();
         } else {
           Alert.alert('Info', 'ℹ️ Status is already up to date.');
         }
@@ -755,7 +801,7 @@ export default function OrdersScreen({ navigation }: any) {
               await axios.post(`${API_URL}/api/orders/${orderId}/cancel-assignment`, {}, {
                 headers: { 'Authorization': `Bearer ${token}` }
               });
-              fetchOrders();
+              refreshData();
             } catch (error: any) {
               console.error('Failed to unassign rider', error);
               Alert.alert('Error', 'Failed to unassign: ' + (error.response?.data?.message || error.message));
@@ -833,8 +879,7 @@ export default function OrdersScreen({ navigation }: any) {
             Alert.alert('Bulk Process Complete', `✅ Success: ${successCount}\n❌ Failed: ${failCount}`);
             setSelectedOrderIds([]);
             setSelectionMode(false);
-            fetchOrders();
-            fetchDashboardStats();
+            refreshData();
           }
         }
       ]
@@ -855,13 +900,22 @@ export default function OrdersScreen({ navigation }: any) {
           refreshing={isRefreshing}
           onRefresh={() => {
             setIsRefreshing(true);
-            fetchDashboardStats().finally(() => setIsRefreshing(false));
+            refreshData().finally(() => setIsRefreshing(false));
           }}
         />
       }
     >
-      {/* 1. Today Order Summary (Moved to Top) */}
-      <View style={[styles.summarySection, { marginTop: Spacing.m }]}>
+      {/* 1. View Details Button (Now on Top) */}
+      <TouchableOpacity
+        style={[styles.viewDetailsButton, { marginTop: Spacing.m }]}
+        onPress={() => setViewMode('list')}
+      >
+        <Text style={styles.viewDetailsText}>View Order Details</Text>
+        <ArrowRight size={20} color={Colors.primary} />
+      </TouchableOpacity>
+
+      {/* 2. Today Order Summary */}
+      <View style={styles.summarySection}>
         <Text style={styles.sectionHeader}>Today Order Summary</Text>
         <View style={styles.summaryGrid2x2}>
           <SummaryCard 
@@ -892,43 +946,17 @@ export default function OrdersScreen({ navigation }: any) {
             style={{ width: '48%' }} 
             onPress={() => { setViewMode('list'); setActiveTab('Today'); setActiveSubTab('Shipped'); }}
           />
+          <SummaryCard 
+            label="Delivered" 
+            count={stats.delivered} 
+            color="#166534" bg="#DCFCE7" 
+            style={{ width: '48%' }} 
+            onPress={() => { setViewMode('list'); setActiveTab('Today'); setActiveSubTab('Delivered'); }}
+          />
         </View>
       </View>
 
-      {/* Possible Redirect Box (Kept near summary) */}
-      <TouchableOpacity 
-        style={styles.redirectBox}
-        onPress={() => setViewMode('redirects')}
-      >
-        <View style={styles.redirectContent}>
-          <Text style={styles.redirectLabel}>Possible Redirect</Text>
-          <Text style={styles.redirectCount}>{stats.redirectCount || 0}</Text>
-        </View>
-        <ArrowRight size={24} color={Colors.primary} />
-      </TouchableOpacity>
-
-      {/* 2. View Details Button (Below Summary) */}
-      <TouchableOpacity
-        style={styles.viewDetailsButton}
-        onPress={() => setViewMode('list')}
-      >
-        <Text style={styles.viewDetailsText}>View Order Details</Text>
-        <ArrowRight size={20} color={Colors.primary} />
-      </TouchableOpacity>
-
-      {/* Today Work Summary (New Section) */}
-      <View style={styles.workDoneSection}>
-        <View style={[styles.workStatBox, { backgroundColor: '#F0F9FF', borderColor: '#BAE6FD' }]}>
-          <Text style={styles.workStatLabel}>Today Shipped Order</Text>
-          <Text style={[styles.workStatCount, { color: '#0369A1' }]}>{stats.shippedToday}</Text>
-        </View>
-        <View style={[styles.workStatBox, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
-          <Text style={styles.workStatLabel}>Today Delivered Order</Text>
-          <Text style={[styles.workStatCount, { color: '#15803D' }]}>{stats.deliveredToday}</Text>
-        </View>
-      </View>
-
-      {/* 3. Shortcuts (Below Button) */}
+      {/* 3. Shortcuts */}
       <View style={styles.summarySection}>
         <Text style={styles.sectionHeader}>Shortcuts</Text>
         <TouchableOpacity
@@ -942,7 +970,31 @@ export default function OrdersScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      {/* 4. Logistics Summary (Bottom) */}
+      {/* 4. Possible Redirect Box */}
+      <TouchableOpacity 
+        style={styles.redirectBox}
+        onPress={() => setViewMode('redirects')}
+      >
+        <View style={styles.redirectContent}>
+          <Text style={styles.redirectLabel}>Possible Redirect</Text>
+          <Text style={styles.redirectCount}>{stats.redirectCount || 0}</Text>
+        </View>
+        <ArrowRight size={24} color={Colors.primary} />
+      </TouchableOpacity>
+
+      {/* 5. Today Work Summary */}
+      <View style={styles.workDoneSection}>
+        <View style={[styles.workStatBox, { backgroundColor: '#F0F9FF', borderColor: '#BAE6FD' }]}>
+          <Text style={styles.workStatLabel}>Today Shipped Order</Text>
+          <Text style={[styles.workStatCount, { color: '#0369A1' }]}>{stats.shippedToday}</Text>
+        </View>
+        <View style={[styles.workStatBox, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+          <Text style={styles.workStatLabel}>Today Delivered Order</Text>
+          <Text style={[styles.workStatCount, { color: '#15803D' }]}>{stats.deliveredToday}</Text>
+        </View>
+      </View>
+
+      {/* 6. Logistics Summary */}
       <View style={styles.summarySection}>
         <Text style={styles.sectionHeader}>Logistics Summary</Text>
         {logisticsStats.map((item, index) => (
@@ -1441,7 +1493,7 @@ export default function OrdersScreen({ navigation }: any) {
               refreshing={isRefreshing}
               onRefresh={() => {
                 setIsRefreshing(true);
-                fetchOrders().finally(() => setIsRefreshing(false));
+                refreshData().finally(() => setIsRefreshing(false));
               }}
             />
           }
@@ -1550,7 +1602,7 @@ export default function OrdersScreen({ navigation }: any) {
           refreshing={isRefreshing}
           onRefresh={() => {
             setIsRefreshing(true);
-            fetchOrders().finally(() => setIsRefreshing(false));
+            refreshData().finally(() => setIsRefreshing(false));
           }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
@@ -1597,18 +1649,24 @@ export default function OrdersScreen({ navigation }: any) {
           {activeTab === 'Today' && (
             <View style={styles.subTabsContainer}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 20 }}>
-                {(['Pending', 'Confirmed', 'Packed', 'Shipped'] as SubTabType[]).map((subTab) => {
+                {(['Pending', 'Confirmed', 'Packed', 'Shipped', 'Delivered'] as SubTabType[]).map((subTab) => {
                   const count =
                     subTab === 'Pending' ? stats.pending :
                       subTab === 'Confirmed' ? stats.confirmed :
                         subTab === 'Packed' ? stats.packed :
-                          stats.shipped;
+                          subTab === 'Shipped' ? stats.shipped :
+                            stats.delivered;
 
                   return (
                     <TouchableOpacity
                       key={subTab}
                       style={[styles.subTab, activeSubTab === subTab && styles.activeSubTab]}
-                      onPress={() => setActiveSubTab(subTab)}
+                      onPress={() => {
+                        setActiveSubTab(subTab);
+                        if (subTab === 'Delivered') {
+                          setDeliveredOption('all');
+                        }
+                      }}
                     >
                       <Text style={[styles.subTabText, activeSubTab === subTab && styles.activeSubTabText]}>
                         {subTab} ({count})
@@ -1617,6 +1675,32 @@ export default function OrdersScreen({ navigation }: any) {
                   );
                 })}
               </ScrollView>
+            </View>
+          )}
+
+          {activeTab === 'Today' && activeSubTab === 'Delivered' && (
+            <View style={styles.deliveredOptionsContainer}>
+              {[
+                { key: 'all', label: 'All Orders' },
+                { key: 'shipped_delivered', label: 'Today Shipped Delivered' },
+                { key: 'delivered_only', label: 'Today Delivered Order' }
+              ].map((opt) => (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[
+                    styles.deliveredOptionChip,
+                    deliveredOption === opt.key && styles.activeDeliveredOptionChip
+                  ]}
+                  onPress={() => setDeliveredOption(opt.key as any)}
+                >
+                  <Text style={[
+                    styles.deliveredOptionChipText,
+                    deliveredOption === opt.key && styles.activeDeliveredOptionChipText
+                  ]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           )}
 
@@ -1629,7 +1713,7 @@ export default function OrdersScreen({ navigation }: any) {
                   placeholder="Search product name or address..."
                   value={searchQuery}
                   onChangeText={setSearchQuery}
-                  onSubmitEditing={fetchOrders}
+                  onSubmitEditing={() => { fetchOrders(); }}
                 />
                 {/* Clear Button - Always show if any filter/search is active */}
                 {(searchQuery || startDate || endDate || statusFilter || logisticFilter) ? (
@@ -1743,7 +1827,7 @@ export default function OrdersScreen({ navigation }: any) {
                       // We just need to stop refreshing eventually.
                       setTimeout(() => setIsRefreshing(false), 1000);
                     } else {
-                      fetchOrders().finally(() => setIsRefreshing(false));
+                      refreshData().finally(() => setIsRefreshing(false));
                     }
                   }}
                   ListEmptyComponent={
@@ -1784,7 +1868,7 @@ export default function OrdersScreen({ navigation }: any) {
           token={token}
           onClose={() => setAssigningOrder(null)}
           onAssigned={() => {
-            fetchOrders();
+            refreshData();
             if (assigningOrder.isBulk) {
               setSelectionMode(false);
               setSelectedOrderIds([]);
@@ -2666,6 +2750,36 @@ const styles = StyleSheet.create({
   },
   workStatCount: {
     fontSize: 22,
+    fontWeight: 'bold',
+  },
+  deliveredOptionsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.m,
+    paddingVertical: 8,
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    gap: 8,
+  },
+  deliveredOptionChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: Radius.m,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  activeDeliveredOptionChip: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#BBF7D0',
+  },
+  deliveredOptionChipText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.textSecondary,
+  },
+  activeDeliveredOptionChipText: {
+    color: '#166534',
     fontWeight: 'bold',
   },
 });

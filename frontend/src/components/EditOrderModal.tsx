@@ -196,7 +196,9 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
     const fetchPickDropBranches = async () => {
         try {
             const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/pickdrop/branches`);
-            setPickdropBranches(res.data || []);
+            if (res.data?.success) {
+                setPickdropBranches(res.data.data || []);
+            }
         } catch (err) {
             console.error('Failed to fetch Pick & Drop branches', err);
         }
@@ -279,14 +281,13 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
 
     const fetchPickDropRate = async () => {
         try {
-            const itemsTotal = editedOrder.items.reduce((sum: number, item: any) => sum + (item.qty * item.amount), 0);
-            const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/pickdrop/rate`, {
-                destination: selectedPickdropBranch,
+            const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/pickdrop/delivery-rate`, {
+                destination_branch: selectedPickdropBranch,
                 city_area: pickdropCityArea,
-                totalAmount: itemsTotal
+                package_weight: editedOrder?.weight || 1
             });
             if (res.data?.success) {
-                setPickdropDeliveryCost(res.data.rate);
+                setPickdropDeliveryCost(res.data.data?.total || res.data.data?.delivery_amount || 0);
             }
         } catch (err) {
             console.error('Failed to fetch PND rate', err);

@@ -19,6 +19,8 @@ import AdminRiderDetailScreen from '../screens/AdminRiderDetailScreen';
 import CampaignDetailsScreen from '../screens/CampaignDetailsScreen';
 import AdsManagementScreen from '../screens/AdsManagementScreen';
 import ProfitManagementScreen from '../screens/ProfitManagementScreen';
+import LogisticFinanceScreen from '../screens/LogisticFinanceScreen';
+import LogisticDetailScreen from '../screens/LogisticDetailScreen';
 import { startCallAssistant } from '../services/CallAssistantService';
 import { useEffect } from 'react';
 
@@ -59,6 +61,28 @@ export default function RootNavigator() {
                             <Stack.Screen name="AdminRiderDetail" component={AdminRiderDetailScreen} />
                             <Stack.Screen name="AdsManagement" component={AdsManagementScreen} />
                             <Stack.Screen name="ProfitManagement" component={ProfitManagementScreen} />
+                            <Stack.Screen 
+                                name="LogisticFinance" 
+                                component={LogisticFinanceScreen} 
+                                options={{ 
+                                    headerShown: true, 
+                                    title: 'Logistic Finance',
+                                    headerStyle: { backgroundColor: Colors.white },
+                                    headerTintColor: Colors.text,
+                                    headerTitleStyle: { fontWeight: 'bold' }
+                                }} 
+                            />
+                            <Stack.Screen 
+                                name="LogisticDetail" 
+                                component={LogisticDetailScreen} 
+                                options={({ route }: any) => ({ 
+                                    headerShown: true, 
+                                    title: route.params?.logistic?.name ? `${route.params.logistic.name} Details` : 'Logistic Details',
+                                    headerStyle: { backgroundColor: Colors.white },
+                                    headerTintColor: Colors.text,
+                                    headerTitleStyle: { fontWeight: 'bold' }
+                                })} 
+                            />
                             <Stack.Screen name="CampaignDetails" component={CampaignDetailsScreen} />
 
                         </>

@@ -19,6 +19,7 @@ import { Colors, Spacing, Radius } from '../theme/theme';
 import { Edit2, MessageCircle, Filter, ChevronDown, ChevronUp, X } from 'lucide-react-native';
 import { supabase } from '../api/supabase';
 import { format } from 'date-fns';
+
 interface Conversation {
     id: string;
     customer_name: string;
@@ -27,12 +28,20 @@ interface Conversation {
     platform: string;
     page_name: string;
     unread_count?: number;
+    customer_id?: string;
+    has_phone_number?: boolean;
     orders?: {
         order_number: string;
         order_status: string;
         created_at: string;
     }[];
 }
+
+const hasPhoneNumber = (text: string) => {
+    if (!text) return false;
+    const phoneRegex = /(?:\b9[78]\d{8}\b)|(?:\b\d{10}\b)/;
+    return phoneRegex.test(text);
+};
 
 const ConversationItem = ({ item, navigation }: { item: Conversation, navigation: any }) => {
     const formattedTime = item.last_message_at
@@ -42,13 +51,8 @@ const ConversationItem = ({ item, navigation }: { item: Conversation, navigation
     // Avatar placeholder based on platform or name
     const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.customer_name)}&background=random`;
 
-    const handlePress = () => {
-        // Navigate to ChatDetail with params
-        // We need navigation prop here or pass it down
-        // Navigation is passed to MessagesScreen, so we can use useNavigation or pass it from parent
-    };
+    const containsPhone = item.has_phone_number || hasPhoneNumber(item.last_message) || hasPhoneNumber(item.customer_name);
 
-    // Better to pass navigation/onPress from parent
     return (
         <TouchableOpacity style={styles.messageItem} onPress={() => {
             // @ts-ignore
@@ -62,14 +66,28 @@ const ConversationItem = ({ item, navigation }: { item: Conversation, navigation
         }}>
             <View style={styles.avatarContainer}>
                 <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-                <View style={[styles.platformBadge, { backgroundColor: item.platform === 'facebook' ? '#1877F2' : '#E4405F' }]}>
-                    <Text style={styles.platformText}>{item.platform[0].toUpperCase()}</Text>
+                <View style={[
+                    styles.platformBadge,
+                    {
+                        backgroundColor:
+                            item.platform === 'facebook_marketplace' ? '#00A400' :
+                            item.platform === 'facebook' ? '#1877F2' : '#E4405F'
+                    }
+                ]}>
+                    <Text style={styles.platformText}>
+                        {item.platform === 'facebook_marketplace' ? 'M' : item.platform[0].toUpperCase()}
+                    </Text>
                 </View>
             </View>
             <View style={styles.messageContent}>
                 <View style={styles.messageHeader}>
                     <View style={styles.nameAndBadge}>
                         <Text style={styles.userName} numberOfLines={1}>{item.customer_name}</Text>
+                        {containsPhone && (
+                            <View style={styles.phoneBadge}>
+                                <Text style={styles.phoneBadgeText}>N</Text>
+                            </View>
+                        )}
                         {item.orders && item.orders.length > 0 && (
                             <View style={[
                                 styles.statusBadge,
@@ -231,7 +249,13 @@ export default function MessagesScreen({ navigation }: any) {
     }, []);
 
     const filteredConversations = conversations.filter(conv => {
-        if (activeTab !== 'Messages') return true; // Only filter messages
+        if (activeTab === 'Messages') {
+            if (conv.platform === 'facebook_marketplace') return false;
+        } else if (activeTab === 'Marketplace') {
+            if (conv.platform !== 'facebook_marketplace') return false;
+        } else if (activeTab === 'Comments') {
+            return true;
+        }
 
         const latestOrder = conv.orders && conv.orders[0];
         const matchesStatus = !statusFilter || latestOrder?.order_status === statusFilter;
@@ -307,7 +331,12 @@ export default function MessagesScreen({ navigation }: any) {
 
                 {/* Tab Switcher Row */}
                 <View style={styles.tabRow}>
-                    <View style={styles.tabContainer}>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.tabContainer}
+                        contentContainerStyle={{ flexDirection: 'row', alignItems: 'center' }}
+                    >
                         <TouchableOpacity
                             style={[styles.tab, activeTab === 'Messages' && styles.activeTab]}
                             onPress={() => setActiveTab('Messages')}
@@ -315,14 +344,20 @@ export default function MessagesScreen({ navigation }: any) {
                             <Text style={[styles.tabText, activeTab === 'Messages' && styles.activeTabText]}>Messages</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
+                            style={[styles.tab, activeTab === 'Marketplace' && styles.activeTab]}
+                            onPress={() => setActiveTab('Marketplace')}
+                        >
+                            <Text style={[styles.tabText, activeTab === 'Marketplace' && styles.activeTabText]}>Marketplace</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
                             style={[styles.tab, activeTab === 'Comments' && styles.activeTab]}
                             onPress={() => setActiveTab('Comments')}
                         >
                             <Text style={[styles.tabText, activeTab === 'Comments' && styles.activeTabText]}>Comments</Text>
                         </TouchableOpacity>
-                    </View>
+                    </ScrollView>
 
-                    {activeTab === 'Messages' && (
+                    {(activeTab === 'Messages' || activeTab === 'Marketplace') && (
                         <TouchableOpacity
                             style={[styles.filterButton, showFilters && styles.activeFilterButton]}
                             onPress={() => setShowFilters(!showFilters)}
@@ -333,7 +368,7 @@ export default function MessagesScreen({ navigation }: any) {
                 </View>
 
                 {/* Compact Filter Panel */}
-                {showFilters && activeTab === 'Messages' && (
+                {showFilters && (activeTab === 'Messages' || activeTab === 'Marketplace') && (
                     <View style={styles.filterRowCompact}>
                         <TouchableOpacity
                             style={[styles.dropdownButton, statusFilter && styles.activeDropdownButton]}
@@ -655,5 +690,20 @@ const styles = StyleSheet.create({
         marginTop: Spacing.m,
         fontSize: 16,
         color: Colors.textSecondary,
+    },
+    phoneBadge: {
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: '#10B981',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 6,
+    },
+    phoneBadgeText: {
+        color: Colors.white,
+        fontSize: 9,
+        fontWeight: '900',
+        lineHeight: 11,
     },
 });
