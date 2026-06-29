@@ -49,3 +49,35 @@ chrome.runtime.onConnect.addListener((port) => {
     });
   }
 });
+
+// Fetch proxy listener to bypass CSP of injected pages
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message && message.type === 'fetchProxy') {
+    const { url, options } = message;
+    fetch(url, options)
+      .then(async (response) => {
+        const contentType = response.headers.get('content-type') || '';
+        let body;
+        if (contentType.includes('application/json')) {
+          body = await response.json();
+        } else {
+          body = await response.text();
+        }
+        sendResponse({
+          ok: response.ok,
+          status: response.status,
+          statusText: response.statusText,
+          body: body
+        });
+      })
+      .catch((error) => {
+        console.error('[Marketplace Assistant] Fetch proxy error:', error);
+        sendResponse({
+          ok: false,
+          error: error.message
+        });
+      });
+    return true; // Keep the message channel open for async sendResponse
+  }
+});
+

@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, Suspense, useCallback, Fragment } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
-import { Send, Instagram, Facebook, MessageCircle, ShoppingCart, ShoppingBag, Settings, Eye, Zap, Truck, Package, User, Image as ImageIcon, Paperclip, X, Camera, Reply, Edit2, Calendar, MapPin, Phone, Info, ClipboardList } from 'lucide-react';
+import { Send, Instagram, Facebook, MessageCircle, ShoppingCart, ShoppingBag, Settings, Eye, Zap, Truck, Package, User, Image as ImageIcon, Paperclip, X, Camera, Reply, Edit2, Calendar, MapPin, Phone, Info, ClipboardList, Tag } from 'lucide-react';
 import OrderModal from '@/components/OrderModal';
 import ViewOrderModal from '@/components/ViewOrderModal';
 import QuickReplyModal from '@/components/QuickReplyModal';
@@ -81,6 +81,8 @@ type Conversation = {
   orderCount?: number;
   hasPhoneNumber?: boolean;
   customerProfilePic?: string;
+  productName?: string;
+  productPrice?: string;
 };
 
 // Define PageInfo type based on its usage
@@ -465,7 +467,9 @@ function UnifiedInboxContent() {
             pageId: conv.page_id,
             platform: conv.platform,
             hasPhoneNumber: !!conv.has_phone_number,
-            customerProfilePic: conv.customer_profile_pic
+            customerProfilePic: conv.customer_profile_pic,
+            productName: conv.product_name,
+            productPrice: conv.product_price
           };
         });
 
@@ -590,7 +594,9 @@ function UnifiedInboxContent() {
             lastMessage: message.text,
             timestamp: new Date(),
             unreadCount: shouldIncrementUnread ? c.unreadCount + 1 : 0,
-            hasPhoneNumber: c.hasPhoneNumber || (senderRole === 'customer' && hasPhoneNumber(message.text))
+            hasPhoneNumber: c.hasPhoneNumber || (senderRole === 'customer' && hasPhoneNumber(message.text)),
+            productName: c.productName || message.productName,
+            productPrice: c.productPrice || message.productPrice
           };
           return newConvs.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
         } else {
@@ -606,7 +612,9 @@ function UnifiedInboxContent() {
               pageName: connectedPages.find(p => p.page_id === message.pageId)?.page_name,
               platform: message.platform || 'facebook',
               customerProfilePic: message.customerProfilePic,
-              hasPhoneNumber: (senderRole === 'customer' && hasPhoneNumber(message.text)) || hasPhoneNumber(conversationId)
+              hasPhoneNumber: (senderRole === 'customer' && hasPhoneNumber(message.text)) || hasPhoneNumber(conversationId),
+              productName: message.productName,
+              productPrice: message.productPrice
             },
             ...prev
           ];
@@ -1341,8 +1349,8 @@ function UnifiedInboxContent() {
                 >
                   <div className="flex items-center gap-4">
                     <div className="relative">
-                      <div className={`w-14 h-14 rounded-full flex items-center justify-center text-white text-xl font-bold overflow-hidden transition-transform ${activeConversationId === convKey ? 'scale-110 shadow-lg' : ''} ${conv.customerId.length % 2 === 0 ? 'bg-gradient-to-br from-blue-500 to-indigo-600' :
-                        conv.customerId.length % 3 === 0 ? 'bg-gradient-to-br from-purple-500 to-pink-600' :
+                      <div className={`w-14 h-14 rounded-full flex items-center justify-center text-white text-xl font-bold overflow-hidden transition-transform ${activeConversationId === convKey ? 'scale-110 shadow-lg' : ''} ${(conv.customerId || '').length % 2 === 0 ? 'bg-gradient-to-br from-blue-500 to-indigo-600' :
+                        (conv.customerId || '').length % 3 === 0 ? 'bg-gradient-to-br from-purple-500 to-pink-600' :
                           'bg-gradient-to-br from-teal-400 to-emerald-500'
                         }`}>
                         {conv.customerProfilePic ? (
@@ -1602,6 +1610,24 @@ function UnifiedInboxContent() {
                   <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5">Customer Details</span>
                 </div>
               </div>
+
+              {conversationType === 'marketplace' && activeConversation && (activeConversation.productName || activeConversation.productPrice) && (
+                <div className="bg-indigo-50/50 dark:bg-slate-800/40 border border-indigo-100/50 dark:border-slate-700/50 rounded-2xl p-4 mb-4">
+                  <div className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <Tag size={13} /> Listing Details
+                  </div>
+                  {activeConversation.productName && (
+                    <div className="text-[14px] font-black text-slate-800 dark:text-slate-100 leading-snug break-words">
+                      {activeConversation.productName}
+                    </div>
+                  )}
+                  {activeConversation.productPrice && (
+                    <div className="text-[14px] font-black text-emerald-600 dark:text-emerald-400 mt-1.5">
+                      {activeConversation.productPrice}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex gap-2 mb-4">
                 <button onClick={() => { setOrderModalMode('create'); setIsOrderModalOpen(true); }} className="flex-1 bg-indigo-600 text-white rounded-lg py-2 flex items-center justify-center gap-2 text-[15px] font-semibold hover:bg-indigo-700 transition-colors">

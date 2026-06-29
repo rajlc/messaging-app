@@ -1,3 +1,31 @@
+// Fetch proxy helper using extension message passing to bypass Facebook page CSP
+async function fetchProxy(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage({
+      type: 'fetchProxy',
+      url: url,
+      options: options
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        return reject(new Error(chrome.runtime.lastError.message));
+      }
+      if (!response) {
+        return reject(new Error('No response received from background proxy'));
+      }
+      if (response.error) {
+        return reject(new Error(response.error));
+      }
+      resolve({
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        json: async () => response.body,
+        text: async () => typeof response.body === 'string' ? response.body : JSON.stringify(response.body)
+      });
+    });
+  });
+}
+
 // Create and inject the Order Panel on Facebook/Messenger (Slides out to the left of the sidebar)
 window.MarketplaceOrderModal = {
   isOpen: false,
@@ -443,7 +471,7 @@ window.MarketplaceOrderModal = {
       btnSave.textContent = 'Saving...';
 
       try {
-        const res = await fetch(`${backendUrl}/api/orders`, {
+        const res = await fetchProxy(`${backendUrl}/api/orders`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -579,7 +607,7 @@ window.MarketplaceOrderModal = {
   },
 
   async fetchBackend(backendUrl, path, token) {
-    const res = await fetch(`${backendUrl}${path}`, {
+    const res = await fetchProxy(`${backendUrl}${path}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (res.ok) return await res.json();

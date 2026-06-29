@@ -15,11 +15,35 @@ let lastConnectTime = 0;
 let threadNoneSince = 0;
 let lastActiveThreadId = '';
 let activeProcessingMessageKey = '';
+let activeProcessingMessageSignature = '';
 let syncedCustomerNames = new Map();
-
-
-
-
+// Fetch proxy helper using extension message passing to bypass Facebook page CSP
+async function fetchProxy(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage({
+      type: 'fetchProxy',
+      url: url,
+      options: options
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        return reject(new Error(chrome.runtime.lastError.message));
+      }
+      if (!response) {
+        return reject(new Error('No response received from background proxy'));
+      }
+      if (response.error) {
+        return reject(new Error(response.error));
+      }
+      resolve({
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        json: async () => response.body,
+        text: async () => typeof response.body === 'string' ? response.body : JSON.stringify(response.body)
+      });
+    });
+  });
+}
 
 function queryOutsideSidebar(selector, all = false) {
   const elements = document.querySelectorAll(selector);
@@ -502,7 +526,7 @@ function renderSidebar() {
         statusDiv.style.display = 'none';
 
         try {
-          const res = await fetch(`${bUrl}/api/auth/login`, {
+          const res = await fetchProxy(`${bUrl}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
@@ -713,7 +737,7 @@ async function registerProfileWithBackend() {
   if (!token) return;
 
   try {
-    const res = await fetch(`${backendUrl}/api/pages`, {
+    const res = await fetchProxy(`${backendUrl}/api/pages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1319,15 +1343,20 @@ function checkActiveChatForUnrepliedMessage() {
     if (newCustomerMessages.length > 0) {
       // Use the last customer message text as the unique signature for keying
       const lastText = newCustomerMessages[newCustomerMessages.length - 1];
+      const combinedText = newCustomerMessages.join(' ');
       const cleanProdName = (productName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-      const messageKey = customerId + ':' + (cleanProdName || 'none') + ':' + lastText;
-      const lastSentAt = processedMessageTTL.get(messageKey) || 0;
       
-      // Only process if this exact message signature hasn't been processed within 5 mins
-      if ((now - lastSentAt) > 300000) {
+      const messageKey = customerId + ':' + (cleanProdName || 'none') + ':' + lastText;
+      const messageSignature = customerId + ':' + (cleanProdName || 'none') + ':' + combinedText;
+      
+      const lastSentAt = processedMessageSignatures.get(messageSignature) || 0;
+      
+      // Only process if this exact message signature (combined text) hasn't been processed within 12 hours
+      if ((now - lastSentAt) > 43200000) {
         logToUI("Found new unreplied messages: " + JSON.stringify(newCustomerMessages));
-        processedMessageTTL.set(messageKey, now);
+        processedMessageSignatures.set(messageSignature, now);
         activeProcessingMessageKey = messageKey;
+        activeProcessingMessageSignature = messageSignature;
         lastRepliedMessageKey = messageKey;
         handleNewMessage(newCustomerMessages);
       } else {
@@ -1353,7 +1382,7 @@ function checkActiveChatForUnrepliedMessage() {
   }
 }
 
-const processedMessageTTL = new Map(); // key: customerId+':'+text, value: timestamp when we last sent this
+const processedMessageSignatures = new Map(); // key: messageSignature, value: timestamp when we last sent this
 
 async function handleNewMessage(textOrArray) {
   const now = Date.now();
@@ -1386,7 +1415,7 @@ async function handleNewMessage(textOrArray) {
 
   try {
     logToUI("Fetching auto-response from backend...");
-    const response = await fetch(`${backendUrl}/api/webhooks/marketplace`, {
+    const response = await fetchProxy(`${backendUrl}/api/webhooks/marketplace`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1449,7 +1478,10 @@ async function handleNewMessage(textOrArray) {
         typingOrScheduledKey = '';
       }
       if (activeProcessingMessageKey) {
-        processedMessageTTL.delete(activeProcessingMessageKey);
+        if (activeProcessingMessageSignature) {
+          processedMessageSignatures.delete(activeProcessingMessageSignature);
+          activeProcessingMessageSignature = '';
+        }
         activeProcessingMessageKey = '';
       }
     }
@@ -1460,7 +1492,10 @@ async function handleNewMessage(textOrArray) {
       typingOrScheduledKey = '';
     }
     if (activeProcessingMessageKey) {
-      processedMessageTTL.delete(activeProcessingMessageKey);
+      if (activeProcessingMessageSignature) {
+        processedMessageSignatures.delete(activeProcessingMessageSignature);
+        activeProcessingMessageSignature = '';
+      }
       activeProcessingMessageKey = '';
     }
   }
@@ -1518,7 +1553,10 @@ function abortTyping(reason) {
     typingCustomerName = '';
   }
   if (activeProcessingMessageKey) {
-    processedMessageTTL.delete(activeProcessingMessageKey);
+    if (activeProcessingMessageSignature) {
+      processedMessageSignatures.delete(activeProcessingMessageSignature);
+      activeProcessingMessageSignature = '';
+    }
     activeProcessingMessageKey = '';
   }
   if (typingTimeoutId) {
@@ -1793,7 +1831,7 @@ async function checkBackendConnection() {
   if (!statusIndicator) return;
 
   try {
-    const res = await fetch(`${backendUrl}/api/logistics/cities`);
+    const res = await fetchProxy(`${backendUrl}/api/logistics/cities`);
     if (res.ok) {
       statusIndicator.innerHTML = `
         <span class="mkt-dot mkt-dot-online"></span>
@@ -1892,7 +1930,7 @@ function runPeriodicScan() {
 async function syncCustomerNameWithBackend(customerId, customerName) {
   if (!token) return;
   try {
-    const res = await fetch(`${backendUrl}/api/conversations/sync-name`, {
+    const res = await fetchProxy(`${backendUrl}/api/conversations/sync-name`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

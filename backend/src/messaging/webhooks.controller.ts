@@ -459,6 +459,20 @@ export class WebhooksController {
             // Purge stale entries occasionally to avoid memory growth
             if (Math.random() < 0.05) WebhooksController.purgeExpiredCacheEntries();
 
+            // Check if the last message in this conversation is already the exact same customer message
+            try {
+                const lastMessages = await supabaseService.getLastMessages(conversation.id, 1);
+                if (lastMessages && lastMessages.length > 0) {
+                    const lastMsg = lastMessages[0];
+                    if (lastMsg.sender === 'customer' && lastMsg.text === messageText) {
+                        console.log(`[Marketplace Guard] 🛡️ Duplicate message detected in DB for conversation ${conversation.id}: "${messageText.substring(0, 50)}". Skipping duplicate insert/processing.`);
+                        return res.status(HttpStatus.OK).json({ replyText: null, skipped: true, reason: 'duplicate_message_db' });
+                    }
+                }
+            } catch (dbErr: any) {
+                console.error('[Marketplace Guard] Error checking for duplicate message:', dbErr.message);
+            }
+
             // 5. Save Customer Message to DB (always, so it appears in chat history)
             const savedMessage = await supabaseService.saveMessage({
                 conversationId: conversation.id,
@@ -474,6 +488,8 @@ export class WebhooksController {
                 isOwnMessage: false,
                 conversationId: conversation.id,
                 customerName: customerName,
+                productName: conversation.product_name,
+                productPrice: conversation.product_price,
             });
 
             // 7. Check templates (Auto-Reply Rules)
@@ -520,6 +536,8 @@ export class WebhooksController {
                     timestamp: Date.now(),
                     isOwnMessage: true,
                     customerName: customerName,
+                    productName: conversation.product_name,
+                    productPrice: conversation.product_price,
                 });
 
                 return res.status(HttpStatus.OK).json({ replyText: combinedReply });
@@ -703,6 +721,8 @@ export class WebhooksController {
                         timestamp: Date.now(),
                         isOwnMessage: true,
                         customerName: customerName,
+                        productName: conversation.product_name,
+                        productPrice: conversation.product_price,
                     });
 
                     return res.status(HttpStatus.OK).json({ replyText });
