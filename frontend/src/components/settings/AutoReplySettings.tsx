@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Save, Globe, MessageSquare, Phone, ToggleLeft, ToggleRight, Loader2, ChevronRight, Facebook, Instagram, Store } from 'lucide-react';
+import { Plus, Trash2, Save, Globe, MessageSquare, Phone, ToggleLeft, ToggleRight, Loader2, ChevronRight, Facebook, Instagram, Store, Edit2 } from 'lucide-react';
 
 type AutoReplyRule = {
     id: string;
@@ -24,6 +24,7 @@ export default function AutoReplySettings() {
     const [pages, setPages] = useState<Page[]>([]);
     const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
     const [rules, setRules] = useState<AutoReplyRule[]>([]);
+    const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
@@ -72,25 +73,70 @@ export default function AutoReplySettings() {
         }
     };
 
+    const handleStartEdit = (rule: AutoReplyRule) => {
+        setEditingRuleId(rule.id);
+        setNewRule({
+            trigger_type: rule.trigger_type,
+            trigger_text: rule.trigger_text || '',
+            reply_text: rule.reply_text,
+            is_active: rule.is_active
+        });
+        const formEl = document.getElementById('rule-form-container');
+        if (formEl) {
+            formEl.scrollIntoView({ behavior: 'smooth' });
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setEditingRuleId(null);
+        setNewRule({
+            trigger_type: 'exact',
+            is_active: true,
+            trigger_text: '',
+            reply_text: ''
+        });
+    };
+
     const handleAddRule = async () => {
         if (!selectedPageId || !newRule.reply_text || ((newRule.trigger_type === 'exact' || newRule.trigger_type === 'keyword') && !newRule.trigger_text)) return;
 
         setIsSaving(true);
         try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/auto-reply`, {
-                method: 'POST',
+            const url = editingRuleId 
+                ? `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/auto-reply/${editingRuleId}`
+                : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/auto-reply`;
+            
+            const method = editingRuleId ? 'PUT' : 'POST';
+
+            const res = await fetch(url, {
+                method,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
-                body: JSON.stringify({ ...newRule, page_id: selectedPageId })
+                body: JSON.stringify(
+                    editingRuleId 
+                        ? {
+                            trigger_type: newRule.trigger_type,
+                            trigger_text: newRule.trigger_text,
+                            reply_text: newRule.reply_text,
+                            is_active: newRule.is_active
+                          }
+                        : { ...newRule, page_id: selectedPageId }
+                )
             });
 
             if (res.ok) {
-                const created = await res.json();
-                setRules([created, ...rules]);
-                setNewRule({ trigger_type: 'exact', is_active: true });
-                setMessage({ text: 'Rule saved successfully!', type: 'success' });
+                const result = await res.json();
+                if (editingRuleId) {
+                    setRules(rules.map(r => r.id === editingRuleId ? result : r));
+                    setEditingRuleId(null);
+                    setMessage({ text: 'Rule updated successfully!', type: 'success' });
+                } else {
+                    setRules([result, ...rules]);
+                    setMessage({ text: 'Rule saved successfully!', type: 'success' });
+                }
+                setNewRule({ trigger_type: 'exact', is_active: true, trigger_text: '', reply_text: '' });
             } else {
                 const error = await res.json();
                 setMessage({ text: `Error: ${error.message || 'Failed to save rule'}`, type: 'error' });
@@ -210,10 +256,12 @@ export default function AutoReplySettings() {
                         {/* Rules List */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-4">
                             {/* Create Rule Header/Box */}
-                            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 shadow-md shadow-indigo-500/5">
+                            <div id="rule-form-container" className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 shadow-md shadow-indigo-500/5 scroll-mt-6">
                                 <div className="flex items-center gap-2 mb-4">
-                                    <Plus size={18} className="text-indigo-500" />
-                                    <h4 className="font-bold text-slate-800 dark:text-white text-sm">Create New Auto-Reply Rule</h4>
+                                    {editingRuleId ? <Edit2 size={18} className="text-indigo-500" /> : <Plus size={18} className="text-indigo-500" />}
+                                    <h4 className="font-bold text-slate-800 dark:text-white text-sm">
+                                        {editingRuleId ? 'Edit Auto-Reply Rule' : 'Create New Auto-Reply Rule'}
+                                    </h4>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                     <div>
@@ -282,14 +330,22 @@ export default function AutoReplySettings() {
                                         className="w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-white resize-none"
                                     />
                                 </div>
-                                <div className="flex justify-end">
+                                <div className="flex justify-end gap-3">
+                                    {editingRuleId && (
+                                        <button
+                                            onClick={handleCancelEdit}
+                                            className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-white px-5 py-2 rounded-xl text-sm font-bold transition-all"
+                                        >
+                                            Cancel
+                                        </button>
+                                    )}
                                     <button
                                         onClick={handleAddRule}
                                         disabled={isSaving || !newRule.reply_text || ((newRule.trigger_type === 'exact' || newRule.trigger_type === 'keyword') && !newRule.trigger_text)}
                                         className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-6 py-2 rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2"
                                     >
-                                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus size={16} />}
-                                        Save Rule
+                                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : editingRuleId ? <Save size={16} /> : <Plus size={16} />}
+                                        {editingRuleId ? 'Update Rule' : 'Save Rule'}
                                     </button>
                                 </div>
                             </div>
@@ -360,6 +416,13 @@ export default function AutoReplySettings() {
                                                             }`} />
                                                         </button>
                                                     </div>
+                                                    <button
+                                                        onClick={() => handleStartEdit(rule)}
+                                                        className="p-2.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                                                        title="Edit Rule"
+                                                    >
+                                                        <Edit2 size={18} />
+                                                    </button>
                                                     <button
                                                         onClick={() => handleDeleteRule(rule.id)}
                                                         className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all opacity-0 group-hover:opacity-100"

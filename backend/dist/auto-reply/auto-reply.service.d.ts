@@ -8,6 +8,7 @@ export declare class AutoReplyService {
     }): Promise<any>;
     getRulesByPage(pageId: string): Promise<any[]>;
     updateRule(id: string, data: Partial<{
+        trigger_type: 'exact' | 'keyword' | 'phone';
         trigger_text: string;
         reply_text: string;
         is_active: boolean;

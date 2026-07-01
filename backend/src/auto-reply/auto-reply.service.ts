@@ -32,6 +32,7 @@ export class AutoReplyService {
     }
 
     async updateRule(id: string, data: Partial<{
+        trigger_type: 'exact' | 'keyword' | 'phone';
         trigger_text: string;
         reply_text: string;
         is_active: boolean;

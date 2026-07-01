@@ -374,15 +374,24 @@ let WebhooksController = class WebhooksController {
                 console.log(`[Marketplace Guard] ⚡ IN-MEMORY HIT — already replied to "${messageText.substring(0, 50)}" for customer ${customerId} ${Math.round((nowMs - lastRepliedAt) / 1000)}s ago. Skipping.`);
                 return res.status(common_1.HttpStatus.OK).json({ replyText: null, skipped: true, reason: 'in_memory_cache_hit' });
             }
+            WebhooksController_1.replyCache.set(replyCacheKey, nowMs);
             if (Math.random() < 0.05)
                 WebhooksController_1.purgeExpiredCacheEntries();
             try {
-                const lastMessages = await supabase_service_1.supabaseService.getLastMessages(conversation.id, 1);
+                const lastMessages = await supabase_service_1.supabaseService.getLastMessages(conversation.id, 2);
                 if (lastMessages && lastMessages.length > 0) {
                     const lastMsg = lastMessages[0];
                     if (lastMsg.sender === 'customer' && lastMsg.text === messageText) {
-                        console.log(`[Marketplace Guard] 🛡️ Duplicate message detected in DB for conversation ${conversation.id}: "${messageText.substring(0, 50)}". Skipping duplicate insert/processing.`);
+                        console.log(`[Marketplace Guard] 🛡️ Duplicate customer message detected (latest in DB) for conversation ${conversation.id}. Skipping duplicate.`);
                         return res.status(common_1.HttpStatus.OK).json({ replyText: null, skipped: true, reason: 'duplicate_message_db' });
+                    }
+                    if (lastMsg.sender === 'agent' && lastMessages.length > 1) {
+                        const secondLastMsg = lastMessages[1];
+                        const ageMs = Date.now() - new Date(lastMsg.created_at).getTime();
+                        if (secondLastMsg.sender === 'customer' && secondLastMsg.text === messageText && ageMs < 45000) {
+                            console.log(`[Marketplace Guard] 🛡️ Duplicate customer message detected (recently replied in DB, age ${Math.round(ageMs / 1000)}s) for conversation ${conversation.id}. Skipping duplicate.`);
+                            return res.status(common_1.HttpStatus.OK).json({ replyText: null, skipped: true, reason: 'duplicate_recent_reply_db' });
+                        }
                     }
                 }
             }
@@ -418,7 +427,12 @@ let WebhooksController = class WebhooksController {
                 }
             }
             if (matchedReplies.length > 0) {
-                const combinedReply = matchedReplies.join('\n\n');
+                let combinedReply = matchedReplies.join('\n\n');
+                const replName = productName || conversation.product_name || '';
+                const replPrice = productPrice || conversation.product_price || '';
+                combinedReply = combinedReply
+                    .replace(/\{\{\s*Product\s*Name\s*\}\}/gi, replName)
+                    .replace(/\{\{\s*Price\s*\}\}/gi, replPrice);
                 console.log(`[Marketplace Template] Match found for ${JSON.stringify(textsArray)}: "${combinedReply}"`);
                 WebhooksController_1.replyCache.set(replyCacheKey, Date.now());
                 console.log(`[Marketplace Guard] 🔒 Cache key locked for customer ${customerId}: "${messageText.substring(0, 50)}"`);

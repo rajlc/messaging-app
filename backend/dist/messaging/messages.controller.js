@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const supabase_service_1 = require("../supabase/supabase.service");
 const facebook_service_1 = require("./facebook.service");
 const messaging_gateway_1 = require("../socket/messaging.gateway");
+const pages_controller_1 = require("./pages/pages.controller");
 let MessagesController = class MessagesController {
     facebookService;
     messagingGateway;
@@ -86,7 +87,15 @@ let MessagesController = class MessagesController {
             }
             const imageIds = Array.isArray(body.imageUrl) ? body.imageUrl : (body.imageUrl ? [body.imageUrl] : []);
             let lastFbMessageId = undefined;
-            if (body.platform === 'facebook') {
+            if (body.platform === 'facebook_marketplace') {
+                if (body.pageId) {
+                    const isOnline = pages_controller_1.PagesController.isProfileOnline(body.pageId);
+                    if (!isOnline) {
+                        throw new Error('Marketplace Profile is offline. Please make sure the Chrome extension is open and running.');
+                    }
+                }
+            }
+            else if (body.platform === 'facebook') {
                 if (imageIds.length > 0) {
                     if (body.text) {
                         const res = await this.facebookService.sendMessage(actualRecipientId, body.text, body.pageId, undefined, body.tag, body.replyToMid);
@@ -122,6 +131,16 @@ let MessagesController = class MessagesController {
                 replyToSender: body.replyToSender,
                 metadata: { source: 'webapp' }
             });
+            if (body.platform === 'facebook_marketplace' && body.pageId) {
+                const queue = pages_controller_1.PagesController.pendingMarketplaceSends.get(body.pageId) || [];
+                queue.push({
+                    recipientId: actualRecipientId,
+                    text: body.text,
+                    messageId: savedMessage.id
+                });
+                pages_controller_1.PagesController.pendingMarketplaceSends.set(body.pageId, queue);
+                console.log(`[Queue] Added message to send queue for page ${body.pageId}: ${body.text}`);
+            }
             this.messagingGateway.broadcastIncomingMessage(body.platform, {
                 ...savedMessage,
                 isOwnMessage: true,

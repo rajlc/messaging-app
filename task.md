@@ -17,8 +17,8 @@
     - [ ] Update `LogisticsService.createOrder` (Pathao) with history logging
     - [ ] Update `LogisticsService.handleWebhook` (Pathao) with history logging
     - [ ] Update `PickDropService.createOrder` with history logging
-    - [ ] Update `PickDropService.syncOrder` with history logging
-    - [ ] Update `PickDropService.handleWebhook` with history logging
+    - [x] Update backend `AutoReplyService` type definitions to allow updating trigger type
+- [/] Add template variable replacement logic in backend `WebhooksController` with history logging
     - [ ] Consolidate `NcmService` logging to use `OrdersService` method
 - [x] Update frontend to use Render backend URL
 - [x] Debug Pathao Webhook rejection

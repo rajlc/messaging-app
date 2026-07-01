@@ -15,4 +15,34 @@ export declare class PagesController {
         custom_prompt?: string;
         cutoff_messages?: string;
     }): Promise<any>;
+    static onlineMarketplaceProfiles: Map<string, number>;
+    static pendingMarketplaceSends: Map<string, {
+        recipientId: string;
+        text: string;
+        messageId: string;
+    }[]>;
+    static isProfileOnline(profileId: string): boolean;
+    registerHeartbeat(body: {
+        pageId: string;
+        platform: string;
+    }): Promise<{
+        success: boolean;
+        status: string;
+        error?: undefined;
+    } | {
+        success: boolean;
+        error: string;
+        status?: undefined;
+    }>;
+    getPendingMessages(pageId: string): {
+        recipientId: string;
+        text: string;
+        messageId: string;
+    }[];
+    markMessageSent(body: {
+        pageId: string;
+        messageId: string;
+    }): {
+        success: boolean;
+    };
 }

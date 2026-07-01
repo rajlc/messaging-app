@@ -11,18 +11,24 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var PagesController_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PagesController = void 0;
 const common_1 = require("@nestjs/common");
 const supabase_service_1 = require("../../supabase/supabase.service");
 const facebook_service_1 = require("../facebook.service");
 let PagesController = class PagesController {
+    static { PagesController_1 = this; }
     facebookService;
     constructor(facebookService) {
         this.facebookService = facebookService;
     }
     async getPages() {
-        return await supabase_service_1.supabaseService.getPages();
+        const pages = await supabase_service_1.supabaseService.getPages();
+        return pages.map(p => ({
+            ...p,
+            isOnline: PagesController_1.isProfileOnline(p.page_id)
+        }));
     }
     async addPage(body) {
         if (!body.pageId) {
@@ -65,6 +71,31 @@ let PagesController = class PagesController {
     async updatePage(id, body) {
         return await supabase_service_1.supabaseService.updatePage(id, body);
     }
+    static onlineMarketplaceProfiles = new Map();
+    static pendingMarketplaceSends = new Map();
+    static isProfileOnline(profileId) {
+        const lastActive = this.onlineMarketplaceProfiles.get(profileId);
+        if (!lastActive)
+            return false;
+        return (Date.now() - lastActive) < 25000;
+    }
+    async registerHeartbeat(body) {
+        if (body.pageId && body.platform === 'facebook_marketplace') {
+            PagesController_1.onlineMarketplaceProfiles.set(body.pageId, Date.now());
+            return { success: true, status: 'acknowledged' };
+        }
+        return { success: false, error: 'Invalid profile or platform' };
+    }
+    getPendingMessages(pageId) {
+        const queue = PagesController_1.pendingMarketplaceSends.get(pageId) || [];
+        return queue;
+    }
+    markMessageSent(body) {
+        const queue = PagesController_1.pendingMarketplaceSends.get(body.pageId) || [];
+        const filtered = queue.filter(m => m.messageId !== body.messageId);
+        PagesController_1.pendingMarketplaceSends.set(body.pageId, filtered);
+        return { success: true };
+    }
 };
 exports.PagesController = PagesController;
 __decorate([
@@ -95,7 +126,28 @@ __decorate([
     __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", Promise)
 ], PagesController.prototype, "updatePage", null);
-exports.PagesController = PagesController = __decorate([
+__decorate([
+    (0, common_1.Post)('heartbeat'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], PagesController.prototype, "registerHeartbeat", null);
+__decorate([
+    (0, common_1.Get)('pending-messages/:pageId'),
+    __param(0, (0, common_1.Param)('pageId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], PagesController.prototype, "getPendingMessages", null);
+__decorate([
+    (0, common_1.Post)('pending-messages/sent'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], PagesController.prototype, "markMessageSent", null);
+exports.PagesController = PagesController = PagesController_1 = __decorate([
     (0, common_1.Controller)('api/pages'),
     __metadata("design:paramtypes", [facebook_service_1.FacebookService])
 ], PagesController);

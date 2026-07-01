@@ -2,6 +2,7 @@ import { Controller, Post, Body } from '@nestjs/common';
 import { supabaseService } from '../supabase/supabase.service';
 import { FacebookService } from './facebook.service';
 import { MessagingGateway } from '../socket/messaging.gateway';
+import { PagesController } from './pages/pages.controller';
 
 @Controller('api/messages')
 export class MessagesController {
@@ -102,7 +103,14 @@ export class MessagesController {
             const imageIds = Array.isArray(body.imageUrl) ? body.imageUrl : (body.imageUrl ? [body.imageUrl] : []);
             let lastFbMessageId: string | undefined = undefined;
 
-            if (body.platform === 'facebook') {
+            if (body.platform === 'facebook_marketplace') {
+                if (body.pageId) {
+                    const isOnline = PagesController.isProfileOnline(body.pageId);
+                    if (!isOnline) {
+                        throw new Error('Marketplace Profile is offline. Please make sure the Chrome extension is open and running.');
+                    }
+                }
+            } else if (body.platform === 'facebook') {
                 if (imageIds.length > 0) {
                     // Send text first if provided
                     if (body.text) {
@@ -144,6 +152,17 @@ export class MessagesController {
                 replyToSender: body.replyToSender,
                 metadata: { source: 'webapp' }
             });
+
+            if (body.platform === 'facebook_marketplace' && body.pageId) {
+                const queue = PagesController.pendingMarketplaceSends.get(body.pageId) || [];
+                queue.push({
+                    recipientId: actualRecipientId,
+                    text: body.text,
+                    messageId: savedMessage.id
+                });
+                PagesController.pendingMarketplaceSends.set(body.pageId, queue);
+                console.log(`[Queue] Added message to send queue for page ${body.pageId}: ${body.text}`);
+            }
 
             // 4. Broadcast to frontend via Socket.io
             this.messagingGateway.broadcastIncomingMessage(body.platform, {

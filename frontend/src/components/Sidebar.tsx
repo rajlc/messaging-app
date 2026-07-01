@@ -41,8 +41,6 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
             style={{
                 width: '200px',
                 minWidth: '200px',
-                background: '#FFFFFF',
-                borderRight: '1px solid #F1F5F9',
                 height: '100vh',
                 display: 'flex',
                 flexDirection: 'column',
@@ -53,7 +51,7 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
                 overflowY: 'auto',
                 overflowX: 'hidden',
             }}
-            className="dark:bg-slate-900 dark:border-slate-800"
+            className="bg-white border-r border-slate-100 dark:bg-slate-900 dark:border-slate-800"
         >
             {/* Logo / Brand at top */}
             <div style={{ padding: '0 16px 4px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
@@ -75,18 +73,17 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
                 <span style={{
                     fontSize: '15px',
                     fontWeight: 700,
-                    color: '#1E1B4B',
                     letterSpacing: '-0.3px',
                     fontFamily: "'Inter', sans-serif",
                 }}
-                    className="dark:text-white"
+                    className="text-[#1E1B4B] dark:text-white"
                 >
                     MsgOrder
                 </span>
             </div>
 
             {/* Divider */}
-            <div style={{ height: '1px', background: '#F1F5F9', margin: '12px 16px' }} className="dark:bg-slate-700" />
+            <div style={{ height: '1px', margin: '12px 16px' }} className="bg-slate-100 dark:bg-slate-700" />
 
             {/* Top Nav Group */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 10px' }}>
@@ -97,8 +94,8 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
             </div>
 
             {/* Section Label */}
-            <div style={{ padding: '18px 18px 6px', fontSize: '10px', fontWeight: 600, color: '#9CA3AF', letterSpacing: '0.8px', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}
-                className="dark:text-slate-600"
+            <div style={{ padding: '18px 18px 6px', fontSize: '10px', fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}
+                className="text-slate-400 dark:text-slate-600"
             >
                 Operations
             </div>
@@ -119,7 +116,7 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
             <div style={{ flex: 1 }} />
 
             {/* Divider */}
-            <div style={{ height: '1px', background: '#F1F5F9', margin: '8px 16px' }} className="dark:bg-slate-700" />
+            <div style={{ height: '1px', margin: '8px 16px' }} className="bg-slate-100 dark:bg-slate-700" />
 
             {/* Bottom Section */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 10px' }}>
@@ -158,13 +155,12 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
                         <span style={{
                             fontSize: '12px',
                             fontWeight: 500,
-                            color: '#6B7280',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
                             fontFamily: "'Inter', sans-serif",
                         }}
-                            className="dark:text-slate-400"
+                            className="text-slate-500 dark:text-slate-400"
                         >
                             {user?.full_name || 'User'}
                         </span>
@@ -174,29 +170,7 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
                     <button
                         onClick={logout}
                         title="Logout"
-                        style={{
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '10px',
-                            background: '#FEF2F2',
-                            color: '#DC2626',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            border: 'none',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease',
-                            flexShrink: 0,
-                        }}
-                        className="dark:bg-red-900/20 dark:text-red-400"
-                        onMouseEnter={e => {
-                            (e.currentTarget as HTMLButtonElement).style.background = '#FEE2E2';
-                            (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.08)';
-                        }}
-                        onMouseLeave={e => {
-                            (e.currentTarget as HTMLButtonElement).style.background = '#FEF2F2';
-                            (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
-                        }}
+                        className="w-8 h-8 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 hover:scale-105 active:scale-95 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 flex items-center justify-center transition-all duration-200 shrink-0"
                     >
                         <LogOut size={15} />
                     </button>
@@ -215,60 +189,21 @@ function NavButton({ label, icon, active, onClick }: {
     return (
         <button
             onClick={onClick}
-            style={{
-                width: '100%',
-                height: '44px',
-                display: 'flex',
-                flexDirection: 'row',       /* ← horizontal: icon + text side by side */
-                alignItems: 'center',
-                gap: '10px',
-                borderRadius: '12px',
-                transition: 'all 0.2s ease',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '0 12px',
-                background: active ? '#EEF2FF' : 'transparent',
-                color: active ? '#4F46E5' : '#374151',
-                textAlign: 'left',
-            }}
-            className={active ? 'dark:bg-indigo-900/40 dark:text-indigo-400' : 'dark:text-slate-400 dark:hover:text-white'}
-            onMouseEnter={e => {
-                if (!active) {
-                    (e.currentTarget as HTMLButtonElement).style.background = '#F8FAFC';
-                }
-            }}
-            onMouseLeave={e => {
-                if (!active) {
-                    (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-                }
-            }}
+            className={`w-full h-11 flex items-center gap-[10px] rounded-xl px-3 transition-all duration-200 text-left border-none cursor-pointer
+                ${active 
+                    ? 'bg-[#EEF2FF] text-[#4F46E5] dark:bg-indigo-900/40 dark:text-indigo-400' 
+                    : 'bg-transparent text-[#374151] hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/50'
+                }`}
         >
             {/* Icon */}
-            <span
-                style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '20px',
-                    height: '20px',
-                    flexShrink: 0,
-                    color: active ? '#4F46E5' : 'inherit',
-                }}
-            >
+            <span className="flex items-center justify-center w-5 h-5 shrink-0">
                 {icon}
             </span>
 
             {/* Label */}
             <span
-                style={{
-                    fontSize: '13px',
-                    fontWeight: active ? 600 : 500,
-                    letterSpacing: '0.1px',
-                    color: active ? '#4F46E5' : '#374151',
-                    fontFamily: "'Inter', sans-serif",
-                    lineHeight: 1,
-                }}
-                className={active ? 'dark:text-indigo-400' : 'dark:text-slate-400'}
+                className={`text-[13px] tracking-[0.1px] font-sans leading-none
+                    ${active ? 'font-semibold' : 'font-medium'}`}
             >
                 {label}
             </span>

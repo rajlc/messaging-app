@@ -8,7 +8,11 @@ export class PagesController {
 
     @Get()
     async getPages() {
-        return await supabaseService.getPages();
+        const pages = await supabaseService.getPages();
+        return pages.map(p => ({
+            ...p,
+            isOnline: PagesController.isProfileOnline(p.page_id)
+        }));
     }
 
     @Post()
@@ -61,5 +65,39 @@ export class PagesController {
     @Patch(':id')
     async updatePage(@Param('id') id: string, @Body() body: { is_ai_enabled?: boolean; custom_prompt?: string; cutoff_messages?: string }) {
         return await supabaseService.updatePage(id, body);
+    }
+
+    // In-memory cache for online marketplace profiles (profileId -> lastActiveTimestamp)
+    public static onlineMarketplaceProfiles = new Map<string, number>();
+    public static pendingMarketplaceSends = new Map<string, Array<{ recipientId: string; text: string; messageId: string }>>();
+
+    public static isProfileOnline(profileId: string): boolean {
+        const lastActive = this.onlineMarketplaceProfiles.get(profileId);
+        if (!lastActive) return false;
+        // Consider online if active within last 25 seconds
+        return (Date.now() - lastActive) < 25000;
+    }
+
+    @Post('heartbeat')
+    async registerHeartbeat(@Body() body: { pageId: string; platform: string }) {
+        if (body.pageId && body.platform === 'facebook_marketplace') {
+            PagesController.onlineMarketplaceProfiles.set(body.pageId, Date.now());
+            return { success: true, status: 'acknowledged' };
+        }
+        return { success: false, error: 'Invalid profile or platform' };
+    }
+
+    @Get('pending-messages/:pageId')
+    getPendingMessages(@Param('pageId') pageId: string) {
+        const queue = PagesController.pendingMarketplaceSends.get(pageId) || [];
+        return queue;
+    }
+
+    @Post('pending-messages/sent')
+    markMessageSent(@Body() body: { pageId: string; messageId: string }) {
+        const queue = PagesController.pendingMarketplaceSends.get(body.pageId) || [];
+        const filtered = queue.filter(m => m.messageId !== body.messageId);
+        PagesController.pendingMarketplaceSends.set(body.pageId, filtered);
+        return { success: true };
     }
 }

@@ -1,11 +1,20 @@
 // Persistent Sidebar Column View for Facebook Messenger & Facebook Messages
 console.log('[Marketplace Assistant] content.js loaded.');
 
+function isExtensionContextValid() {
+  try {
+    return !!(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id && chrome.runtime.getManifest);
+  } catch (e) {
+    return false;
+  }
+}
+
 let backendUrl = 'http://localhost:3002';
 let token = null;
 let chromeProfileTag = 'Profile-1';
 let activeProfileName = 'Marketplace Profile';
 let activeProfileId = 'marketplace-profile-1';
+let lastHeartbeatTime = 0;
 let user = null;
 let monitorNewChatsEnabled = false;
 let lastUserTypeTime = 0;
@@ -19,29 +28,43 @@ let activeProcessingMessageSignature = '';
 let syncedCustomerNames = new Map();
 // Fetch proxy helper using extension message passing to bypass Facebook page CSP
 async function fetchProxy(url, options = {}) {
+  if (!isExtensionContextValid()) {
+    return Promise.reject(new Error('Extension context invalidated'));
+  }
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage({
-      type: 'fetchProxy',
-      url: url,
-      options: options
-    }, (response) => {
-      if (chrome.runtime.lastError) {
-        return reject(new Error(chrome.runtime.lastError.message));
-      }
-      if (!response) {
-        return reject(new Error('No response received from background proxy'));
-      }
-      if (response.error) {
-        return reject(new Error(response.error));
-      }
-      resolve({
-        ok: response.ok,
-        status: response.status,
-        statusText: response.statusText,
-        json: async () => response.body,
-        text: async () => typeof response.body === 'string' ? response.body : JSON.stringify(response.body)
+    try {
+      chrome.runtime.sendMessage({
+        type: 'fetchProxy',
+        url: url,
+        options: options
+      }, (response) => {
+        try {
+          if (!isExtensionContextValid()) {
+            return reject(new Error('Extension context invalidated'));
+          }
+          if (chrome.runtime.lastError) {
+            return reject(new Error(chrome.runtime.lastError.message));
+          }
+          if (!response) {
+            return reject(new Error('No response received from background proxy'));
+          }
+          if (response.error) {
+            return reject(new Error(response.error));
+          }
+          resolve({
+            ok: response.ok,
+            status: response.status,
+            statusText: response.statusText,
+            json: async () => response.body,
+            text: async () => typeof response.body === 'string' ? response.body : JSON.stringify(response.body)
+          });
+        } catch (callbackErr) {
+          reject(new Error('Extension context invalidated: ' + callbackErr.message));
+        }
       });
-    });
+    } catch (err) {
+      reject(new Error('Extension context invalidated: ' + err.message));
+    }
   });
 }
 
@@ -1848,6 +1871,31 @@ async function checkBackendConnection() {
   }
 }
 
+async function sendHeartbeatToBackend() {
+  if (!activeProfileId) return;
+
+  chrome.storage.local.get(['token'], async (store) => {
+    const activeToken = store.token || token;
+    if (!activeToken) return;
+
+    try {
+      await fetchProxy(`${backendUrl}/api/pages/heartbeat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${activeToken}`
+        },
+        body: JSON.stringify({
+          pageId: activeProfileId,
+          platform: 'facebook_marketplace'
+        })
+      });
+    } catch (e) {
+      // Ignore heartbeat errors
+    }
+  });
+}
+
 // Listen for manual clicks on conversation items to reset cooldown timer
 document.addEventListener('click', (e) => {
   const anchor = e.target.closest('a[href]');
@@ -1869,9 +1917,15 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 let lastScanTime = 0;
 
 function runPeriodicScan() {
+  if (!isExtensionContextValid()) return;
   const now = Date.now();
   if (now - lastScanTime < 2000) return;
   lastScanTime = now;
+
+  if (now - lastHeartbeatTime > 12000) {
+    lastHeartbeatTime = now;
+    sendHeartbeatToBackend();
+  }
 
   // Always ensure sidebar is loaded
   injectSidebar();
@@ -1924,6 +1978,206 @@ function runPeriodicScan() {
 
     // 4. Check active chat for unreplied customer message
     checkActiveChatForUnrepliedMessage();
+
+    // 5. Check for pending messages to type & send
+    if (now - lastPendingCheckTime > 4000) {
+      lastPendingCheckTime = now;
+      checkPendingMessages();
+    }
+  }
+}
+
+let lastPendingCheckTime = 0;
+let isCurrentlySendingPending = false;
+
+async function checkPendingMessages() {
+  if (!isExtensionContextValid()) return;
+  if (!activeProfileId || isCurrentlySendingPending) return;
+
+  try {
+    chrome.storage.local.get(['token'], async (store) => {
+      const activeToken = store.token || token;
+      if (!activeToken) return;
+
+      try {
+        const res = await fetchProxy(`${backendUrl}/api/pages/pending-messages/${activeProfileId}`, {
+          headers: {
+            'Authorization': `Bearer ${activeToken}`
+          }
+        });
+        if (res.ok) {
+          const queue = await res.json();
+          if (queue && queue.length > 0) {
+            isCurrentlySendingPending = true;
+            try {
+              await processPendingMessage(queue[0]);
+            } finally {
+              isCurrentlySendingPending = false;
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[Marketplace Assistant] Error checking pending messages:', e);
+      }
+    });
+  } catch (err) {
+    console.warn('[Marketplace Assistant] Pending check storage access failed, context invalidated:', err.message);
+  }
+}
+
+async function processPendingMessage(msgObj) {
+  const { recipientId, text, messageId } = msgObj;
+  logToUI(`[Pending Send] Processing queued message for customer ${recipientId}: "${text}"`);
+
+  // 1. Check if we are currently on the correct conversation URL
+  const currentUrl = window.location.href;
+  const currentThreadId = getThreadIdFromUrl(currentUrl);
+
+  if (currentThreadId !== recipientId) {
+    logToUI(`[Pending Send] Navigating to customer thread: ${recipientId}`);
+    // Click the thread if visible or change location
+    const anchor = queryOutsideSidebar(`a[href*="/messages/t/${recipientId}"], a[href*="/t/${recipientId}"]`);
+    if (anchor) {
+      anchor.click();
+    } else {
+      // If anchor not found in sidebar list, navigate there directly
+      window.location.href = `https://www.facebook.com/messages/t/${recipientId}`;
+      // Wait for page to reload/navigate
+      return;
+    }
+    // Wait a brief delay for DOM to load after clicking
+    await new Promise(resolve => setTimeout(resolve, 3000));
+  }
+
+  // 2. We are on the correct thread, type and send it!
+  const success = await typeAndSendReplyDirectly(text);
+  
+  if (success) {
+    logToUI(`[Pending Send] Message sent successfully. Notifying backend...`);
+    // 3. Notify backend to clear from queue
+    chrome.storage.local.get(['token'], async (store) => {
+      const activeToken = store.token || token;
+      await fetchProxy(`${backendUrl}/api/pages/pending-messages/sent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${activeToken}`
+        },
+        body: JSON.stringify({
+          pageId: activeProfileId,
+          messageId: messageId
+        })
+      });
+    });
+  } else {
+    logToUI(`[Pending Send] Failed to type/send message. Will retry.`);
+  }
+}
+
+async function typeAndSendReplyDirectly(replyText) {
+  const input = queryOutsideSidebar('div[role="textbox"], div[aria-label="Message"], textarea');
+  if (!input) {
+    logToUI("[Pending Send] Composer input box not found.");
+    return false;
+  }
+
+  input.focus();
+  logToUI("[Pending Send] Inserting text: '" + replyText.substring(0, 25) + "...'");
+  
+  let execSuccess = false;
+  try {
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(input);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  } catch (e) {
+    console.warn("Could not focus cursor explicitly:", e);
+  }
+
+  try {
+    document.execCommand('insertText', false, replyText);
+    const newText = input.textContent || '';
+    if (newText.includes(replyText)) {
+      execSuccess = true;
+    }
+  } catch (execErr) {
+    console.warn("execCommand failed in foreground:", execErr);
+  }
+
+  if (!execSuccess) {
+    try {
+      let p = input.querySelector('p');
+      if (!p) {
+        p = document.createElement('p');
+        p.className = 'xdj266r x11i5rnm xat24cr x1mh8g0r x16tdct8';
+        input.appendChild(p);
+      }
+      let span = p.querySelector('span[data-lexical-text="true"]') || p.querySelector('span[data-text="true"]') || p.querySelector('span');
+      if (!span) {
+        span = document.createElement('span');
+        span.setAttribute('data-lexical-text', 'true');
+        p.appendChild(span);
+      }
+      span.textContent = replyText;
+      p.querySelectorAll('br').forEach(br => br.remove());
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      execSuccess = true;
+    } catch (domErr) {
+      console.error("Direct DOM text injection failed:", domErr);
+    }
+  }
+
+  await new Promise(resolve => setTimeout(resolve, 800));
+
+  const textLength = (input.textContent || '').trim().length;
+  if (textLength === 0) {
+    logToUI("[Pending Send] Composer is empty. Message insertion failed.");
+    return false;
+  }
+
+  // Click send button
+  const allButtons = queryOutsideSidebar('div[role="button"], button', true);
+  let finalSendBtn = allButtons.find(b => {
+    const label = (b.getAttribute('aria-label') || '').toLowerCase();
+    return label === 'send' || label === 'press enter to send';
+  });
+
+  if (!finalSendBtn) {
+    finalSendBtn = allButtons.find(b => {
+      const label = (b.getAttribute('aria-label') || '').toLowerCase();
+      if (label.includes('like')) return false;
+      const svg = b.querySelector('svg');
+      if (svg) {
+        const fill = svg.getAttribute('fill') || '';
+        return fill === '#0084ff' || svg.querySelector('path');
+      }
+      return false;
+    });
+  }
+
+  if (finalSendBtn) {
+    finalSendBtn.click();
+    logToUI("[Pending Send] Sent via Send button!");
+    return true;
+  } else {
+    const dispatchKey = (type) => {
+      input.dispatchEvent(new KeyboardEvent(type, {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        bubbles: true,
+        cancelable: true
+      }));
+    };
+    dispatchKey('keydown');
+    dispatchKey('keypress');
+    dispatchKey('keyup');
+    logToUI("[Pending Send] Sent via Enter simulation!");
+    return true;
   }
 }
 
@@ -1956,43 +2210,48 @@ setInterval(() => {
 let keepAlivePort = null;
 
 function connectKeepAlive() {
-  chrome.storage.local.get(['backgroundRunningEnabled'], (data) => {
-    if (!data.backgroundRunningEnabled) {
-      disconnectKeepAlive();
-      return;
-    }
+  if (!isExtensionContextValid()) return;
+  try {
+    chrome.storage.local.get(['backgroundRunningEnabled'], (data) => {
+      if (!data.backgroundRunningEnabled) {
+        disconnectKeepAlive();
+        return;
+      }
 
-    if (keepAlivePort) return;
+      if (keepAlivePort) return;
 
-    const now = Date.now();
-    // If we connected less than 1.5 seconds ago, delay the next connection to prevent infinite looping or spamming if SW keeps failing
-    if (now - lastConnectTime < 1500) {
-      setTimeout(connectKeepAlive, 2000);
-      return;
-    }
-    lastConnectTime = now;
+      const now = Date.now();
+      // If we connected less than 1.5 seconds ago, delay the next connection to prevent infinite looping or spamming if SW keeps failing
+      if (now - lastConnectTime < 1500) {
+        setTimeout(connectKeepAlive, 2000);
+        return;
+      }
+      lastConnectTime = now;
 
-    try {
-      console.log('[Marketplace Assistant] Connecting keepalive port to background service worker.');
-      keepAlivePort = chrome.runtime.connect({ name: 'mkt-keepalive' });
+      try {
+        console.log('[Marketplace Assistant] Connecting keepalive port to background service worker.');
+        keepAlivePort = chrome.runtime.connect({ name: 'mkt-keepalive' });
 
-      keepAlivePort.onMessage.addListener((msg) => {
-        if (msg && msg.type === 'backgroundPing') {
-          // Trigger scan
-          runPeriodicScan();
-        }
-      });
+        keepAlivePort.onMessage.addListener((msg) => {
+          if (msg && msg.type === 'backgroundPing') {
+            // Trigger scan
+            runPeriodicScan();
+          }
+        });
 
-      keepAlivePort.onDisconnect.addListener(() => {
-        console.log('[Marketplace Assistant] Keepalive port disconnected. Reconnecting immediately...');
-        keepAlivePort = null;
-        connectKeepAlive();
-      });
-    } catch (e) {
-      console.error('[Marketplace Assistant] Failed to connect port:', e);
-      setTimeout(connectKeepAlive, 5000);
-    }
-  });
+        keepAlivePort.onDisconnect.addListener(() => {
+          console.log('[Marketplace Assistant] Keepalive port disconnected. Reconnecting immediately...');
+          keepAlivePort = null;
+          connectKeepAlive();
+        });
+      } catch (e) {
+        console.error('[Marketplace Assistant] Failed to connect port:', e);
+        setTimeout(connectKeepAlive, 5000);
+      }
+    });
+  } catch (err) {
+    console.warn('[Marketplace Assistant] connectKeepAlive storage access failed, context invalidated:', err.message);
+  }
 }
 
 function disconnectKeepAlive() {
@@ -2007,6 +2266,7 @@ function disconnectKeepAlive() {
 
 // Send a periodic keepalive ping to the service worker to prevent MV3 hibernation
 setInterval(() => {
+  if (!isExtensionContextValid()) return;
   if (keepAlivePort) {
     try {
       keepAlivePort.postMessage({ type: 'keepalive' });

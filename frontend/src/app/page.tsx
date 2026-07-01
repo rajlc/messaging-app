@@ -206,7 +206,7 @@ function UnifiedInboxContent() {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [filterPlatform, setFilterPlatform] = useState<string>('');
   const [filterOrderStatus, setFilterOrderStatus] = useState<string>('');
-  const [connectedPages, setConnectedPages] = useState<{ id: string; platform: string; page_name: string; page_id: string; is_active: boolean }[]>([]);
+  const [connectedPages, setConnectedPages] = useState<{ id: string; platform: string; page_name: string; page_id: string; is_active: boolean; isOnline?: boolean }[]>([]);
   const filterDropdownRef = useRef<HTMLDivElement>(null);
 
   // Bulk message state
@@ -391,6 +391,24 @@ function UnifiedInboxContent() {
     };
     initApp();
   }, []); // Run ONCE on mount
+
+  // Periodically poll pages to refresh active/online extension status
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/pages`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setConnectedPages(data);
+        }
+      } catch (e) {
+        // ignore periodic check error
+      }
+    }, 8000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Clear all filters when navigating away from messages view
   useEffect(() => {
@@ -1370,7 +1388,7 @@ function UnifiedInboxContent() {
                           ? 'font-[850] text-black dark:text-white'
                           : 'font-semibold text-slate-700 dark:text-slate-300'}`}>
                           <span className="truncate">{conv.customerName}</span>
-                          {(conv.hasPhoneNumber || hasPhoneNumber(conv.lastMessage) || hasPhoneNumber(conv.customerName)) && (
+                          {(conv.hasPhoneNumber || hasPhoneNumber(conv.customerName)) && (
                             <span className="inline-flex items-center justify-center w-4.5 h-4.5 text-[10px] font-black bg-emerald-500 text-white rounded-full shadow-sm flex-shrink-0 animate-pulse" title="Phone number available">
                               N
                             </span>
@@ -1576,7 +1594,7 @@ function UnifiedInboxContent() {
             )}
           </div>
 
-          {conversationType !== 'marketplace' && (
+          {conversationType !== 'marketplace' ? (
             <MessageInput
               onSend={handleSend}
               isUploading={isUploading}
@@ -1585,6 +1603,34 @@ function UnifiedInboxContent() {
               onFileRemove={(i) => setSelectedFiles(prev => prev.filter((_, idx) => idx !== i))}
               chatInputRef={chatInputRef}
             />
+          ) : (
+            (() => {
+              const activePage = connectedPages.find(p => p.page_id === activeConversation?.pageId);
+              const isOnline = activePage?.isOnline;
+              if (isOnline) {
+                return (
+                  <MessageInput
+                    onSend={handleSend}
+                    isUploading={isUploading}
+                    onFileClick={() => fileInputRef.current?.click()}
+                    selectedFiles={selectedFiles}
+                    onFileRemove={(i) => setSelectedFiles(prev => prev.filter((_, idx) => idx !== i))}
+                    chatInputRef={chatInputRef}
+                  />
+                );
+              } else {
+                return (
+                  <div className="bg-rose-50 dark:bg-rose-950/20 border-t border-rose-200 dark:border-rose-800/40 p-4 text-center">
+                    <p className="text-sm font-bold text-rose-700 dark:text-rose-400">
+                      Marketplace Profile is Offline
+                    </p>
+                    <p className="text-xs text-rose-500 dark:text-rose-400 mt-1">
+                      Please open Facebook Marketplace on your browser and verify that the Chrome Extension is logged in and Online.
+                    </p>
+                  </div>
+                );
+              }
+            })()
           )}
         </div>
 
