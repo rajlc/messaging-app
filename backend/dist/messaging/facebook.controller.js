@@ -74,6 +74,7 @@ let FacebookController = class FacebookController {
         try {
             const userAccessToken = await this.facebookService.exchangeCodeForAccessToken(body.code, body.redirectUri);
             const accounts = await this.facebookService.getUserAccounts(userAccessToken);
+            console.log('DEBUG: Facebook accounts returned from Meta:', JSON.stringify(accounts, null, 2));
             return {
                 success: true,
                 pages: accounts.map(acc => ({

@@ -61,10 +61,12 @@ export class WebhooksController {
         @Res() res: Response
     ) {
         const verifyToken = this.configService.get<string>('META_VERIFY_TOKEN');
+        console.log(`[Webhook Verification] Expected: '${verifyToken}' | Received: '${token}' | Mode: '${mode}'`);
         if (mode === 'subscribe' && token === verifyToken) {
             console.log('META_WEBHOOK_VERIFIED');
             return res.status(HttpStatus.OK).send(challenge);
         }
+        console.warn('[Webhook Verification Failed] Token mismatch or invalid mode');
         return res.status(HttpStatus.FORBIDDEN).send('Forbidden');
     }
 
