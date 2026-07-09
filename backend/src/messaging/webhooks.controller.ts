@@ -191,6 +191,8 @@ export class WebhooksController {
                                                 this.messagingGateway.broadcastIncomingMessage('facebook', {
                                                     ...savedMessage,
                                                     isOwnMessage: false,
+                                                    senderId: customerId,
+                                                    recipientId: pageId,
                                                     conversationId: conversation.id,
                                                     customerName: customerName,
                                                     customerProfilePic: userProfile?.profile_pic
@@ -217,6 +219,8 @@ export class WebhooksController {
                                                             this.messagingGateway.broadcastIncomingMessage('facebook', {
                                                                 ...savedMessage,
                                                                 isOwnMessage: false,
+                                                                senderId: customerId,
+                                                                recipientId: pageId,
                                                                 conversationId: conversation.id,
                                                                 customerName: customerName,
                                                                 customerProfilePic: userProfile?.profile_pic
@@ -277,6 +281,8 @@ export class WebhooksController {
                                     this.messagingGateway.broadcastIncomingMessage('facebook', {
                                         ...savedMessage,
                                         isOwnMessage: isEcho, // If it's an echo, it's our own message (agent)
+                                        senderId: isEcho ? pageId : customerId,
+                                        recipientId: isEcho ? customerId : pageId,
                                         conversationId: conversation.id,
                                         customerName: customerName,
                                         customerProfilePic: userProfile?.profile_pic

@@ -67,6 +67,10 @@ export class MessagesController {
         try {
             console.log('📤 Send message request:', body);
 
+            if (!body.recipientId || body.recipientId === 'undefined' || body.recipientId === 'null') {
+                throw new Error('Recipient ID is missing or invalid');
+            }
+
             let actualRecipientId = body.recipientId;
             let conversationId = body.recipientId;
 
