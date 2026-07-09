@@ -34,7 +34,11 @@ export default function MessageTemplates() {
     const fetchTemplates = async () => {
         setLoading(true);
         try {
-            const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/templates`);
+            const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/templates`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
             // Map array to object for easier lookup
             if (Array.isArray(response.data)) {
                 const fetchedTemplates: Record<string, string> = {};
@@ -66,6 +70,10 @@ export default function MessageTemplates() {
                 status: selectedStatus,
                 template: templateText,
                 is_active: isActive
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
             });
             setStatusMessage({ type: 'success', text: 'Template saved successfully!' });
 

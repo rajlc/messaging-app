@@ -26,11 +26,16 @@ export default function QuickReplyTemplates() {
 
     const loadTemplates = async () => {
         try {
-            const response = await fetch(`${apiUrl}/api/templates/quick-reply`);
+            const response = await fetch(`${apiUrl}/api/templates/quick-reply`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
             const data = await response.json();
-            setTemplates(data);
+            setTemplates(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error('Failed to load templates:', error);
+            setTemplates([]);
         } finally {
             setLoading(false);
         }
@@ -51,13 +56,19 @@ export default function QuickReplyTemplates() {
             if (isCreating) {
                 await fetch(`${apiUrl}/api/templates/quick-reply`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
                     body: JSON.stringify(formData)
                 });
             } else if (editingId) {
                 await fetch(`${apiUrl}/api/templates/quick-reply/${editingId}`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
                     body: JSON.stringify(formData)
                 });
             }
@@ -73,7 +84,10 @@ export default function QuickReplyTemplates() {
 
         try {
             await fetch(`${apiUrl}/api/templates/quick-reply/${id}`, {
-                method: 'DELETE'
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
             });
             await loadTemplates();
         } catch (error) {
