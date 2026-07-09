@@ -72,6 +72,12 @@ export class FacebookController {
                     pageName: acc.name,
                     accessToken: acc.access_token,
                     category: acc.category,
+                    instagramAccount: acc.instagram_business_account ? {
+                        id: acc.instagram_business_account.id,
+                        name: acc.instagram_business_account.name,
+                        username: acc.instagram_business_account.username,
+                        profilePicture: acc.instagram_business_account.profile_picture_url,
+                    } : null,
                 })),
             };
         } catch (error: any) {

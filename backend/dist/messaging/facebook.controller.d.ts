@@ -37,6 +37,12 @@ export declare class FacebookController {
             pageName: any;
             accessToken: any;
             category: any;
+            instagramAccount: {
+                id: any;
+                name: any;
+                username: any;
+                profilePicture: any;
+            } | null;
         }[];
         error?: undefined;
     } | {

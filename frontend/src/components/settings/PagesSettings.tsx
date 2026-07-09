@@ -33,7 +33,7 @@ export default function PagesSettings() {
     const handleFacebookLoginConnect = () => {
         const appId = '900380315905703';
         const redirectUri = `${window.location.origin}/auth/facebook/callback`;
-        const scope = 'pages_show_list,pages_messaging,pages_read_engagement,pages_manage_metadata';
+        const scope = 'pages_show_list,pages_messaging,pages_read_engagement,pages_manage_metadata,instagram_basic,instagram_manage_messages';
         
         const oauthUrl = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&response_type=code`;
         
@@ -54,7 +54,7 @@ export default function PagesSettings() {
                     pageId: page.pageId,
                     accessToken: page.accessToken,
                     pageName: page.pageName,
-                    platform: 'facebook'
+                    platform: selectedPlatform
                 })
             });
 
@@ -68,7 +68,13 @@ export default function PagesSettings() {
             
             // Remove from the list of connectable pages in state
             setOauthPages(prev => {
-                const updated = prev.filter(p => p.pageId !== page.pageId);
+                const updated = prev.filter(p => {
+                    if (selectedPlatform === 'facebook') {
+                        return p.pageId !== page.pageId;
+                    } else {
+                        return p.instagramAccount?.id !== page.pageId;
+                    }
+                });
                 if (updated.length === 0) {
                     setIsOauthModalOpen(false);
                 }
@@ -213,14 +219,19 @@ export default function PagesSettings() {
                                     : `Connect and manage your ${selectedPlatform} integration`}
                             </p>
                         </div>
-                        {(selectedPlatform === 'facebook' || selectedPlatform === 'tiktok') && (
+                        {(selectedPlatform === 'facebook' || selectedPlatform === 'instagram' || selectedPlatform === 'tiktok') && (
                             <div className="flex gap-3">
-                                {selectedPlatform === 'facebook' && (
+                                {(selectedPlatform === 'facebook' || selectedPlatform === 'instagram') && (
                                     <button
                                         onClick={handleFacebookLoginConnect}
-                                        className="px-6 py-2.5 rounded-xl flex items-center gap-2 font-bold uppercase tracking-widest text-xs transition-all shadow-lg bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/10 active:scale-95"
+                                        className={`px-6 py-2.5 rounded-xl flex items-center gap-2 font-bold uppercase tracking-widest text-xs transition-all shadow-lg active:scale-95 ${
+                                            selectedPlatform === 'instagram'
+                                            ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 text-white hover:opacity-90 shadow-pink-600/20'
+                                            : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/10'
+                                        }`}
                                     >
-                                        <Facebook size={18} /> Connect page by login
+                                        {selectedPlatform === 'instagram' ? <Instagram size={18} /> : <Facebook size={18} />}
+                                        Connect {selectedPlatform === 'instagram' ? 'Instagram' : 'page'} by login
                                     </button>
                                 )}
                                 <button
@@ -231,13 +242,13 @@ export default function PagesSettings() {
                                         : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-600/20'
                                     }`}
                                 >
-                                    {isAdding ? 'Cancel' : <><Plus size={18} /> Connect {selectedPlatform === 'facebook' ? 'Page' : 'Account'}</>}
+                                    {isAdding ? 'Cancel' : <><Plus size={18} /> Connect {selectedPlatform === 'facebook' ? 'Page' : selectedPlatform === 'instagram' ? 'Instagram' : 'Account'}</>}
                                 </button>
                             </div>
                         )}
                     </div>
 
-                    {(selectedPlatform !== 'facebook' && selectedPlatform !== 'tiktok') ? (
+                    {(selectedPlatform !== 'facebook' && selectedPlatform !== 'instagram' && selectedPlatform !== 'tiktok') ? (
                         <div className="flex flex-col items-center justify-center py-20 text-center">
                             <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-[2.5rem] flex items-center justify-center text-slate-400 mb-6 border border-dashed border-slate-300 dark:border-slate-700">
                                 {(() => {
@@ -330,7 +341,13 @@ export default function PagesSettings() {
 
                                         <div className="flex items-center gap-4 mb-6">
                                             <div className="w-14 h-14 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl flex items-center justify-center text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20">
-                                                {page.platform === 'facebook' ? <Facebook size={28} /> : <Music2 size={28} />}
+                                                {page.platform === 'facebook' ? (
+                                                    <Facebook size={28} />
+                                                ) : page.platform === 'instagram' ? (
+                                                    <Instagram size={28} />
+                                                ) : (
+                                                    <Music2 size={28} />
+                                                )}
                                             </div>
                                             <div className="min-w-0">
                                                 <h3 className="text-lg font-black text-slate-900 dark:text-white truncate pr-8">{page.page_name || 'Unknown Page'}</h3>
@@ -398,36 +415,76 @@ export default function PagesSettings() {
                             {oauthPages.length === 0 ? (
                                 <p className="text-center py-8 text-slate-500 text-sm">No new connectable pages found.</p>
                             ) : (
-                                oauthPages.map((page) => {
-                                    const isAlreadyConnected = pages.some(p => p.page_id === page.pageId);
-                                    return (
-                                        <div
-                                            key={page.pageId}
-                                            className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-gray-100 dark:border-slate-700"
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center">
-                                                    <Facebook size={20} />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <h4 className="font-bold text-slate-900 dark:text-white truncate max-w-[15rem]">{page.pageName}</h4>
-                                                    <p className="text-[10px] text-slate-400 font-mono">ID: {page.pageId}</p>
-                                                </div>
-                                            </div>
-                                            <button
-                                                disabled={isAlreadyConnected || isLoading}
-                                                onClick={() => handleConnectOauthPage(page)}
-                                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm ${
-                                                    isAlreadyConnected
-                                                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
-                                                    : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/10 active:scale-95'
-                                                }`}
+                                selectedPlatform === 'facebook' ? (
+                                    oauthPages.map((page) => {
+                                        const isAlreadyConnected = pages.some(p => p.page_id === page.pageId);
+                                        return (
+                                            <div
+                                                key={page.pageId}
+                                                className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-gray-100 dark:border-slate-700"
                                             >
-                                                {isAlreadyConnected ? 'Connected' : 'Connect'}
-                                            </button>
-                                        </div>
-                                    );
-                                })
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center">
+                                                        <Facebook size={20} />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <h4 className="font-bold text-slate-900 dark:text-white truncate max-w-[15rem]">{page.pageName}</h4>
+                                                        <p className="text-[10px] text-slate-400 font-mono">ID: {page.pageId}</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    disabled={isAlreadyConnected || isLoading}
+                                                    onClick={() => handleConnectOauthPage(page)}
+                                                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm ${
+                                                        isAlreadyConnected
+                                                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                                                        : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/10 active:scale-95'
+                                                    }`}
+                                                >
+                                                    {isAlreadyConnected ? 'Connected' : 'Connect'}
+                                                </button>
+                                            </div>
+                                        );
+                                    })
+                                ) : (
+                                    oauthPages
+                                        .filter(page => page.instagramAccount !== null && page.instagramAccount !== undefined)
+                                        .map((page) => {
+                                            const ig = page.instagramAccount;
+                                            const isAlreadyConnected = pages.some(p => p.page_id === ig.id);
+                                            return (
+                                                <div
+                                                    key={ig.id}
+                                                    className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-gray-100 dark:border-slate-700"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 rounded-xl flex items-center justify-center">
+                                                            <Instagram size={20} />
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <h4 className="font-bold text-slate-900 dark:text-white truncate max-w-[15rem]">{ig.name || ig.username}</h4>
+                                                            <p className="text-[10px] text-slate-400 font-mono">@{ig.username} | ID: {ig.id}</p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        disabled={isAlreadyConnected || isLoading}
+                                                        onClick={() => handleConnectOauthPage({
+                                                            pageId: ig.id,
+                                                            pageName: ig.name || ig.username,
+                                                            accessToken: page.accessToken
+                                                        })}
+                                                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm ${
+                                                            isAlreadyConnected
+                                                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                                                            : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/10 active:scale-95'
+                                                        }`}
+                                                    >
+                                                        {isAlreadyConnected ? 'Connected' : 'Connect'}
+                                                    </button>
+                                                </div>
+                                            );
+                                        })
+                                )
                             )}
                         </div>
                     </div>

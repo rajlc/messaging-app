@@ -213,7 +213,7 @@ export class FacebookService {
         const response = await axios.get(url, {
             params: {
                 access_token: userAccessToken,
-                fields: 'id,name,access_token,category,tasks',
+                fields: 'id,name,access_token,category,tasks,instagram_business_account{id,name,username,profile_picture_url}',
             },
         });
 
