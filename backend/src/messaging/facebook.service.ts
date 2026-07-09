@@ -183,4 +183,43 @@ export class FacebookService {
             return null;
         }
     }
+
+    async exchangeCodeForAccessToken(code: string, redirectUri: string): Promise<string> {
+        const appId = this.configService.get<string>('META_APP_ID');
+        const appSecret = this.configService.get<string>('META_APP_SECRET');
+
+        if (!appId || !appSecret) {
+            throw new Error('Meta App ID or App Secret is not configured');
+        }
+
+        const url = `https://graph.facebook.com/${this.apiVersion}/oauth/access_token`;
+        const response = await axios.get(url, {
+            params: {
+                client_id: appId,
+                client_secret: appSecret,
+                redirect_uri: redirectUri,
+                code: code,
+            },
+        });
+
+        if (response.data && response.data.access_token) {
+            return response.data.access_token;
+        }
+        throw new Error('Failed to retrieve access token from Meta');
+    }
+
+    async getUserAccounts(userAccessToken: string): Promise<any[]> {
+        const url = `https://graph.facebook.com/${this.apiVersion}/me/accounts`;
+        const response = await axios.get(url, {
+            params: {
+                access_token: userAccessToken,
+                fields: 'id,name,access_token,category,tasks',
+            },
+        });
+
+        if (response.data && response.data.data) {
+            return response.data.data;
+        }
+        return [];
+    }
 }

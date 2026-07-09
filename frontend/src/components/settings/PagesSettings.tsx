@@ -15,6 +15,71 @@ export default function PagesSettings() {
     const [isLoading, setIsLoading] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
     const [selectedPlatform, setSelectedPlatform] = useState('facebook');
+    const [oauthPages, setOauthPages] = useState<any[]>([]);
+    const [isOauthModalOpen, setIsOauthModalOpen] = useState(false);
+
+    useEffect(() => {
+        const handleMessage = (event: MessageEvent) => {
+            if (event.data && event.data.type === 'FB_PAGES_RECEIVED') {
+                setOauthPages(event.data.pages || []);
+                setIsOauthModalOpen(true);
+            }
+        };
+
+        window.addEventListener('message', handleMessage);
+        return () => window.removeEventListener('message', handleMessage);
+    }, []);
+
+    const handleFacebookLoginConnect = () => {
+        const appId = '900380315905703';
+        const redirectUri = `${window.location.origin}/auth/facebook/callback`;
+        const scope = 'pages_show_list,pages_messaging,pages_read_engagement,pages_manage_metadata';
+        
+        const oauthUrl = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&response_type=code`;
+        
+        window.open(oauthUrl, 'Facebook Connect', 'width=600,height=650,status=no,toolbar=no,menubar=no,location=no');
+    };
+
+    const handleConnectOauthPage = async (page: { pageId: string; pageName: string; accessToken: string }) => {
+        setError('');
+        setIsLoading(true);
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/pages`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    pageId: page.pageId,
+                    accessToken: page.accessToken,
+                    pageName: page.pageName,
+                    platform: 'facebook'
+                })
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.message || 'Failed to connect page');
+            }
+
+            setPages([data, ...pages]);
+            
+            // Remove from the list of connectable pages in state
+            setOauthPages(prev => {
+                const updated = prev.filter(p => p.pageId !== page.pageId);
+                if (updated.length === 0) {
+                    setIsOauthModalOpen(false);
+                }
+                return updated;
+            });
+        } catch (err: any) {
+            alert(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const platforms = [
         { id: 'facebook', label: 'Facebook Messenger', icon: Facebook, description: 'Connect Facebook Pages' },
@@ -149,16 +214,26 @@ export default function PagesSettings() {
                             </p>
                         </div>
                         {(selectedPlatform === 'facebook' || selectedPlatform === 'tiktok') && (
-                            <button
-                                onClick={() => setIsAdding(!isAdding)}
-                                className={`px-6 py-2.5 rounded-xl flex items-center gap-2 font-bold uppercase tracking-widest text-xs transition-all shadow-lg ${
-                                    isAdding 
-                                    ? 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700' 
-                                    : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-600/20'
-                                }`}
-                            >
-                                {isAdding ? 'Cancel' : <><Plus size={18} /> Connect {selectedPlatform === 'facebook' ? 'Page' : 'Account'}</>}
-                            </button>
+                            <div className="flex gap-3">
+                                {selectedPlatform === 'facebook' && (
+                                    <button
+                                        onClick={handleFacebookLoginConnect}
+                                        className="px-6 py-2.5 rounded-xl flex items-center gap-2 font-bold uppercase tracking-widest text-xs transition-all shadow-lg bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/10 active:scale-95"
+                                    >
+                                        <Facebook size={18} /> Connect page by login
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => setIsAdding(!isAdding)}
+                                    className={`px-6 py-2.5 rounded-xl flex items-center gap-2 font-bold uppercase tracking-widest text-xs transition-all shadow-lg ${
+                                        isAdding 
+                                        ? 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700' 
+                                        : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-600/20'
+                                    }`}
+                                >
+                                    {isAdding ? 'Cancel' : <><Plus size={18} /> Connect {selectedPlatform === 'facebook' ? 'Page' : 'Account'}</>}
+                                </button>
+                            </div>
                         )}
                     </div>
 
@@ -300,6 +375,64 @@ export default function PagesSettings() {
                             </div>
                         </>
                     )}
+            {/* Facebook Pages Selection Modal */}
+            {isOauthModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-slate-800 rounded-[2rem] border border-gray-200 dark:border-slate-700 shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        {/* Modal Header */}
+                        <div className="p-6 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50 dark:bg-slate-800/50">
+                            <div>
+                                <h3 className="text-xl font-black text-slate-900 dark:text-white mb-1">Select Page to Connect</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Select the page you want to integrate with your dashboard.</p>
+                            </div>
+                            <button
+                                onClick={() => setIsOauthModalOpen(false)}
+                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold bg-gray-100 dark:bg-slate-700 p-2 rounded-xl"
+                            >
+                                Close
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="p-6 max-h-[30rem] overflow-y-auto custom-scrollbar space-y-4">
+                            {oauthPages.length === 0 ? (
+                                <p className="text-center py-8 text-slate-500 text-sm">No new connectable pages found.</p>
+                            ) : (
+                                oauthPages.map((page) => {
+                                    const isAlreadyConnected = pages.some(p => p.page_id === page.pageId);
+                                    return (
+                                        <div
+                                            key={page.pageId}
+                                            className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-gray-100 dark:border-slate-700"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center">
+                                                    <Facebook size={20} />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <h4 className="font-bold text-slate-900 dark:text-white truncate max-w-[15rem]">{page.pageName}</h4>
+                                                    <p className="text-[10px] text-slate-400 font-mono">ID: {page.pageId}</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                disabled={isAlreadyConnected || isLoading}
+                                                onClick={() => handleConnectOauthPage(page)}
+                                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm ${
+                                                    isAlreadyConnected
+                                                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                                                    : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/10 active:scale-95'
+                                                }`}
+                                            >
+                                                {isAlreadyConnected ? 'Connected' : 'Connect'}
+                                            </button>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
                 </div>
             </div>
         </div>

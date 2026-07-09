@@ -70,6 +70,28 @@ let FacebookController = class FacebookController {
             };
         }
     }
+    async exchangeCode(body) {
+        try {
+            const userAccessToken = await this.facebookService.exchangeCodeForAccessToken(body.code, body.redirectUri);
+            const accounts = await this.facebookService.getUserAccounts(userAccessToken);
+            return {
+                success: true,
+                pages: accounts.map(acc => ({
+                    pageId: acc.id,
+                    pageName: acc.name,
+                    accessToken: acc.access_token,
+                    category: acc.category,
+                })),
+            };
+        }
+        catch (error) {
+            console.error('Error exchanging Facebook auth code:', error.response?.data || error.message);
+            return {
+                success: false,
+                error: error.message,
+            };
+        }
+    }
 };
 exports.FacebookController = FacebookController;
 __decorate([
@@ -85,6 +107,13 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], FacebookController.prototype, "getUserProfile", null);
+__decorate([
+    (0, common_1.Post)('exchange-code'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], FacebookController.prototype, "exchangeCode", null);
 exports.FacebookController = FacebookController = __decorate([
     (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.Controller)('api/facebook'),

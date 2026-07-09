@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { FacebookService } from './facebook.service';
@@ -56,6 +56,29 @@ export class FacebookController {
             return {
                 error: 'Failed to fetch user profile',
                 message: error.message
+            };
+        }
+    }
+
+    @Post('exchange-code')
+    async exchangeCode(@Body() body: { code: string; redirectUri: string }) {
+        try {
+            const userAccessToken = await this.facebookService.exchangeCodeForAccessToken(body.code, body.redirectUri);
+            const accounts = await this.facebookService.getUserAccounts(userAccessToken);
+            return {
+                success: true,
+                pages: accounts.map(acc => ({
+                    pageId: acc.id,
+                    pageName: acc.name,
+                    accessToken: acc.access_token,
+                    category: acc.category,
+                })),
+            };
+        } catch (error: any) {
+            console.error('Error exchanging Facebook auth code:', error.response?.data || error.message);
+            return {
+                success: false,
+                error: error.message,
             };
         }
     }

@@ -10,4 +10,6 @@ export declare class FacebookService {
     getPageName(pageId: string, accessToken: string): Promise<string>;
     sendMessage(recipientId: string, text: string, pageId?: string, imageUrl?: string, tag?: string, replyToMid?: string): Promise<any>;
     getUserProfile(userId: string, pageId?: string): Promise<any>;
+    exchangeCodeForAccessToken(code: string, redirectUri: string): Promise<string>;
+    getUserAccounts(userAccessToken: string): Promise<any[]>;
 }

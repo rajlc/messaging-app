@@ -27,4 +27,21 @@ export declare class FacebookController {
         username?: undefined;
     }>;
     getUserProfile(userId: string): Promise<any>;
+    exchangeCode(body: {
+        code: string;
+        redirectUri: string;
+    }): Promise<{
+        success: boolean;
+        pages: {
+            pageId: any;
+            pageName: any;
+            accessToken: any;
+            category: any;
+        }[];
+        error?: undefined;
+    } | {
+        success: boolean;
+        error: any;
+        pages?: undefined;
+    }>;
 }
