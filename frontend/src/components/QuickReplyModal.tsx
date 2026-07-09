@@ -32,11 +32,16 @@ export default function QuickReplyModal({ isOpen, onClose, onSend }: QuickReplyM
 
     const loadTemplates = async () => {
         try {
-            const response = await fetch(`${apiUrl}/api/templates/quick-reply`);
+            const response = await fetch(`${apiUrl}/api/templates/quick-reply`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
             const data = await response.json();
-            setTemplates(data);
+            setTemplates(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error('Failed to load templates:', error);
+            setTemplates([]);
         } finally {
             setLoading(false);
         }

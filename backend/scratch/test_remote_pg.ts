@@ -4,7 +4,7 @@ import * as path from 'path';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
-const dbPassword = process.env.DB_PASSWORD || 'Bagmati@123';
+const dbPassword = process.env.SUPABASE_DB_PASSWORD || process.env.DB_PASSWORD || 'Bagmati@123';
 const host = 'db.jrcluodakvudjkwlrrxi.supabase.co';
 const connectionString = `postgresql://postgres:${encodeURIComponent(dbPassword)}@${host}:5432/postgres`;
 
