@@ -6,7 +6,12 @@ export const commentHandlers = {
     fetchComments: async (customerId: string) => {
         try {
             const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/comments/customer/${customerId}`
+                `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/comments/customer/${customerId}`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                }
             );
             return await response.json();
         } catch (error) {
@@ -22,7 +27,10 @@ export const commentHandlers = {
                 `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/comments/${commentId}/reply`,
                 {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
                     body: JSON.stringify({ message, accessToken })
                 }
             );
@@ -40,7 +48,10 @@ export const commentHandlers = {
                 `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/comments/${commentId}/reply-private`,
                 {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
                     body: JSON.stringify({ message, accessToken, pageId })
                 }
             );
@@ -58,7 +69,10 @@ export const commentHandlers = {
                 `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/comments/${commentId}/hide`,
                 {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
                     body: JSON.stringify({ accessToken })
                 }
             );

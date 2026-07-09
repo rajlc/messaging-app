@@ -1028,7 +1028,11 @@ function UnifiedInboxContent() {
         }));
 
         // Load comments for this customer
-        const commentsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/comments/customer/${conv.customerId}`);
+        const commentsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/comments/customer/${conv.customerId}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
         const commentsData = await commentsResponse.json();
 
         // Convert comments to message format
@@ -1058,7 +1062,11 @@ function UnifiedInboxContent() {
         ));
       } else {
         // No messages, but check for comments
-        const commentsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/comments/customer/${conv.customerId}`);
+        const commentsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/comments/customer/${conv.customerId}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
         const commentsData = await commentsResponse.json();
 
         if (commentsData && commentsData.length > 0) {
