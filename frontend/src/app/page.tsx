@@ -860,9 +860,6 @@ function UnifiedInboxContent() {
         : c
     ).sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()));
 
-    // Only use POST_PURCHASE_UPDATE tag if this conversation has an order
-    const hasOrder = !!(activeConversation?.orderStatus || activeConversation?.hasOrders);
-
     try {
       await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/messages/send`, {
         method: 'POST',
@@ -876,7 +873,6 @@ function UnifiedInboxContent() {
           imageUrl: uploadedUrls.length > 0 ? uploadedUrls : undefined,
           platform: activeConversation?.platform || 'facebook',
           pageId: activeConversation?.pageId,
-          ...(hasOrder && { tag: 'POST_PURCHASE_UPDATE' }),
           replyToMid: currentReplyingTo?.messageId || currentReplyingTo?.id,
           replyToText: currentReplyingTo?.text,
           replyToSender: currentReplyingTo?.sender,
@@ -954,9 +950,6 @@ function UnifiedInboxContent() {
         : c
     ).sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()));
 
-    // Only use POST_PURCHASE_UPDATE tag if this conversation has an order
-    const hasOrder = !!(activeConversation?.orderStatus || activeConversation?.hasOrders);
-
     try {
       await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/messages/send`, {
         method: 'POST',
@@ -969,7 +962,6 @@ function UnifiedInboxContent() {
           text: message,
           platform: activeConversation?.platform || 'facebook',
           pageId: activeConversation?.pageId,
-          ...(hasOrder && { tag: 'POST_PURCHASE_UPDATE' }),
         }),
       });
     } catch (error) {
