@@ -33,7 +33,9 @@ export default function PagesSettings() {
     const handleFacebookLoginConnect = () => {
         const appId = '900380315905703';
         const redirectUri = `${window.location.origin}/auth/facebook/callback`;
-        const scope = 'pages_show_list,pages_messaging,pages_read_engagement,pages_manage_metadata,instagram_basic,instagram_manage_messages';
+        const scope = selectedPlatform === 'facebook'
+            ? 'pages_show_list,pages_messaging,pages_read_engagement,pages_manage_metadata'
+            : 'pages_show_list,pages_messaging,pages_read_engagement,pages_manage_metadata,instagram_basic,instagram_manage_messages';
         
         const oauthUrl = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&response_type=code`;
         
