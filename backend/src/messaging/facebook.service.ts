@@ -213,12 +213,35 @@ export class FacebookService {
         const response = await axios.get(url, {
             params: {
                 access_token: userAccessToken,
-                fields: 'id,name,access_token,category,tasks,instagram_business_account{id,name,username,profile_picture_url}',
+                fields: 'id,name,access_token,category,tasks',
             },
         });
 
         if (response.data && response.data.data) {
-            return response.data.data;
+            const accounts = response.data.data;
+            
+            const accountsWithIg = await Promise.all(accounts.map(async (acc: any) => {
+                try {
+                    const pageUrl = `https://graph.facebook.com/${this.apiVersion}/${acc.id}`;
+                    const pageRes = await axios.get(pageUrl, {
+                        params: {
+                            access_token: acc.access_token,
+                            fields: 'instagram_business_account{id,name,username,profile_picture_url}',
+                        },
+                    });
+                    if (pageRes.data && pageRes.data.instagram_business_account) {
+                        return {
+                            ...acc,
+                            instagram_business_account: pageRes.data.instagram_business_account
+                        };
+                    }
+                } catch (err: any) {
+                    console.warn(`Could not fetch instagram account for page ${acc.id}:`, err.message);
+                }
+                return acc;
+            }));
+            
+            return accountsWithIg;
         }
         return [];
     }
