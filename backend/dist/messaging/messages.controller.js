@@ -56,6 +56,9 @@ let MessagesController = class MessagesController {
     async sendMessage(body) {
         try {
             console.log('📤 Send message request:', body);
+            if (!body.recipientId || body.recipientId === 'undefined' || body.recipientId === 'null') {
+                throw new Error('Recipient ID is missing or invalid');
+            }
             let actualRecipientId = body.recipientId;
             let conversationId = body.recipientId;
             const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
