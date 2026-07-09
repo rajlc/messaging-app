@@ -46,14 +46,50 @@ export default function ViewOrderModal({ isOpen, onClose, customerId }: ViewOrde
     const handleSave = async () => {
         setLoading(true);
         try {
-            if (editedOrder.courier_provider && (editedOrder.courier_delivery_fee || 0) <= 0) {
+            const itemsTotal = editedOrder.items?.reduce((sum: number, item: any) => sum + (item.qty * item.amount), 0) || 0;
+            const delivery = parseFloat(editedOrder.delivery_charge || 0);
+            const maxAllowedPrepayment = itemsTotal + delivery;
+
+            if (editedOrder.payment_status === 'Prepayment' && (parseFloat(editedOrder.prepayment_amount) || 0) > maxAllowedPrepayment) {
+                alert(`Prepayment Amount cannot be greater than the Total Order Value (Rs. ${maxAllowedPrepayment})`);
+                setLoading(false);
+                return;
+            }
+
+            if (itemsTotal <= 0) {
+                alert("Product Price/Amount is required and must be greater than 0");
+                setLoading(false);
+                return;
+            } else if ((editedOrder.payment_status || 'COD') === 'COD' && (itemsTotal + delivery) <= 0) {
+                alert("Amount is required");
+                setLoading(false);
+                return;
+            }
+
+            const currentStatus = editedOrder.order_status;
+            if (currentStatus === 'Confirmed Order' || currentStatus === 'Ready to Ship') {
+                if (!editedOrder.courier_provider) {
+                    alert("Logistic Partner is required");
+                    setLoading(false);
+                    return;
+                }
+                if ((editedOrder.courier_delivery_fee || 0) <= 0) {
+                    alert("Est Delivery Cost is required");
+                    setLoading(false);
+                    return;
+                }
+            } else if (currentStatus !== 'New Order' && editedOrder.courier_provider && (editedOrder.courier_delivery_fee || 0) <= 0) {
                 alert("Est Delivery Cost is required");
                 setLoading(false);
                 return;
             }
             const token = localStorage.getItem('token');
             // Update order logic here
-            await axios.put(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/orders/${editedOrder.id}`, editedOrder, {
+            const payload = {
+                ...editedOrder,
+                total_amount: totalAmount
+            };
+            await axios.put(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/orders/${editedOrder.id}`, payload, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             alert('Order updated successfully!');
@@ -92,7 +128,7 @@ export default function ViewOrderModal({ isOpen, onClose, customerId }: ViewOrde
     if (!isOpen) return null;
 
     const displayOrder = isEditing ? editedOrder : selectedOrder;
-    const totalAmount = displayOrder?.items?.reduce((sum: number, item: any) => sum + (item.qty * item.amount), 0) + (displayOrder?.delivery_charge || 0);
+    const totalAmount = Math.max(0, (displayOrder?.items?.reduce((sum: number, item: any) => sum + (item.qty * item.amount), 0) || 0) + (displayOrder?.delivery_charge || 0) - (displayOrder?.payment_status === 'Prepayment' ? parseFloat(displayOrder.prepayment_amount || 0) : 0));
 
     return (
         <div className="flex flex-col h-full">
@@ -200,6 +236,56 @@ export default function ViewOrderModal({ isOpen, onClose, customerId }: ViewOrde
                                     className="w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-indigo-500 outline-none h-20 resize-none"
                                 />
                             </div>
+
+                            {/* Payment Status & Prepayment Amount */}
+                            {isEditing ? (
+                                <div className={`grid ${editedOrder?.payment_status === 'Prepayment' ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2 block">Payment Status</label>
+                                        <select
+                                            value={editedOrder?.payment_status || 'COD'}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setEditedOrder({
+                                                    ...editedOrder,
+                                                    payment_status: val,
+                                                    prepayment_amount: val === 'COD' ? 0 : (editedOrder?.prepayment_amount || 0)
+                                                });
+                                            }}
+                                            className="w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                        >
+                                            <option value="COD">COD</option>
+                                            <option value="Prepayment">Prepayment</option>
+                                        </select>
+                                    </div>
+                                    {editedOrder?.payment_status === 'Prepayment' && (
+                                        <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                                            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2 block">Prepayment Amount</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={editedOrder?.prepayment_amount || 0}
+                                                onChange={(e) => setEditedOrder({ ...editedOrder, prepayment_amount: Math.max(0, parseFloat(e.target.value) || 0) })}
+                                                placeholder="Enter amount"
+                                                className="w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-indigo-500 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                displayOrder?.payment_status === 'Prepayment' && (
+                                    <div className="grid grid-cols-2 gap-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-slate-700 rounded-lg p-3">
+                                        <div>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">Payment Status</p>
+                                            <p className="text-sm text-slate-900 dark:text-white font-semibold">Prepayment</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">Prepayment Amount</p>
+                                            <p className="text-sm text-emerald-600 dark:text-emerald-400 font-bold">Rs. {displayOrder.prepayment_amount}</p>
+                                        </div>
+                                    </div>
+                                )
+                            )}
 
                             {/* Package Description (Display for all, editable if needed) */}
                             {(displayOrder.package_description || isEditing) && (

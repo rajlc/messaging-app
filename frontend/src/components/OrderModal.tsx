@@ -62,6 +62,8 @@ export default function OrderModal({
     const [isDirty, setIsDirty] = useState(false);
     const [remarks, setRemarks] = useState('');
     const [orderType, setOrderType] = useState('Ads');
+    const [paymentStatus, setPaymentStatus] = useState<string>('COD');
+    const [prepaymentAmount, setPrepaymentAmount] = useState<number>(0);
 
     // Logistics State
     const [courierProvider, setCourierProvider] = useState('');
@@ -204,6 +206,8 @@ export default function OrderModal({
                 setItems(initialOrder.items || []);
                 setCourierProvider('');
                 setRemarks(initialOrder.remarks || '');
+                setPaymentStatus(initialOrder.payment_status || 'COD');
+                setPrepaymentAmount(initialOrder.prepayment_amount || 0);
 
                 // Local Logistics Init
                 setLogisticName(initialOrder.logistic_name || '');
@@ -256,6 +260,8 @@ export default function OrderModal({
                 setPhone(''); // User requested to remove autofill
                 setAddress(initialAddress || '');
                 setRemarks('');
+                setPaymentStatus('COD');
+                setPrepaymentAmount(0);
                 setItems([{ product_name: '', qty: 1, amount: 0, total_amount: 0, product_id: '' }]);
                 setOrderStatus('New Order');
                 setDeliveryCharge(0);
@@ -679,7 +685,7 @@ export default function OrderModal({
     // Totals
     const itemsTotal = items.reduce((sum, item) => sum + (item.qty * item.amount), 0);
     // Use deliveryCharge for actual amount, but totalDeliveryCost could be a fallback if desired
-    const totalAmount = itemsTotal + parseFloat(deliveryCharge.toString());
+    const totalAmount = Math.max(0, itemsTotal + parseFloat(deliveryCharge.toString()) - (paymentStatus === 'Prepayment' ? parseFloat(prepaymentAmount.toString() || '0') : 0));
 
     // Submit
     const handleSubmit = async () => {
@@ -692,7 +698,19 @@ export default function OrderModal({
 
         if (orderStatus === 'Confirmed Order' || orderStatus === 'Ready to Ship') {
             if (!address) missingFields.push("Address");
-            if (totalAmount <= 0) missingFields.push("Amount"); // Assuming total amount > 0
+            if (!courierProvider) {
+                missingFields.push("Logistic Partner");
+            }
+            const maxAllowedPrepayment = itemsTotal + parseFloat(deliveryCharge.toString());
+            if (paymentStatus === 'Prepayment' && prepaymentAmount > maxAllowedPrepayment) {
+                missingFields.push(`Prepayment Amount cannot be greater than the Total Order Value (Rs. ${maxAllowedPrepayment})`);
+            }
+
+            if (itemsTotal <= 0) {
+                missingFields.push("Product Price/Amount");
+            } else if (paymentStatus === 'COD' && totalAmount <= 0) {
+                missingFields.push("Amount");
+            }
 
             // Local Logistics Validation
             if (courierProvider === 'local') {
@@ -716,6 +734,8 @@ export default function OrderModal({
                 if (estCost <= 0) {
                     missingFields.push("Est Delivery Cost");
                 }
+            } else {
+                missingFields.push("Est Delivery Cost");
             }
         }
 
@@ -744,6 +764,8 @@ export default function OrderModal({
                 order_status: orderStatus,
                 delivery_charge: deliveryCharge,
                 total_amount: totalAmount,
+                payment_status: paymentStatus,
+                prepayment_amount: paymentStatus === 'Prepayment' ? prepaymentAmount : 0,
                 weight: weight,
                 items: items.map(item => ({
                     ...item,
@@ -1135,6 +1157,39 @@ export default function OrderModal({
                                 )}
                             </select>
                         </div>
+                    </div>
+
+                    {/* Payment Status & Prepayment Amount */}
+                    <div className={`grid ${paymentStatus === 'Prepayment' ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
+                        <div>
+                            <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1 uppercase font-bold">Payment Status {!isReadOnly && <span className="text-red-500">*</span>}</label>
+                            <select
+                                value={paymentStatus}
+                                onChange={(e) => setDirty(() => {
+                                    setPaymentStatus(e.target.value);
+                                    if (e.target.value === 'COD') setPrepaymentAmount(0);
+                                })}
+                                disabled={isReadOnly}
+                                className="w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded p-2 text-slate-900 dark:text-white focus:border-indigo-500 outline-none disabled:opacity-70"
+                            >
+                                <option value="COD">COD</option>
+                                <option value="Prepayment">Prepayment</option>
+                            </select>
+                        </div>
+                        {paymentStatus === 'Prepayment' && (
+                            <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                                <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1 uppercase font-bold">Prepayment Amount {!isReadOnly && <span className="text-red-500">*</span>}</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={prepaymentAmount}
+                                    onChange={(e) => setDirty(() => setPrepaymentAmount(Math.max(0, parseFloat(e.target.value) || 0)))}
+                                    readOnly={isReadOnly}
+                                    placeholder="Enter amount"
+                                    className="w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded p-2 text-slate-900 dark:text-white outline-none focus:border-indigo-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                />
+                            </div>
+                        )}
                     </div>
 
                     <div>

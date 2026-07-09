@@ -1621,9 +1621,14 @@ export default function OrdersView() {
                                             {/* Section 3: TOTAL + SHIPPING (17%) */}
                                             <div className="flex flex-col w-full md:w-[17%] shrink-0 border-t md:border-t-0 md:border-l border-gray-100 dark:border-slate-700/50 pt-3 md:pt-0 md:pl-4 justify-center md:justify-start">
                                                 <div className="text-[12px] text-[#667085] dark:text-slate-400 uppercase font-semibold">Grand Total</div>
-                                                <div className="text-[34px] font-[800] tracking-[-0.02em] text-[#111827] dark:text-white leading-none mt-1">
+                                                <div className={`${order.payment_status === 'Prepayment' && order.prepayment_amount > 0 ? 'text-[26px]' : 'text-[34px]'} font-[800] tracking-[-0.02em] text-[#111827] dark:text-white leading-none mt-1`}>
                                                     Rs. {order.total_amount}
                                                 </div>
+                                                {order.payment_status === 'Prepayment' && order.prepayment_amount > 0 && (
+                                                    <div className="text-[15px] font-[700] text-emerald-600 dark:text-emerald-400 mt-1 leading-tight">
+                                                        Paid Rs. {order.prepayment_amount}
+                                                    </div>
+                                                )}
                                                 
                                                 <div className="h-[1px] bg-[#EAECF0] dark:bg-slate-700 my-[14px]"></div>
                                                 

@@ -316,7 +316,9 @@ export class OrdersService {
                 ncm_to_branch: orderData.ncm_to_branch,
                 ncm_delivery_type: orderData.ncm_delivery_type,
                 package_description: orderData.package_description,
-                order_type: orderData.order_type || 'Ads'
+                order_type: orderData.order_type || 'Ads',
+                payment_status: orderData.payment_status || 'COD',
+                prepayment_amount: orderData.prepayment_amount || 0
             })
             .select()
             .single();
@@ -670,6 +672,8 @@ export class OrdersService {
             package_description: orderData.package_description,
             order_type: orderData.order_type,
             invoice_printed: orderData.invoice_printed,
+            payment_status: orderData.payment_status,
+            prepayment_amount: orderData.prepayment_amount,
 
             updated_by: user?.full_name || 'System'
         };

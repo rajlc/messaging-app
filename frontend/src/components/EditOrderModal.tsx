@@ -79,7 +79,11 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
 
     useEffect(() => {
         if (order) {
-            setEditedOrder({ ...order });
+            setEditedOrder({
+                payment_status: 'COD',
+                prepayment_amount: 0,
+                ...order
+            });
             // Initialize Logistics
             if (order.courier_provider) setCourierProvider(order.courier_provider);
 
@@ -442,8 +446,24 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
         setLoading(true);
         try {
             // Validation
-            if (courierProvider && (editedOrder.courier_delivery_fee || 0) <= 0) {
-                throw new Error("Est Delivery Cost is required");
+            const currentStatus = editedOrder.order_status;
+            if (currentStatus === 'Confirmed Order' || currentStatus === 'Ready to Ship') {
+                if (!courierProvider) {
+                    throw new Error("Logistic Partner is required");
+                }
+                const estCost = courierProvider === 'pickdrop'
+                    ? pickdropDeliveryCost
+                    : (courierProvider === 'ncm' ? (ncmDeliveryCost > 0 ? ncmDeliveryCost : (editedOrder.courier_delivery_fee || 0)) : (editedOrder.courier_delivery_fee || 0));
+                if (estCost <= 0) {
+                    throw new Error("Est Delivery Cost is required");
+                }
+            } else if (currentStatus !== 'New Order' && courierProvider) {
+                const estCost = courierProvider === 'pickdrop'
+                    ? pickdropDeliveryCost
+                    : (courierProvider === 'ncm' ? (ncmDeliveryCost > 0 ? ncmDeliveryCost : (editedOrder.courier_delivery_fee || 0)) : (editedOrder.courier_delivery_fee || 0));
+                if (estCost <= 0) {
+                    throw new Error("Est Delivery Cost is required");
+                }
             }
 
             if (editedOrder.order_status !== 'New Order' && !packageDescription) {
@@ -453,11 +473,27 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
             const token = localStorage.getItem('token');
             // Recalculate total amount to ensure consistency
             const itemsTotal = editedOrder.items.reduce((sum: number, item: any) => sum + (item.qty * item.amount), 0);
-            const finalTotal = itemsTotal + (editedOrder.delivery_charge || 0);
+            const delivery = parseFloat(editedOrder.delivery_charge || 0);
+            const maxAllowedPrepayment = itemsTotal + delivery;
+
+            if (editedOrder.payment_status === 'Prepayment' && (parseFloat(editedOrder.prepayment_amount) || 0) > maxAllowedPrepayment) {
+                throw new Error(`Prepayment Amount cannot be greater than the Total Order Value (Rs. ${maxAllowedPrepayment})`);
+            }
+
+            if (itemsTotal <= 0) {
+                throw new Error("Product Price/Amount is required and must be greater than 0");
+            } else if ((editedOrder.payment_status || 'COD') === 'COD' && (itemsTotal + delivery) <= 0) {
+                throw new Error("Amount is required");
+            }
+
+            const prepayment = editedOrder.payment_status === 'Prepayment' ? parseFloat(editedOrder.prepayment_amount || 0) : 0;
+            const finalTotal = Math.max(0, itemsTotal + delivery - prepayment);
 
             const payload = {
                 ...editedOrder,
                 total_amount: finalTotal,
+                payment_status: editedOrder.payment_status || 'COD',
+                prepayment_amount: prepayment,
                 courier_provider: courierProvider,
 
                 // Local Logistics
@@ -517,7 +553,7 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
 
     if (!isOpen || !editedOrder) return null;
 
-    const totalAmount = editedOrder.items?.reduce((sum: number, item: any) => sum + (item.qty * item.amount), 0) + (editedOrder.delivery_charge || 0);
+    const totalAmount = Math.max(0, (editedOrder.items?.reduce((sum: number, item: any) => sum + (item.qty * item.amount), 0) || 0) + (editedOrder.delivery_charge || 0) - (editedOrder.payment_status === 'Prepayment' ? parseFloat(editedOrder.prepayment_amount || 0) : 0));
 
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
@@ -732,6 +768,46 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
                             <option value="Follow up again">Follow up again</option>
                             <option value="Cancel">Cancel</option>
                         </select>
+                    </div>
+
+                    {/* Payment Status & Prepayment Amount */}
+                    <div className={`grid ${editedOrder.payment_status === 'Prepayment' ? 'grid-cols-2' : 'grid-cols-1'} gap-3 mb-4`}>
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2 block">Payment Status</label>
+                            <select
+                                value={editedOrder.payment_status || 'COD'}
+                                disabled={isRestricted}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setEditedOrder((prev: any) => ({
+                                        ...prev,
+                                        payment_status: val,
+                                        prepayment_amount: val === 'COD' ? 0 : prev.prepayment_amount
+                                    }));
+                                }}
+                                className="w-full bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                            >
+                                <option value="COD">COD</option>
+                                <option value="Prepayment">Prepayment</option>
+                            </select>
+                        </div>
+                        {editedOrder.payment_status === 'Prepayment' && (
+                            <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2 block">Prepayment Amount</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={editedOrder.prepayment_amount || 0}
+                                    readOnly={isRestricted}
+                                    onChange={(e) => {
+                                        const amt = Math.max(0, parseFloat(e.target.value) || 0);
+                                        setEditedOrder((prev: any) => ({ ...prev, prepayment_amount: amt }));
+                                    }}
+                                    placeholder="Enter amount"
+                                    className="w-full bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-indigo-500 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                />
+                            </div>
+                        )}
                     </div>
 
                     <div className="mb-4">
