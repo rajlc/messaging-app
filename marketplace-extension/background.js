@@ -52,6 +52,20 @@ chrome.runtime.onConnect.addListener((port) => {
 
 // Fetch proxy listener to bypass CSP of injected pages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message && message.type === 'scheduleTimeout') {
+    const { delay, timeoutId } = message;
+    setTimeout(() => {
+      try {
+        if (sender && sender.tab && sender.tab.id) {
+          chrome.tabs.sendMessage(sender.tab.id, { type: 'timeoutFired', timeoutId });
+        }
+      } catch (err) {
+        console.warn('[Marketplace Assistant] Failed to send timeoutFired to tab:', err);
+      }
+    }, delay);
+    return false;
+  }
+
   if (message && message.type === 'fetchProxy') {
     const { url, options } = message;
     fetch(url, options)

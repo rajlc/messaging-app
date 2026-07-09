@@ -9,7 +9,58 @@ function isExtensionContextValid() {
   }
 }
 
-let backendUrl = 'http://localhost:3002';
+const activeTimeouts = new Map();
+let nextTimeoutId = 1;
+
+function safeTimeout(callback, delay) {
+  if (!isExtensionContextValid()) {
+    return setTimeout(callback, delay);
+  }
+  if (!document.hidden) {
+    return setTimeout(callback, delay);
+  }
+
+  const id = nextTimeoutId++;
+  activeTimeouts.set(id, callback);
+  try {
+    chrome.runtime.sendMessage({
+      type: 'scheduleTimeout',
+      delay: delay,
+      timeoutId: id
+    });
+  } catch (err) {
+    activeTimeouts.delete(id);
+    return setTimeout(callback, delay);
+  }
+  return id;
+}
+
+function safeClearTimeout(id) {
+  if (typeof id === 'number') {
+    activeTimeouts.delete(id);
+  } else {
+    clearTimeout(id);
+  }
+}
+
+// Listen for background timeouts
+try {
+  if (isExtensionContextValid()) {
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg && msg.type === 'timeoutFired') {
+        const callback = activeTimeouts.get(msg.timeoutId);
+        if (callback) {
+          activeTimeouts.delete(msg.timeoutId);
+          callback();
+        }
+      }
+    });
+  }
+} catch (err) {
+  console.warn('[Marketplace Assistant] Failed to add timeout listener, context likely invalidated.');
+}
+
+let backendUrl = 'http://127.0.0.1:3002/';
 let token = null;
 let chromeProfileTag = 'Profile-1';
 let activeProfileName = 'Marketplace Profile';
@@ -71,11 +122,11 @@ async function fetchProxy(url, options = {}) {
 function queryOutsideSidebar(selector, all = false) {
   const elements = document.querySelectorAll(selector);
   const filtered = Array.from(elements).filter(el => {
-    if (el.closest('#mkt-sidebar') || 
-        el.closest('#mkt-order-panel') || 
-        el.closest('#mkt-order-modal') || 
-        el.closest('.mkt-panel-container') ||
-        el.closest('#mkt-suggestion-box')) {
+    if (el.closest('#mkt-sidebar') ||
+      el.closest('#mkt-order-panel') ||
+      el.closest('#mkt-order-modal') ||
+      el.closest('.mkt-panel-container') ||
+      el.closest('#mkt-suggestion-box')) {
       return false;
     }
     const rect = el.getBoundingClientRect();
@@ -96,7 +147,7 @@ function isStatusOrNotificationText(txt) {
   if (!txt) return true;
   const t = txt.trim().toLowerCase();
   if (!t) return true;
-  
+
   if (t === 'active now') return true;
   if (/^active\s+\d+\s*\w+\s+ago/i.test(t)) return true;
   if (/^unread\s+message/i.test(t)) return true;
@@ -104,19 +155,19 @@ function isStatusOrNotificationText(txt) {
   if (t === 'sent') return true;
   if (t === 'delivered') return true;
   if (t === 'seen') return true;
-  
+
   if (/^\d+[mhdw]$/i.test(t)) return true;
   if (/\b\d{1,2}:\d{2}\s*(?:AM|PM)?\b/i.test(t)) return true;
   if (/^(today|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i.test(t)) return true;
   if (t === '·' || t === '•') return true;
-  
+
   return false;
 }
 
 function cleanContactName(name) {
   if (!name) return '';
   let cleaned = name.trim();
-  
+
   const statusRegex = /^(active\s+now|active\s+\d+\w*\s+ago|unread\s+message:?|unread)/i;
   cleaned = cleaned.replace(statusRegex, '').trim();
 
@@ -125,7 +176,7 @@ function cleanContactName(name) {
   } else if (cleaned.includes(' • ')) {
     cleaned = cleaned.split(' • ')[0].trim();
   }
-  
+
   return cleaned;
 }
 
@@ -715,9 +766,9 @@ function renderSidebar() {
       document.getElementById('sb-btn-create-order').onclick = () => {
         const details = getCustomerDetails();
         window.MarketplaceOrderModal.open(
-          details.name, 
-          details.id, 
-          activeProfileId, 
+          details.name,
+          details.id,
+          activeProfileId,
           `${activeProfileName} (${chromeProfileTag})`
         );
       };
@@ -793,7 +844,7 @@ function getUnreadCount() {
     const h = a.getAttribute('href') || '';
     return h.includes('/messages/t/') || h.includes('/t/');
   });
-  
+
   let unreadCount = 0;
   anchors.forEach(anchor => {
     const hasAriaUnread = anchor.getAttribute('aria-label')?.toLowerCase().includes('unread');
@@ -832,17 +883,17 @@ function isSystemNotice(text) {
   if (warnings.some(w => textLower.includes(w))) {
     return true;
   }
-  
+
   // RegEx checks for timestamps and dates (e.g. "4:54 PM", "Yesterday", "June 14")
   const timeRegex = /\b\d{1,2}:\d{2}\s*(?:AM|PM)?\b/i;
   const dayRegex = /^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Today|Yesterday)$/i;
   const dateRegex = /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2}\b/i;
-  
+
   const cleanText = text.trim();
   if (timeRegex.test(cleanText) || dayRegex.test(cleanText) || dateRegex.test(cleanText)) {
     return true;
   }
-  
+
   return false;
 }
 
@@ -862,7 +913,7 @@ function getChatColumnCenter() {
     const inputRect = inputArea.getBoundingClientRect();
     return inputRect.left + inputRect.width / 2 - 40; // fallback by offsetting for left action buttons
   }
-  
+
   // Fallback to main content area center
   const mainArea = document.querySelector('div[role="main"]');
   if (mainArea) {
@@ -885,7 +936,7 @@ function getBubbleColorType(el) {
   for (let i = 0; i < 3; i++) {
     if (!current) break;
     const style = window.getComputedStyle(current);
-    
+
     // Check if the background uses a gradient (gradient backgrounds are exclusively used for Agent messages)
     const bgImage = style.backgroundImage;
     if (bgImage && bgImage !== 'none' && bgImage.includes('gradient')) {
@@ -955,7 +1006,7 @@ function detectSenderOfElement(el) {
       return 'Agent (Us)';
     }
   }
-  
+
   const isAgentAria = el.closest('[aria-label*="Sent by You"], [aria-label*="You sent"], [aria-label*="You"], [aria-label*="sent by you"], [aria-label*="you sent"], [aria-label*="you"]');
   if (isAgentAria) {
     return 'Agent (Us)';
@@ -967,39 +1018,39 @@ function detectSenderOfElement(el) {
 
 function getActiveChatMessages() {
   const allDirs = queryOutsideSidebar('div[dir="auto"]', true);
-  
+
   return allDirs.filter(el => {
     // 1. Skip left conversation sidebar list items (wrapped in conversation links)
     if (el.closest('a[href]')) {
       return false;
     }
-    
+
     // Also skip standard navigation/sidebar roles
     if (el.closest('[role="navigation"], [aria-label*="Chats" i]')) {
       return false;
     }
-    
+
     // 2. Skip composer/input area
     if (el.closest('[role="textbox"], [contenteditable="true"], form, [aria-label="Message" i]')) {
       return false;
     }
-    
+
     // 3. Skip headers/banners
     if (el.closest('h1, h2, h3, h4, [role="heading"], [role="banner"]')) {
       return false;
     }
-    
+
     // 4. Ensure it has non-empty text content
     const text = el.textContent.trim();
     if (!text) {
       return false;
     }
-    
+
     // 5. Skip system notices
     if (isSystemNotice(text)) {
       return false;
     }
-    
+
     return true;
   });
 }
@@ -1032,7 +1083,7 @@ function scrapeListingPriceAndProduct() {
 
   const chatPane = queryOutsideSidebar('div[role="main"], div[role="presentation"]');
   const contextArea = chatPane || document.body;
-  
+
   const elements = Array.from(contextArea.querySelectorAll('span, div')).filter(el => {
     if (el.closest('#mkt-sidebar') || el.closest('#mkt-suggestion-box') || el.closest('.mkt-panel-container')) {
       return false;
@@ -1077,7 +1128,7 @@ function getCustomerDetails() {
   if (!rawName && activeAnchor) {
     const leafTextEls = Array.from(activeAnchor.querySelectorAll('*'))
       .filter(el => el.childElementCount === 0 && el.textContent.trim().length > 1);
-    
+
     const validLeaf = leafTextEls.find(el => !isStatusOrNotificationText(el.textContent));
     if (validLeaf) {
       rawName = validLeaf.textContent.trim();
@@ -1113,8 +1164,8 @@ function getCustomerDetails() {
     productName = cardDetails.name;
   }
 
-  return { 
-    name: name || 'Customer', 
+  return {
+    name: name || 'Customer',
     id: id || 'customer-id',
     productName: productName || null,
     productPrice: productPrice || null
@@ -1124,11 +1175,11 @@ function getCustomerDetails() {
 // Check if a message bubble was sent by customer
 function isIncomingMessageElement(el) {
   // Exclude extension's own elements
-  if (el.closest('#mkt-sidebar') || 
-      el.closest('#mkt-order-panel') || 
-      el.closest('#mkt-order-modal') || 
-      el.closest('.mkt-panel-container') ||
-      el.closest('#mkt-suggestion-box')) {
+  if (el.closest('#mkt-sidebar') ||
+    el.closest('#mkt-order-panel') ||
+    el.closest('#mkt-order-modal') ||
+    el.closest('.mkt-panel-container') ||
+    el.closest('#mkt-suggestion-box')) {
     return false;
   }
 
@@ -1170,7 +1221,7 @@ function observeMessages() {
             if (node.matches && node.matches('div[dir="auto"]')) {
               textContainers.push(node);
             }
-            
+
             for (const textEl of textContainers) {
               const messageText = textEl.textContent?.trim();
               if (messageText && isIncomingMessageElement(textEl)) {
@@ -1284,7 +1335,7 @@ function clickNextUnreadChat() {
         logToUI("Unread Chat #" + idx + " is the active thread. Skipping.");
         continue;
       }
-      
+
       logToUI("Auto-clicking unread chat: " + (targetThreadId || "unknown"));
       lastUnreadChatClickTime = now;
       anchor.click();
@@ -1295,7 +1346,7 @@ function clickNextUnreadChat() {
 
 function checkActiveChatForUnrepliedMessage() {
   const now = Date.now();
-  
+
   // If we are currently typing or scheduled to type a reply, check if the customer has sent a NEW message in the meantime.
   // If so, we abort the current typing and re-evaluate to reply to all messages combined.
   if (typingOrScheduledKey) {
@@ -1310,7 +1361,7 @@ function checkActiveChatForUnrepliedMessage() {
           break;
         }
       }
-      
+
       if (currentLastCustomerText && activeProcessingMessageKey) {
         const cleanProdName = (productName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
         const currentKey = customerId + ':' + (cleanProdName || 'none') + ':' + currentLastCustomerText;
@@ -1348,7 +1399,7 @@ function checkActiveChatForUnrepliedMessage() {
   if (lastSender === 'Customer') {
     const messages = getActiveChatMessages();
     const newCustomerMessages = [];
-    
+
     // Scan backwards to gather all customer messages sent since the last agent message
     for (let i = messages.length - 1; i >= 0; i--) {
       const msgEl = messages[i];
@@ -1368,12 +1419,12 @@ function checkActiveChatForUnrepliedMessage() {
       const lastText = newCustomerMessages[newCustomerMessages.length - 1];
       const combinedText = newCustomerMessages.join(' ');
       const cleanProdName = (productName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-      
+
       const messageKey = customerId + ':' + (cleanProdName || 'none') + ':' + lastText;
       const messageSignature = customerId + ':' + (cleanProdName || 'none') + ':' + combinedText;
-      
+
       const lastSentAt = processedMessageSignatures.get(messageSignature) || 0;
-      
+
       // Only process if this exact message signature (combined text) hasn't been processed within 12 hours
       if ((now - lastSentAt) > 43200000) {
         logToUI("Found new unreplied messages: " + JSON.stringify(newCustomerMessages));
@@ -1409,7 +1460,7 @@ const processedMessageSignatures = new Map(); // key: messageSignature, value: t
 
 async function handleNewMessage(textOrArray) {
   const now = Date.now();
-  
+
   let combinedText = '';
   let textsArray = [];
 
@@ -1462,7 +1513,7 @@ async function handleNewMessage(textOrArray) {
       const data = await response.json();
       if (data.replyText) {
         logToUI("Backend reply matched: '" + data.replyText.substring(0, 20) + "...'");
-        
+
         // Only trigger reply if the fetching lock wasn't cleared/aborted in the meantime
         if (!hasValidCustomer || typingOrScheduledKey === customerId + ':fetching') {
           if (hasValidCustomer) {
@@ -1613,8 +1664,8 @@ function typeAndSendReply(replyText) {
   typingOrScheduledKey = messageKey;
   typingCustomerName = targetCustomer.name;
   const waitMs = Math.floor(Math.random() * 10000) + 5000;
-  logToUI("Simulating typing: waiting " + (waitMs/1000).toFixed(1) + "s...");
-  
+  logToUI("Simulating typing: waiting " + (waitMs / 1000).toFixed(1) + "s...");
+
   typingTimeoutId = setTimeout(() => {
     try {
       const currentCustomer = getCustomerDetails();
@@ -1631,7 +1682,7 @@ function typeAndSendReply(replyText) {
 
       input.focus();
       logToUI("Typing response: '" + replyText.substring(0, 25) + "...'");
-      
+
       try {
         const selection = window.getSelection();
         const range = document.createRange();
@@ -1645,7 +1696,7 @@ function typeAndSendReply(replyText) {
 
       if (document.hidden) {
         logToUI("Tab is in background. Inserting entire response instantly to bypass background throttling.");
-        
+
         let execSuccess = false;
         try {
           input.focus();
@@ -1666,21 +1717,21 @@ function typeAndSendReply(replyText) {
           if (!currentText.includes(replyText.substring(0, Math.min(10, replyText.length)))) {
             try {
               input.focus();
-              
+
               let p = input.querySelector('p');
               if (!p) {
                 p = document.createElement('p');
                 p.className = 'xdj266r x11i5rnm xat24cr x1mh8g0r x16tdct8';
                 input.appendChild(p);
               }
-              
+
               let span = p.querySelector('span[data-lexical-text="true"]') || p.querySelector('span[data-text="true"]') || p.querySelector('span');
               if (!span) {
                 span = document.createElement('span');
                 span.setAttribute('data-lexical-text', 'true');
                 p.appendChild(span);
               }
-              
+
               span.textContent = replyText;
               p.querySelectorAll('br').forEach(br => br.remove());
 
@@ -1692,7 +1743,7 @@ function typeAndSendReply(replyText) {
             }
           }
         }
-        
+
         charTypingTimeoutId = setTimeout(() => {
           try {
             const checkCustomerFinal = getCustomerDetails();
@@ -1754,7 +1805,7 @@ function typeAndSendReply(replyText) {
         }, 500);
         return;
       }
-      
+
       let charIndex = 0;
       function typeChar() {
         try {
@@ -2051,7 +2102,7 @@ async function processPendingMessage(msgObj) {
 
   // 2. We are on the correct thread, type and send it!
   const success = await typeAndSendReplyDirectly(text);
-  
+
   if (success) {
     logToUI(`[Pending Send] Message sent successfully. Notifying backend...`);
     // 3. Notify backend to clear from queue
@@ -2083,7 +2134,7 @@ async function typeAndSendReplyDirectly(replyText) {
 
   input.focus();
   logToUI("[Pending Send] Inserting text: '" + replyText.substring(0, 25) + "...'");
-  
+
   let execSuccess = false;
   try {
     const selection = window.getSelection();
@@ -2259,7 +2310,7 @@ function disconnectKeepAlive() {
     try {
       console.log('[Marketplace Assistant] Disconnecting keepalive port.');
       keepAlivePort.disconnect();
-    } catch (e) {}
+    } catch (e) { }
     keepAlivePort = null;
   }
 }
@@ -2302,7 +2353,7 @@ function scrapeConversationList() {
       const s = window.getComputedStyle(el);
       const bg = s.backgroundColor;
       const w = parseInt(s.width);
-      return (bg==='rgb(0, 132, 255)'||bg==='rgb(45, 136, 255)'||bg==='rgb(24, 119, 242)') && s.borderRadius==='50%' && w>4 && w<20;
+      return (bg === 'rgb(0, 132, 255)' || bg === 'rgb(45, 136, 255)' || bg === 'rgb(24, 119, 242)') && s.borderRadius === '50%' && w > 4 && w < 20;
     });
     const isCustomerLast = preview && !preview.toLowerCase().startsWith('you:') && !preview.toLowerCase().startsWith('you ');
     selectModeConversations.set(href, { name, preview, isUnread, isCustomerLast });
@@ -2328,33 +2379,33 @@ function enterSelectMode() {
       const badge = conv.isUnread ? '<span style="display:inline-block;width:7px;height:7px;background:#3b82f6;border-radius:50%;margin-left:4px;vertical-align:middle;"></span>' : '';
       const previewColor = conv.isCustomerLast ? '#38bdf8' : '#64748b';
       const previewStr = conv.preview ? conv.preview.substring(0, 45) : (conv.isCustomerLast ? 'Customer message' : 'You sent last');
-      const safeHref = href.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-      rowsHtml += '<div class="mkt-pick-row" data-idx="'+idx+'" data-href="'+safeHref+'" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;border:1px solid #334155;background:#0f172a;transition:all 0.15s;">' +
-        '<input type="checkbox" class="mkt-pick-cb" data-href="'+safeHref+'" style="width:16px;height:16px;accent-color:#6366f1;cursor:pointer;flex-shrink:0;">' +
+      const safeHref = href.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+      rowsHtml += '<div class="mkt-pick-row" data-idx="' + idx + '" data-href="' + safeHref + '" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;border:1px solid #334155;background:#0f172a;transition:all 0.15s;">' +
+        '<input type="checkbox" class="mkt-pick-cb" data-href="' + safeHref + '" style="width:16px;height:16px;accent-color:#6366f1;cursor:pointer;flex-shrink:0;">' +
         '<div style="flex:1;min-width:0;">' +
-          '<div style="font-size:12px;font-weight:700;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + conv.name + badge + '</div>' +
-          '<div style="font-size:10px;color:'+previewColor+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;">' + previewStr + '</div>' +
+        '<div style="font-size:12px;font-weight:700;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + conv.name + badge + '</div>' +
+        '<div style="font-size:10px;color:' + previewColor + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;">' + previewStr + '</div>' +
         '</div>' +
-      '</div>';
+        '</div>';
       idx++;
     });
   }
 
   sidebar.innerHTML =
     '<div class="mkt-sb-header" style="flex-shrink:0;">' +
-      '<h3 class="mkt-sb-title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg> Select Conversations</h3>' +
-      '<span id="mkt-pick-count" style="font-size:11px;color:#fbbf24;font-weight:700;">0 selected</span>' +
+    '<h3 class="mkt-sb-title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg> Select Conversations</h3>' +
+    '<span id="mkt-pick-count" style="font-size:11px;color:#fbbf24;font-weight:700;">0 selected</span>' +
     '</div>' +
     '<div style="padding:8px 12px;display:flex;gap:6px;border-bottom:1px solid #334155;flex-shrink:0;">' +
-      '<button id="mkt-pick-auto" style="flex:1;padding:7px 6px;background:#0ea5e9;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">&#9889; Auto-Unread</button>' +
-      '<button id="mkt-pick-all" style="flex:1;padding:7px 6px;background:#334155;color:#f8fafc;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">&#9745; All</button>' +
-      '<button id="mkt-pick-refresh" style="padding:7px 8px;background:#334155;color:#94a3b8;border:none;border-radius:7px;font-size:11px;cursor:pointer;" title="Refresh">&#8635;</button>' +
+    '<button id="mkt-pick-auto" style="flex:1;padding:7px 6px;background:#0ea5e9;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">&#9889; Auto-Unread</button>' +
+    '<button id="mkt-pick-all" style="flex:1;padding:7px 6px;background:#334155;color:#f8fafc;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">&#9745; All</button>' +
+    '<button id="mkt-pick-refresh" style="padding:7px 8px;background:#334155;color:#94a3b8;border:none;border-radius:7px;font-size:11px;cursor:pointer;" title="Refresh">&#8635;</button>' +
     '</div>' +
     '<div id="mkt-pick-list" style="flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:5px;">' + rowsHtml + '</div>' +
     '<div id="mkt-pick-progress" style="display:none;padding:6px 12px;font-size:11px;font-weight:700;color:#fbbf24;background:#0f172a;text-align:center;border-top:1px solid #334155;flex-shrink:0;"></div>' +
     '<div style="padding:10px 12px;border-top:1px solid #334155;display:flex;flex-direction:column;gap:6px;flex-shrink:0;">' +
-      '<button id="mkt-pick-reply" disabled style="padding:10px;background:#10b981;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:not-allowed;opacity:0.5;">&#9993; Reply to Selected (0)</button>' +
-      '<button id="mkt-pick-back" style="padding:8px;background:#334155;color:#f8fafc;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">&#8592; Back</button>' +
+    '<button id="mkt-pick-reply" disabled style="padding:10px;background:#10b981;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:not-allowed;opacity:0.5;">&#9993; Reply to Selected (0)</button>' +
+    '<button id="mkt-pick-back" style="padding:8px;background:#334155;color:#f8fafc;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">&#8592; Back</button>' +
     '</div>';
 
   // Wire up row clicks
@@ -2368,8 +2419,8 @@ function enterSelectMode() {
     if (cb) {
       cb.addEventListener('change', () => {
         const href = cb.dataset.href;
-        if (cb.checked) { selectedHrefs.add(href); row.style.background='rgba(99,102,241,0.2)'; row.style.borderColor='#6366f1'; }
-        else { selectedHrefs.delete(href); row.style.background='#0f172a'; row.style.borderColor='#334155'; }
+        if (cb.checked) { selectedHrefs.add(href); row.style.background = 'rgba(99,102,241,0.2)'; row.style.borderColor = '#6366f1'; }
+        else { selectedHrefs.delete(href); row.style.background = '#0f172a'; row.style.borderColor = '#334155'; }
         updatePickerCount();
       });
     }
@@ -2396,20 +2447,20 @@ function updatePickerCount() {
 }
 
 function autoSelectUnreadPicker() {
-  document.querySelectorAll('.mkt-pick-cb').forEach(cb => { if (cb.checked) { cb.checked=false; cb.dispatchEvent(new Event('change')); } });
+  document.querySelectorAll('.mkt-pick-cb').forEach(cb => { if (cb.checked) { cb.checked = false; cb.dispatchEvent(new Event('change')); } });
   selectedHrefs.clear();
   let count = 0;
   selectModeConversations.forEach((conv, href) => {
     if (conv.isUnread || conv.isCustomerLast) {
-      const cb = document.querySelector('.mkt-pick-cb[data-href="'+href.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"]');
-      if (cb && !cb.checked) { cb.checked=true; cb.dispatchEvent(new Event('change')); count++; }
+      const cb = document.querySelector('.mkt-pick-cb[data-href="' + href.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"]');
+      if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change')); count++; }
     }
   });
   console.log('[Select Mode] Auto-selected ' + count + ' conversations.');
 }
 
 function selectAllPicker() {
-  document.querySelectorAll('.mkt-pick-cb').forEach(cb => { if (!cb.checked) { cb.checked=true; cb.dispatchEvent(new Event('change')); } });
+  document.querySelectorAll('.mkt-pick-cb').forEach(cb => { if (!cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change')); } });
 }
 
 async function processSelectedConversations() {
@@ -2420,30 +2471,30 @@ async function processSelectedConversations() {
   const autoBtn = document.getElementById('mkt-pick-auto');
   const progressEl = document.getElementById('mkt-pick-progress');
 
-  if (replyBtn) { replyBtn.disabled=true; replyBtn.textContent='Processing...'; replyBtn.style.opacity='0.7'; }
-  if (backBtn) backBtn.disabled=true;
-  if (autoBtn) autoBtn.disabled=true;
-  if (progressEl) progressEl.style.display='';
+  if (replyBtn) { replyBtn.disabled = true; replyBtn.textContent = 'Processing...'; replyBtn.style.opacity = '0.7'; }
+  if (backBtn) backBtn.disabled = true;
+  if (autoBtn) autoBtn.disabled = true;
+  if (progressEl) progressEl.style.display = '';
 
-  let done=0, replied=0, skipped=0;
+  let done = 0, replied = 0, skipped = 0;
 
   for (const href of links) {
     done++;
     const conv = selectModeConversations.get(href);
-    const name = conv ? conv.name.substring(0,20) : '...';
-    if (progressEl) progressEl.textContent = '('+done+'/'+links.length+') Opening: '+name+'...';
+    const name = conv ? conv.name.substring(0, 20) : '...';
+    if (progressEl) progressEl.textContent = '(' + done + '/' + links.length + ') Opening: ' + name + '...';
 
-    const anchor = queryOutsideSidebar('a[href="'+href+'"]');
+    const anchor = queryOutsideSidebar('a[href="' + href + '"]');
     if (!anchor) { skipped++; continue; }
     anchor.click();
     await new Promise(r => setTimeout(r, 2800));
 
-    if (progressEl) progressEl.textContent = '('+done+'/'+links.length+') Reading messages...';
+    if (progressEl) progressEl.textContent = '(' + done + '/' + links.length + ') Reading messages...';
 
     const msgRows = queryOutsideSidebar('div[role="row"], div.x78zum5.xdt5ytf.x1iyjqo2.xs83m0k', true);
 
     let lastText = '';
-    for (let i = msgRows.length-1; i >= 0; i--) {
+    for (let i = msgRows.length - 1; i >= 0; i--) {
       const row = msgRows[i];
       if (row.closest('[role="navigation"],[aria-label*="Chats" i]')) continue;
       if (row.closest('[role="textbox"],[contenteditable="true"],form')) continue;
@@ -2458,7 +2509,7 @@ async function processSelectedConversations() {
 
     if (!lastText) { skipped++; continue; }
 
-    if (progressEl) progressEl.textContent = '('+done+'/'+links.length+') Sending reply...';
+    if (progressEl) progressEl.textContent = '(' + done + '/' + links.length + ') Sending reply...';
     await handleNewMessage(lastText);
     replied++;
     await new Promise(r => setTimeout(r, 1500));
@@ -2467,11 +2518,11 @@ async function processSelectedConversations() {
   if (progressEl) {
     progressEl.textContent = 'Done! ' + replied + ' replied, ' + skipped + ' skipped.';
     progressEl.style.color = '#10b981';
-    setTimeout(() => { if (progressEl) { progressEl.style.display='none'; progressEl.style.color='#fbbf24'; } }, 6000);
+    setTimeout(() => { if (progressEl) { progressEl.style.display = 'none'; progressEl.style.color = '#fbbf24'; } }, 6000);
   }
-  if (replyBtn) { replyBtn.disabled=false; replyBtn.textContent='Reply to Selected ('+selectedHrefs.size+')'; replyBtn.style.opacity='1'; }
-  if (backBtn) backBtn.disabled=false;
-  if (autoBtn) autoBtn.disabled=false;
+  if (replyBtn) { replyBtn.disabled = false; replyBtn.textContent = 'Reply to Selected (' + selectedHrefs.size + ')'; replyBtn.style.opacity = '1'; }
+  if (backBtn) backBtn.disabled = false;
+  if (autoBtn) autoBtn.disabled = false;
 }
 
 function exitSelectMode() {
