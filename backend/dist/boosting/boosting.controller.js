@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BoostingController = void 0;
 const common_1 = require("@nestjs/common");
 const boosting_service_1 = require("./boosting.service");
+const passport_1 = require("@nestjs/passport");
 let BoostingController = class BoostingController {
     boostingService;
     constructor(boostingService) {
@@ -54,6 +55,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], BoostingController.prototype, "create", null);
 exports.BoostingController = BoostingController = __decorate([
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.Controller)('api/boosting-costs'),
     __metadata("design:paramtypes", [boosting_service_1.BoostingService])
 ], BoostingController);

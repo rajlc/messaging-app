@@ -67,24 +67,17 @@ let WebhooksController = class WebhooksController {
         return res.status(common_1.HttpStatus.FORBIDDEN).send('Forbidden');
     }
     async handleMetaWebhook(body) {
-        console.log('='.repeat(80));
-        console.log('--- Incoming Meta Webhook ---');
-        console.log('Received at:', new Date().toISOString());
-        console.log(JSON.stringify(body, null, 2));
-        if (body.object === 'page') {
+        console.log(`[${new Date().toISOString()}] Meta Webhook received: object=${body?.object}`);
+        if (body?.object === 'page') {
             body.entry.forEach((entry) => {
-                console.log(`\n📋 Processing entry for Page ID: ${entry.id}`);
-                console.log(`   - Has messaging events: ${!!entry.messaging}`);
-                console.log(`   - Has changes (feed) events: ${!!entry.changes}`);
                 if (entry.messaging) {
-                    console.log(`   ✉️ Found ${entry.messaging.length} messaging event(s)`);
                     entry.messaging.forEach((messagingEvent) => {
-                        console.log('Processing messaging event:', JSON.stringify(messagingEvent, null, 2));
+                        const pageId = entry.id;
+                        const isFromPage = messagingEvent.sender.id === pageId;
+                        const isEcho = messagingEvent.message?.is_echo;
+                        const customerId = isFromPage ? messagingEvent.recipient.id : messagingEvent.sender.id;
+                        console.log(`[FACEBOOK WEBHOOK] Page ID: ${pageId} | Customer: ${customerId} | Echo: ${!!isEcho}`);
                         if (messagingEvent.message) {
-                            const pageId = entry.id;
-                            const isFromPage = messagingEvent.sender.id === pageId;
-                            const isEcho = messagingEvent.message.is_echo;
-                            const customerId = isFromPage ? messagingEvent.recipient.id : messagingEvent.sender.id;
                             const senderRole = isFromPage ? 'agent' : 'customer';
                             const messageId = messagingEvent.message.mid;
                             let text = messagingEvent.message.text;

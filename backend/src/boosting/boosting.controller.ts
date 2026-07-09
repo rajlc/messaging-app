@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
 import { BoostingService } from './boosting.service';
+import { AuthGuard } from '@nestjs/passport';
 
+@UseGuards(AuthGuard('jwt'))
 @Controller('api/boosting-costs')
 export class BoostingController {
     constructor(private readonly boostingService: BoostingService) { }

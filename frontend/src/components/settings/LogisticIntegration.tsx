@@ -52,7 +52,11 @@ export default function LogisticIntegration() {
         setStatusMessage(null);
         try {
             if (activeProvider === 'pathao') {
-                const response = await axios.get(`${API_URL}/api/settings/courier`);
+                const response = await axios.get(`${API_URL}/api/settings/courier`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
                 if (response.data) {
                     setPathaoConfig({
                         base_url: response.data.base_url || '',
@@ -68,7 +72,11 @@ export default function LogisticIntegration() {
                     });
                 }
             } else if (activeProvider === 'pickdrop') {
-                const response = await axios.get(`${API_URL}/api/settings/courier/pickdrop`);
+                const response = await axios.get(`${API_URL}/api/settings/courier/pickdrop`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
                 if (response.data) {
                     setPickdropConfig({
                         base_url: response.data.base_url || 'https://pickndropnepal.com',
@@ -77,7 +85,11 @@ export default function LogisticIntegration() {
                     });
                 }
             } else if (activeProvider === 'ncm') {
-                const response = await axios.get(`${API_URL}/api/settings/courier/ncm`);
+                const response = await axios.get(`${API_URL}/api/settings/courier/ncm`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
                 if (response.data) {
                     setNcmConfig({
                         base_url: response.data.base_url || 'https://portal.nepalcanmove.com',
@@ -99,11 +111,23 @@ export default function LogisticIntegration() {
         setStatusMessage(null);
         try {
             if (activeProvider === 'pathao') {
-                await axios.post(`${API_URL}/api/settings/courier`, pathaoConfig);
+                await axios.post(`${API_URL}/api/settings/courier`, pathaoConfig, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
             } else if (activeProvider === 'pickdrop') {
-                await axios.post(`${API_URL}/api/settings/courier/pickdrop`, pickdropConfig);
+                await axios.post(`${API_URL}/api/settings/courier/pickdrop`, pickdropConfig, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
             } else if (activeProvider === 'ncm') {
-                await axios.post(`${API_URL}/api/settings/courier/ncm`, ncmConfig);
+                await axios.post(`${API_URL}/api/settings/courier/ncm`, ncmConfig, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
             }
             setStatusMessage({ type: 'success', text: 'Settings saved successfully!' });
             setTimeout(() => setStatusMessage(null), 3000);

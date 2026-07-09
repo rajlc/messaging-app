@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const comments_service_1 = require("./comments.service");
 const facebook_graph_service_1 = require("../facebook/facebook-graph.service");
 const config_1 = require("@nestjs/config");
+const passport_1 = require("@nestjs/passport");
 let CommentsController = class CommentsController {
     commentsService;
     facebookGraphService;
@@ -139,6 +140,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], CommentsController.prototype, "deleteComment", null);
 exports.CommentsController = CommentsController = __decorate([
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.Controller)('api/comments'),
     __metadata("design:paramtypes", [comments_service_1.CommentsService,
         facebook_graph_service_1.FacebookGraphService,

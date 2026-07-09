@@ -20,6 +20,7 @@ const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const axios_1 = __importDefault(require("axios"));
 const facebook_service_1 = require("./facebook.service");
+const passport_1 = require("@nestjs/passport");
 let FacebookController = class FacebookController {
     configService;
     facebookService;
@@ -85,6 +86,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], FacebookController.prototype, "getUserProfile", null);
 exports.FacebookController = FacebookController = __decorate([
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.Controller)('api/facebook'),
     __metadata("design:paramtypes", [config_1.ConfigService,
         facebook_service_1.FacebookService])

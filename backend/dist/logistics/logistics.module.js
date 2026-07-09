@@ -10,6 +10,7 @@ exports.LogisticsModule = void 0;
 const common_1 = require("@nestjs/common");
 const logistics_service_1 = require("./logistics.service");
 const logistics_controller_1 = require("./logistics.controller");
+const logistics_webhook_controller_1 = require("./logistics-webhook.controller");
 const pick_drop_service_1 = require("./pick-drop.service");
 const ncm_service_1 = require("./ncm.service");
 const settings_module_1 = require("../settings/settings.module");
@@ -20,7 +21,7 @@ exports.LogisticsModule = LogisticsModule;
 exports.LogisticsModule = LogisticsModule = __decorate([
     (0, common_1.Module)({
         imports: [settings_module_1.SettingsModule, orders_module_1.OrdersModule],
-        controllers: [logistics_controller_1.LogisticsController],
+        controllers: [logistics_controller_1.LogisticsController, logistics_webhook_controller_1.LogisticsWebhookController],
         providers: [logistics_service_1.LogisticsService, pick_drop_service_1.PickDropService, ncm_service_1.NcmService],
         exports: [logistics_service_1.LogisticsService, pick_drop_service_1.PickDropService, ncm_service_1.NcmService]
     })

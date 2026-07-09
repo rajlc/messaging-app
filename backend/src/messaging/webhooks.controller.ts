@@ -71,29 +71,22 @@ export class WebhooksController {
     // Meta Webhook receiver
     @Post('meta')
     async handleMetaWebhook(@Body() body: any) {
-        console.log('='.repeat(80));
-        console.log('--- Incoming Meta Webhook ---');
-        console.log('Received at:', new Date().toISOString());
-        console.log(JSON.stringify(body, null, 2));
+        console.log(`[${new Date().toISOString()}] Meta Webhook received: object=${body?.object}`);
 
-        if (body.object === 'page') {
+        if (body?.object === 'page') {
             body.entry.forEach((entry: any) => {
-                console.log(`\n📋 Processing entry for Page ID: ${entry.id}`);
-                console.log(`   - Has messaging events: ${!!entry.messaging}`);
-                console.log(`   - Has changes (feed) events: ${!!entry.changes}`);
-
                 if (entry.messaging) {
-                    console.log(`   ✉️ Found ${entry.messaging.length} messaging event(s)`);
                     entry.messaging.forEach((messagingEvent: any) => {
-                        console.log('Processing messaging event:', JSON.stringify(messagingEvent, null, 2));
+                        const pageId = entry.id; // The ID of the Page receiving the webhook
+                        const isFromPage = messagingEvent.sender.id === pageId;
+                        const isEcho = messagingEvent.message?.is_echo;
+                        const customerId = isFromPage ? messagingEvent.recipient.id : messagingEvent.sender.id;
+                        
+                        console.log(`[FACEBOOK WEBHOOK] Page ID: ${pageId} | Customer: ${customerId} | Echo: ${!!isEcho}`);
+
                         // Process messaging events
                         if (messagingEvent.message) {
-                            const pageId = entry.id; // The ID of the Page receiving the webhook
-                            const isFromPage = messagingEvent.sender.id === pageId;
-                            const isEcho = messagingEvent.message.is_echo;
-                            
                             // Determine who is the customer and who is the agent
-                            const customerId = isFromPage ? messagingEvent.recipient.id : messagingEvent.sender.id;
                             const senderRole = isFromPage ? 'agent' : 'customer';
                             const messageId = messagingEvent.message.mid;
 

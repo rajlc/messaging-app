@@ -1,9 +1,11 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { supabaseService } from '../supabase/supabase.service';
 import { FacebookService } from './facebook.service';
 import { MessagingGateway } from '../socket/messaging.gateway';
 import { PagesController } from './pages/pages.controller';
+import { AuthGuard } from '@nestjs/passport';
 
+@UseGuards(AuthGuard('jwt'))
 @Controller('api/messages')
 export class MessagesController {
     constructor(

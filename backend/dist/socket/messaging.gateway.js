@@ -29,7 +29,7 @@ let MessagingGateway = class MessagingGateway {
         console.log(`Client disconnected: ${client.id}`);
     }
     async handleMessage(data, client) {
-        console.log('Received message from frontend:', data);
+        console.log(`Received sendMessage request from client: ${client.id} for platform: ${data?.platform}`);
         if (data.platform === 'facebook' && data.recipientId) {
             try {
                 await this.facebookService.sendMessage(data.recipientId, data.text);
@@ -42,16 +42,12 @@ let MessagingGateway = class MessagingGateway {
         this.server.emit('messageReceived', data);
     }
     broadcastIncomingMessage(platform, message) {
-        console.log('📤 Broadcasting message to frontend via socket.io');
-        console.log('Platform:', platform);
-        console.log('Message:', message);
-        console.log('Connected clients:', this.server.sockets.sockets.size);
+        console.log(`📤 Broadcasting message to frontend via socket.io (Platform: ${platform})`);
         this.server.emit('incomingMessage', {
             platform,
             ...message,
             conversationId: message.conversationId
         });
-        console.log('✅ Message broadcast complete');
     }
 };
 exports.MessagingGateway = MessagingGateway;

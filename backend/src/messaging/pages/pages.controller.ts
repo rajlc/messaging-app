@@ -1,7 +1,9 @@
-import { Controller, Get, Post, Delete, Patch, Body, Param, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Patch, Body, Param, HttpException, HttpStatus, UseGuards } from '@nestjs/common';
 import { supabaseService } from '../../supabase/supabase.service';
 import { FacebookService } from '../facebook.service';
+import { AuthGuard } from '@nestjs/passport';
 
+@UseGuards(AuthGuard('jwt'))
 @Controller('api/pages')
 export class PagesController {
     constructor(private facebookService: FacebookService) { }

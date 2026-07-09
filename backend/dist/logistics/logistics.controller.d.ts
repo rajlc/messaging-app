@@ -1,4 +1,3 @@
-import * as express from 'express';
 import { LogisticsService } from './logistics.service';
 import { PickDropService } from './pick-drop.service';
 import { NcmService } from './ncm.service';
@@ -17,7 +16,6 @@ export declare class LogisticsController {
         data: any;
     }>;
     getPathaoInfo(orderId: string): Promise<any>;
-    handleWebhook(payload: any, headers: any, res: express.Response): Promise<express.Response<any, Record<string, any>>>;
     getPickDropBranches(): Promise<{
         success: boolean;
         data: any;
@@ -72,12 +70,6 @@ export declare class LogisticsController {
         error: any;
         data?: undefined;
     }>;
-    verifyPickDropWebhook(): Promise<{
-        message: string;
-        expectedPath: string;
-        method: string;
-    }>;
-    handlePickDropWebhook(payload: any, headers: any, res: express.Response): Promise<express.Response<any, Record<string, any>>>;
     getNcmBranches(): Promise<{
         success: boolean;
         data: any[];
@@ -106,13 +98,6 @@ export declare class LogisticsController {
         error: any;
         orderId?: undefined;
         message?: undefined;
-    }>;
-    handleNcmWebhook(payload: any): Promise<{
-        success: boolean;
-        error?: undefined;
-    } | {
-        success: boolean;
-        error: any;
     }>;
     registerNcmWebhook(url: string): Promise<{
         success: boolean;

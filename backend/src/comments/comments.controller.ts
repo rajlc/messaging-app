@@ -1,8 +1,10 @@
-import { Controller, Get, Post, Delete, Body, Param, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, HttpException, HttpStatus, UseGuards } from '@nestjs/common';
 import { CommentsService } from './comments.service';
 import { FacebookGraphService } from '../facebook/facebook-graph.service';
 import { ConfigService } from '@nestjs/config';
+import { AuthGuard } from '@nestjs/passport';
 
+@UseGuards(AuthGuard('jwt'))
 @Controller('api/comments')
 export class CommentsController {
     constructor(

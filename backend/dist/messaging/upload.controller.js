@@ -16,6 +16,7 @@ exports.UploadController = void 0;
 const common_1 = require("@nestjs/common");
 const platform_express_1 = require("@nestjs/platform-express");
 const supabase_service_1 = require("../supabase/supabase.service");
+const passport_1 = require("@nestjs/passport");
 let UploadController = class UploadController {
     async uploadFile(file) {
         if (!file) {
@@ -45,6 +46,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], UploadController.prototype, "uploadFile", null);
 exports.UploadController = UploadController = __decorate([
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.Controller)('api/upload')
 ], UploadController);
 //# sourceMappingURL=upload.controller.js.map

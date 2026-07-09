@@ -16,6 +16,7 @@ exports.SettingsController = void 0;
 const common_1 = require("@nestjs/common");
 const platform_express_1 = require("@nestjs/platform-express");
 const settings_service_1 = require("./settings.service");
+const passport_1 = require("@nestjs/passport");
 let SettingsController = class SettingsController {
     settingsService;
     constructor(settingsService) {
@@ -185,6 +186,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], SettingsController.prototype, "uploadMarketplaceProducts", null);
 exports.SettingsController = SettingsController = __decorate([
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.Controller)('api/settings'),
     __metadata("design:paramtypes", [settings_service_1.SettingsService])
 ], SettingsController);

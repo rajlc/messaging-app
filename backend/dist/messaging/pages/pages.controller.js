@@ -17,6 +17,7 @@ exports.PagesController = void 0;
 const common_1 = require("@nestjs/common");
 const supabase_service_1 = require("../../supabase/supabase.service");
 const facebook_service_1 = require("../facebook.service");
+const passport_1 = require("@nestjs/passport");
 let PagesController = class PagesController {
     static { PagesController_1 = this; }
     facebookService;
@@ -148,6 +149,7 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], PagesController.prototype, "markMessageSent", null);
 exports.PagesController = PagesController = PagesController_1 = __decorate([
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.Controller)('api/pages'),
     __metadata("design:paramtypes", [facebook_service_1.FacebookService])
 ], PagesController);

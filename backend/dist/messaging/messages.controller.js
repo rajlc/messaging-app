@@ -18,6 +18,7 @@ const supabase_service_1 = require("../supabase/supabase.service");
 const facebook_service_1 = require("./facebook.service");
 const messaging_gateway_1 = require("../socket/messaging.gateway");
 const pages_controller_1 = require("./pages/pages.controller");
+const passport_1 = require("@nestjs/passport");
 let MessagesController = class MessagesController {
     facebookService;
     messagingGateway;
@@ -183,6 +184,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], MessagesController.prototype, "sendMessage", null);
 exports.MessagesController = MessagesController = __decorate([
+    (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.Controller)('api/messages'),
     __metadata("design:paramtypes", [facebook_service_1.FacebookService,
         messaging_gateway_1.MessagingGateway])

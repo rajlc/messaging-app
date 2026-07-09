@@ -56,7 +56,11 @@ export default function AIAgentSettings() {
         setIsCatalogLoading(true);
         setCatalogError('');
         try {
-            const res = await fetch(`${API_URL}/api/settings/marketplace-products`);
+            const res = await fetch(`${API_URL}/api/settings/marketplace-products`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
             const data = await res.json();
             if (Array.isArray(data)) {
                 setCatalogProducts(data);
@@ -85,6 +89,9 @@ export default function AIAgentSettings() {
         try {
             const res = await fetch(`${API_URL}/api/settings/marketplace-products/upload`, {
                 method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
                 body: formData,
             });
             const data = await res.json();
@@ -109,6 +116,9 @@ export default function AIAgentSettings() {
         try {
             const res = await fetch(`${API_URL}/api/settings/marketplace-products/${id}`, {
                 method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
             });
             const data = await res.json();
             if (data.success) {
@@ -127,6 +137,9 @@ export default function AIAgentSettings() {
         try {
             const res = await fetch(`${API_URL}/api/settings/marketplace-products/clear`, {
                 method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
             });
             const data = await res.json();
             if (data.success) {
@@ -144,7 +157,11 @@ export default function AIAgentSettings() {
 
     const fetchSettings = async () => {
         try {
-            const res = await fetch(`${API_URL}/api/settings`);
+            const res = await fetch(`${API_URL}/api/settings`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
             const data = await res.json();
             setIsGlobalEnabled(data.is_ai_global_enabled === 'true');
             setIsMarketplaceEnabled(data.is_ai_marketplace_enabled === 'true');
@@ -159,7 +176,11 @@ export default function AIAgentSettings() {
     const fetchPages = async () => {
         setIsLoadingPages(true);
         try {
-            const res = await fetch(`${API_URL}/api/pages`);
+            const res = await fetch(`${API_URL}/api/pages`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
             const data = await res.json();
             setPages(data || []);
         } catch (err) {
@@ -175,7 +196,10 @@ export default function AIAgentSettings() {
         try {
             const res = await fetch(`${API_URL}/api/settings`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
                 body: JSON.stringify({
                     is_ai_global_enabled: String(isGlobalEnabled),
                     is_ai_marketplace_enabled: String(isMarketplaceEnabled),
@@ -218,7 +242,10 @@ export default function AIAgentSettings() {
         try {
             const res = await fetch(`${API_URL}/api/pages/${editingPage.id}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
                 body: JSON.stringify({
                     is_ai_enabled: editAiEnabled,
                     custom_prompt: editPrompt,
