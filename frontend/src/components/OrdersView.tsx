@@ -653,7 +653,11 @@ export default function OrdersView() {
                 return (priority[a.order_status] || 99) - (priority[b.order_status] || 99);
             });
         } else if (orderListSubTab === 'returned') {
-            orderList = orderList.filter(order => order.order_status === 'Returned Delivered');
+            orderList = orderList.filter(order => 
+                order.order_status === 'Returned Delivered' || 
+                order.order_status === 'Returned' || 
+                order.order_status === 'Return Delivered'
+            );
         } else if (orderListSubTab === 'delivered') {
             orderList = orderList.filter(order => order.order_status === 'Delivered');
         }
@@ -809,7 +813,11 @@ export default function OrdersView() {
             o.order_status === 'Delivery Failed' || 
             o.order_status === 'Return Process'
         ).length;
-        const returnedCount = orders.filter(o => o.order_status === 'Returned Delivered').length;
+        const returnedCount = orders.filter(o => 
+            o.order_status === 'Returned Delivered' || 
+            o.order_status === 'Returned' || 
+            o.order_status === 'Return Delivered'
+        ).length;
         const deliveredCount = orders.filter(o => o.order_status === 'Delivered').length;
         return { all: allCount, shipped: shippedCount, returnProcess: returnProcessCount, returned: returnedCount, delivered: deliveredCount };
     }, [orders]);

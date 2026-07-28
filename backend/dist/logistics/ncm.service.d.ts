@@ -11,8 +11,20 @@ export declare class NcmService {
     constructor(settingsService: SettingsService, ordersService: OrdersService);
     private getCredentials;
     private getHeaders;
-    getBranches(): Promise<any[]>;
-    calculateShippingRate(pickupBranch: string, destinationBranch: string, type?: string): Promise<any>;
+    getBranches(): Promise<any>;
+    calculateShippingRate(pickupBranch: string, destinationBranch: string, type?: string): Promise<{
+        success: boolean;
+        charge: number;
+        error: string;
+        rate?: undefined;
+        total?: undefined;
+    } | {
+        success: boolean;
+        charge: number;
+        rate: number;
+        total: number;
+        error?: undefined;
+    }>;
     createOrder(orderData: any): Promise<{
         success: boolean;
         orderId: any;

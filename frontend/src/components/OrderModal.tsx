@@ -64,6 +64,7 @@ export default function OrderModal({
     const [orderType, setOrderType] = useState('Ads');
     const [paymentStatus, setPaymentStatus] = useState<string>('COD');
     const [prepaymentAmount, setPrepaymentAmount] = useState<number>(0);
+    const [returnDeliveryCharge, setReturnDeliveryCharge] = useState<number>(0);
 
     // Logistics State
     const [courierProvider, setCourierProvider] = useState('');
@@ -137,6 +138,8 @@ export default function OrderModal({
     // Populate data regarding mode
 
     // Mock Page Mapping (Should ideally be fetched from API)
+    const [connectedPages, setConnectedPages] = useState<any[]>([]);
+
     const PAGE_MAPPING: { [key: string]: string } = {
         '104508142519049': 'Sasto Online Shopping',
         '107953682325493': 'Online Shopping Bagmati',
@@ -150,6 +153,37 @@ export default function OrderModal({
         'Website': 'Website'
     };
 
+    // Helper to get Page Name from ID or Name
+    const getPageName = (idOrName: string) => {
+        if (!idOrName) return '';
+        const found = connectedPages.find(p => (p.page_id && p.page_id === idOrName) || (p.page_name && p.page_name.toLowerCase() === idOrName.toLowerCase()));
+        if (found) return found.page_name || found.pageName;
+        return PAGE_MAPPING[idOrName] || idOrName;
+    };
+
+    // Helper to get Page Platform from ID or Name
+    const getPagePlatform = (idOrName: string) => {
+        if (!idOrName) return '';
+        const found = connectedPages.find(p => (p.page_id && p.page_id === idOrName) || (p.page_name && p.page_name.toLowerCase() === idOrName.toLowerCase()));
+        if (found && found.platform) {
+            const p = found.platform;
+            return p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+        }
+        return PAGE_PLATFORM_MAPPING[idOrName] || '';
+    };
+
+    // Helper to filter pages by platform
+    const getFilteredPages = () => {
+        if (orderPlatform === 'Others') return ['Others'];
+        if (!orderPlatform) return allowedAccounts;
+
+        return allowedAccounts.filter(acc => {
+            if (acc === 'Others') return true;
+            const p = getPagePlatform(acc);
+            return !p || p.toLowerCase() === orderPlatform.toLowerCase();
+        });
+    };
+
     useEffect(() => {
         if (isOpen) {
             setCurrentMode(mode);
@@ -157,42 +191,48 @@ export default function OrderModal({
             fetchCities();
             fetchPathaoAreas();
 
-            // Load User Permissions & Setup Options
-            try {
-                const userStr = localStorage.getItem('user');
-                if (userStr) {
-                    const user = JSON.parse(userStr);
-                    setUserRole(user.role);
+            // Fetch connected pages dynamically
+            axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/pages`, {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            }).then(res => {
+                const pagesData = Array.isArray(res.data) ? res.data : [];
+                setConnectedPages(pagesData);
 
-                    if (user.role === 'admin' || user.role === 'editor') {
-                        // Admin/Editor: See All + Others
-                        setAllowedPlatforms(['Facebook', 'Instagram', 'Tiktok', 'Others', 'Website']);
-                        // All known pages + Others
-                        const allPageIds = Object.keys(PAGE_MAPPING).filter(k => k !== 'Others');
-                        setAllowedAccounts([...allPageIds, 'Others']);
+                // Build dynamic page accounts list
+                const dynamicPageAccounts = pagesData.map(p => p.page_id || p.page_name).filter(Boolean);
+                const allPageIds = Array.from(new Set([
+                    ...Object.keys(PAGE_MAPPING).filter(k => k !== 'Others'),
+                    ...dynamicPageAccounts
+                ]));
+
+                try {
+                    const userStr = localStorage.getItem('user');
+                    if (userStr) {
+                        const user = JSON.parse(userStr);
+                        setUserRole(user.role);
+
+                        if (user.role === 'admin' || user.role === 'editor') {
+                            setAllowedPlatforms(['Facebook', 'Instagram', 'Tiktok', 'Others', 'Website']);
+                            setAllowedAccounts([...allPageIds, 'Others']);
+                        } else {
+                            const userPlatforms = user.platforms || [];
+                            const userAccounts = user.accounts || [];
+                            setAllowedPlatforms([...userPlatforms, 'Others']);
+                            setAllowedAccounts([...Array.from(new Set([...userAccounts, ...allPageIds])), 'Others']);
+                        }
                     } else {
-                        // User: Allowed + Others
-                        const userPlatforms = user.platforms || [];
-                        const userAccounts = user.accounts || [];
-                        setAllowedPlatforms([...userPlatforms, 'Others']);
-                        setAllowedAccounts([...userAccounts, 'Others']);
+                        setAllowedPlatforms(['Facebook', 'Instagram', 'Tiktok', 'Others', 'Website']);
+                        setAllowedAccounts([...allPageIds, 'Others']);
                     }
-
-                    // Default to 'Others' if creating manually (no context)
-                    if (mode === 'create' && !platform && !pageId && !pageName) {
-                        setOrderPlatform('Others');
-                        setOrderPageName('Others');
-                        setOrderPageId('Others');
-                    } else if (mode === 'create' && user.role !== 'admin') {
-                        // Auto-select single option logic (preserved but aware of 'Others')
-                        // Only auto-select if "Others" is the ONLY option (which implies empty real permissions)
-                        // OR if we want to prioritize real permissions? 
-                        // Requirement: "initially show Others". So defaulting to Others above handles it for manual.
-                    }
+                } catch (e) {
+                    console.error("Error parsing user", e);
                 }
-            } catch (e) {
-                console.error("Error parsing user", e);
-            }
+            }).catch(e => {
+                console.error("Failed to fetch pages in OrderModal:", e);
+                const allPageIds = Object.keys(PAGE_MAPPING).filter(k => k !== 'Others');
+                setAllowedAccounts([...allPageIds, 'Others']);
+                setAllowedPlatforms(['Facebook', 'Instagram', 'Tiktok', 'Others', 'Website']);
+            });
 
             if ((mode === 'view' || mode === 'edit') && initialOrder) {
                 // Populate fields from order
@@ -204,10 +244,12 @@ export default function OrderModal({
                 setDeliveryCharge(initialOrder.delivery_charge || 0);
                 setWeight(initialOrder.weight || 0.5);
                 setItems(initialOrder.items || []);
-                setCourierProvider('');
+                const provider = initialOrder.courier_provider || (initialOrder.logistic_name ? 'local' : '') || '';
+                setCourierProvider(provider);
                 setRemarks(initialOrder.remarks || '');
                 setPaymentStatus(initialOrder.payment_status || 'COD');
                 setPrepaymentAmount(initialOrder.prepayment_amount || 0);
+                setReturnDeliveryCharge(initialOrder.return_delivery_charge || 0);
 
                 // Local Logistics Init
                 setLogisticName(initialOrder.logistic_name || '');
@@ -216,7 +258,6 @@ export default function OrderModal({
                 // Pick & Drop Init
                 setSelectedPickdropBranch(initialOrder.pickdrop_destination_branch || '');
                 setPickdropBranchSearch(initialOrder.pickdrop_destination_branch || '');
-                // City area: use saved value, or fall back to order address
                 setPickdropCityArea(initialOrder.pickdrop_city_area || initialOrder.address || '');
                 setPickdropTrackingUrl(initialOrder.pickdrop_tracking_url || '');
 
@@ -245,7 +286,6 @@ export default function OrderModal({
                     }
                 }
 
-                // Fetch dependent logistics data if needed (zones/areas)
                 if (initialOrder.city_id) {
                     axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/zones/${initialOrder.city_id}`)
                         .then(res => setZones(res.data || [])).catch(console.error);
@@ -256,8 +296,8 @@ export default function OrderModal({
                 }
             } else {
                 // Reset for create
-                setOrderCustomerName(''); // User requested to remove autofill
-                setPhone(''); // User requested to remove autofill
+                setOrderCustomerName(customerName || '');
+                setPhone(initialPhone || '');
                 setAddress(initialAddress || '');
                 setRemarks('');
                 setPaymentStatus('COD');
@@ -293,35 +333,37 @@ export default function OrderModal({
                 setOrderType('Ads');
             }
 
+            // Auto-fill from props (context-aware & normalized)
+            let formattedPlatform = '';
+            if (platform) {
+                const pLower = platform.toLowerCase();
+                if (pLower === 'facebook') formattedPlatform = 'Facebook';
+                else if (pLower === 'instagram') formattedPlatform = 'Instagram';
+                else if (pLower === 'tiktok') formattedPlatform = 'Tiktok';
+                else if (pLower === 'website') formattedPlatform = 'Website';
+                else formattedPlatform = platform.charAt(0).toUpperCase() + platform.slice(1);
+                setOrderPlatform(formattedPlatform);
+            }
 
-            // Auto-fill from props (context-aware)
-            if (platform) setOrderPlatform(platform);
-            if (pageName) setOrderPageName(pageName);
-            if (pageId) setOrderPageId(pageId);
+            if (pageId) {
+                setOrderPageId(pageId);
+                setOrderPageName(getPageName(pageId) || pageName || pageId);
+            } else if (pageName) {
+                setOrderPageName(pageName);
+                const matched = connectedPages.find(p => p.page_name?.toLowerCase() === pageName.toLowerCase() || p.page_id === pageName);
+                if (matched) {
+                    setOrderPageId(matched.page_id || pageName);
+                    if (!formattedPlatform && matched.platform) {
+                        const pLower = matched.platform.toLowerCase();
+                        const pForm = pLower === 'facebook' ? 'Facebook' : pLower === 'instagram' ? 'Instagram' : pLower === 'tiktok' ? 'Tiktok' : matched.platform;
+                        setOrderPlatform(pForm);
+                    }
+                } else {
+                    setOrderPageId(pageName);
+                }
+            }
         }
-    }, [isOpen, initialOrder, mode, platform, pageName, pageId]);
-
-    // Helper to get Page Name from ID
-    const getPageName = (idOrName: string) => {
-        return PAGE_MAPPING[idOrName] || idOrName;
-    };
-
-    // Helper to filter pages by platform
-    const getFilteredPages = () => {
-        if (orderPlatform === 'Others') return ['Others'];
-        if (!orderPlatform) return allowedAccounts; // Show all if no platform selected? Or none?
-
-        return allowedAccounts.filter(acc => {
-            if (acc === 'Others') return true; // Always show Others? Requirement says "show selected plateform pages and also show Others"
-            // If we don't know the platform for an account, maybe show it to be safe?
-            // Or strict: PAGE_PLATFORM_MAPPING[acc] === orderPlatform
-            // For now, assume unmapped accounts match nothing (except maybe legacy names?)
-            // If 'acc' is a Name (legacy), we can't easily map it. 
-            // BUT we are standardizing on IDs.
-            const p = PAGE_PLATFORM_MAPPING[acc];
-            return p === orderPlatform;
-        });
-    };
+    }, [isOpen, initialOrder, mode, platform, pageName, pageId, customerName, initialPhone]);
 
     // Auto-select 'Others' page if Platform is 'Others'
     useEffect(() => {
@@ -330,6 +372,69 @@ export default function OrderModal({
             setOrderPageId('Others');
         }
     }, [orderPlatform]);
+
+    // Fetch branches when courierProvider switches or modal opens
+    useEffect(() => {
+        if (isOpen) {
+            if (courierProvider === 'pickdrop') fetchPickDropBranches();
+            if (courierProvider === 'ncm') fetchNcmBranches();
+            if (courierProvider === 'pathao') fetchCities();
+        }
+    }, [isOpen, courierProvider]);
+
+    // Calculate Pick & Drop rate when branch or area changes
+    useEffect(() => {
+        if (courierProvider === 'pickdrop' && selectedPickdropBranch && pickdropCityArea) {
+            const timer = setTimeout(() => {
+                fetchPickDropDeliveryRate(selectedPickdropBranch, pickdropCityArea, 1);
+            }, 300);
+            return () => clearTimeout(timer);
+        }
+    }, [courierProvider, selectedPickdropBranch, pickdropCityArea]);
+
+    // Calculate NCM rate when branch or delivery type changes
+    useEffect(() => {
+        if (courierProvider === 'ncm' && ncmToBranch) {
+            const timer = setTimeout(() => {
+                fetchNcmDeliveryRate(ncmToBranch, ncmFromBranch, ncmDeliveryType);
+            }, 300);
+            return () => clearTimeout(timer);
+        }
+    }, [courierProvider, ncmToBranch, ncmFromBranch, ncmDeliveryType]);
+
+    // Re-evaluate Platform and Page when dynamic connectedPages finishes loading
+    useEffect(() => {
+        if (isOpen && connectedPages.length > 0) {
+            let formattedPlatform = orderPlatform;
+            if (platform) {
+                const pLower = platform.toLowerCase();
+                formattedPlatform = pLower === 'facebook' ? 'Facebook' : pLower === 'instagram' ? 'Instagram' : pLower === 'tiktok' ? 'Tiktok' : pLower === 'website' ? 'Website' : platform.charAt(0).toUpperCase() + platform.slice(1);
+                setOrderPlatform(formattedPlatform);
+            }
+
+            if (pageId) {
+                const matched = connectedPages.find(p => p.page_id === pageId || p.page_name?.toLowerCase() === pageId.toLowerCase());
+                if (matched) {
+                    setOrderPageId(matched.page_id || pageId);
+                    setOrderPageName(matched.page_name || pageName || pageId);
+                    if (!formattedPlatform && matched.platform) {
+                        const pLower = matched.platform.toLowerCase();
+                        setOrderPlatform(pLower === 'facebook' ? 'Facebook' : pLower === 'instagram' ? 'Instagram' : pLower === 'tiktok' ? 'Tiktok' : matched.platform);
+                    }
+                }
+            } else if (pageName) {
+                const matched = connectedPages.find(p => p.page_name?.toLowerCase() === pageName.toLowerCase() || p.page_id === pageName);
+                if (matched) {
+                    setOrderPageId(matched.page_id || pageName);
+                    setOrderPageName(matched.page_name || pageName);
+                    if (!formattedPlatform && matched.platform) {
+                        const pLower = matched.platform.toLowerCase();
+                        setOrderPlatform(pLower === 'facebook' ? 'Facebook' : pLower === 'instagram' ? 'Instagram' : pLower === 'tiktok' ? 'Tiktok' : matched.platform);
+                    }
+                }
+            }
+        }
+    }, [isOpen, connectedPages, platform, pageId, pageName]);
 
     // Auto-populate Package Description from items (REMOVED as per user request)
 
@@ -378,7 +483,10 @@ export default function OrderModal({
     // Logistics API Call Helpers
     const fetchCities = async () => {
         try {
-            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/cities`);
+            const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/cities`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
             setCities(res.data || []);
         } catch (error) {
             console.error('Failed to load cities', error);
@@ -387,7 +495,10 @@ export default function OrderModal({
 
     const fetchPathaoAreas = async () => {
         try {
-            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/all-areas`);
+            const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/all-areas`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
             setPathaoAreas(res.data || []);
         } catch (error) {
             console.error('Failed to load Pathao areas', error);
@@ -395,59 +506,200 @@ export default function OrderModal({
     };
 
     const fetchPickDropBranches = async () => {
-        if (pickdropBranches.length > 0) return; // Already loaded
+        const masterBranches = [
+            { name: 'KATHMANDU VALLEY', branch_name: 'KATHMANDU VALLEY', district_name: 'Kathmandu', area: ['Kathmandu', 'New Road', 'Thamel', 'Baneshwor', 'Kalanki', 'Chabahil', 'Koteshwor', 'Balaju Industrial Area', 'Asan', 'Indrachowk', 'Lazimpat', 'Maharajgunj', 'Gongabu', 'Samakhusi', 'Bouddha', 'Jorpati', 'Pashupati', 'Gaushala', 'Sinamangal', 'Tinkune', 'Balkhu', 'Kirtipur', 'Kalimati', 'Teku', 'Tripureshwor', 'Jamal', 'Durbarmarg', 'Naxal', 'Kamalpokhari', 'Maitidevi', 'Old Baneshwor', 'New Baneshwor', 'Shankhamul'] },
+            { name: 'LALITPUR', branch_name: 'LALITPUR', district_name: 'Lalitpur', area: ['Lalitpur Valley', 'Kupandole', 'Pulchowk', 'Jawalakhel', 'Satdobato', 'Mangalbazar', 'Lagankhel', 'Kumaripati', 'Balkhu', 'Gwarko', 'Imadol', 'Sanepa', 'Jhamsikhel', 'Bhadrakali', 'Bhanimandal', 'Dhapakhel', 'Harisiddhi', 'Thaiba', 'Godavari', 'Bungamati', 'Khokana', 'Lubhu'] },
+            { name: 'BHAKTAPUR', branch_name: 'BHAKTAPUR', district_name: 'Bhaktapur', area: ['Bhaktapur', 'Suryabinayak', 'Thimi', 'Lokanthali', 'Kaushaltar', 'Gatthaghar', 'Sallaghari', 'Byasi', 'Kamalbinayak', 'Dadapati', 'Duwakot', 'Balkot', 'Changunarayan', 'Nagarkot', 'Sipadol'] },
+            { name: 'DHADING BESI', branch_name: 'DHADING BESI', district_name: 'Dhading', area: ['Nilkantha Municipality', 'Dhading', 'DHADING BESI', 'MURALI BHANJYANG', 'NILKANTHA', 'SANGKOSH', 'BICHHAUR', 'JAMPAL', 'SUNGAVA'] },
+            { name: 'CHARAUDI', branch_name: 'CHARAUDI', district_name: 'Dhading', area: ['Benighat Rorang Rural Municipality', 'Dhading', 'BISHALTAR', 'CHARAUDI', 'DHUSA', 'HUGDIKHOLA', 'JYAMIREGHAT', 'KHATAUTI', 'KRISHNABHIR', 'LALTIN BAZAR', 'MAJHIMTAR', 'MOWAKHOLA'] },
+            { name: 'DHARKE', branch_name: 'DHARKE', district_name: 'Dhading', area: ['Dhunibenshi Municipality', 'Dhading', 'DHARKE', 'KHANI KHOLA', 'MAHADEVESTHAN', 'NAUBISE', 'THAKRE', 'JIWANPUR'] },
+            { name: 'GAJURI', branch_name: 'GAJURI', district_name: 'Dhading', area: ['Gajuri Rural Municipality', 'Dhading', 'GAJURI', 'MALEKHU', 'PIDA', 'BENIGHAT', 'KIRENI'] },
+            { name: 'TRISHULI', branch_name: 'TRISHULI', district_name: 'Nuwakot', area: ['Bidur Municipality', 'Nuwakot', 'Battar', 'Betrawati', 'Bidur', 'Devighat Bazar', 'Dhikure Bazar', 'Gerkhutar', 'Pipalntar', 'Sole Bazar', 'Tupche', 'Trishuli Bazar', 'Ranipauwa', 'Kakani'] },
+            { name: 'POKHARA', branch_name: 'POKHARA', district_name: 'Kaski', area: ['ARCHALBOT', 'BAGAR', 'BHADRAKALI', 'BINDABASINI', 'BIRAUTA', 'BOTECHAUTARA', 'CHAUTHE', 'CHINEDADA', 'CHIPLEDHUNGA', 'CHOREPATAN', 'DAMSIDE', 'DEEP', 'DIGOPATAN', 'FULBARI', 'GAIRAPATAN', 'GALESHWOR', 'GHARIPATAN', 'HALANCHOWK', 'HARICHOWK', 'JAIMURE', 'JAREBAR', 'KALIMATI', 'KHAHARE', 'LAMACHAUR', 'MAASBAR', 'MAHENDRAGUFA', 'MAHENDRAPOOL', 'MALEPATAN', 'MANIPAL', 'MATEPANI', 'MATGAUDA', 'MEYAPATAN', 'NADIPUR', 'NAGDHUNGA', 'NAVA GALI', 'Lakeside', 'Prithvi Chowk', 'Lekhnath', 'Sarangkot', 'Hemja', 'Shishuwa'] },
+            { name: 'BUTWAL', branch_name: 'BUTWAL', district_name: 'Rupandehi', area: ['Traffic Chowk', 'Rajmarg Chauraha', 'Butwal', 'Golpark', 'Devinagar', 'Milanchowk', 'Hospitalline', 'Haatbazar', 'Deepnagar', 'Kalikanagar', 'Belbas', 'Nayagaun', 'Tamnagar'] },
+            { name: 'BHAIRAHAWA', branch_name: 'BHAIRAHAWA', district_name: 'Rupandehi', area: ['Bhairahawa', 'Siddharthanagar', 'Bankasya', 'Barmeli Tole', 'Devkota Chowk', 'Dhakdhai', 'Lumbini Road', 'Milan Chowk'] },
+            { name: 'PALPA', branch_name: 'PALPA', district_name: 'Palpa', area: ['Tansen Municipality', 'Palpa', 'Tansen', 'Barthang', 'Rampur', 'Aryabhanjyang'] },
+            { name: 'BIRATNAGAR', branch_name: 'BIRATNAGAR', district_name: 'Morang', area: ['Bargachhi', 'Trafic Chowk', 'Main Road', 'Biratnagar', 'Maina Road', 'Airport Mode', 'Kanchanbari', 'Puspalal Chowk', 'Rangashala', 'Tintulia'] },
+            { name: 'DHARAN', branch_name: 'DHARAN', district_name: 'Sunsari', area: ['Bhanu Chowk', 'Mahendra Path', 'Dharan', 'Bhedetar', 'Putali Line', 'Chatara Line', 'Prithvi Path'] },
+            { name: 'ITAHARI', branch_name: 'ITAHARI', district_name: 'Sunsari', area: ['Main Chowk', 'Biratnagar Line', 'Itahari', 'Dharan Line', 'Auraabani', 'Talgachhi', 'Khanar'] },
+            { name: 'BIRTAMODE', branch_name: 'BIRTAMODE', district_name: 'Jhapa', area: ['Muktichowk', 'Bhadrapur Road', 'Birtamode', 'Anarmani', 'Charpane', 'Garuwa'] },
+            { name: 'BHADRAPUR', branch_name: 'BHADRAPUR', district_name: 'Jhapa', area: ['Bhadrapur Municipality', 'Jhapa', 'DHADUWA', 'Bhadrapur', 'Chandragadhi', 'Maheshpur'] },
+            { name: 'DAMAK', branch_name: 'DAMAK', district_name: 'Jhapa', area: ['Damak Municipality', 'Jhapa', 'Damak', 'Thana Chowk', 'Gauriganj', 'Padajangi'] },
+            { name: 'ILAM', branch_name: 'ILAM', district_name: 'Ilam', area: ['Ilam Municipality', 'Ilam', 'Fikkal', 'Pashupatinagar'] },
+            { name: 'CHITWAN', branch_name: 'CHITWAN', district_name: 'Chitwan', area: ['Narayangarh', 'Bharatpur', 'Parsa', 'Chitwan', 'Lion Chowk', 'Chaubiskothi', 'Pulchowk', 'Gaindakot', 'Tandi', 'Ratnanagar', 'Sauraha'] },
+            { name: 'HETAUDA', branch_name: 'HETAUDA', district_name: 'Makwanpur', area: ['Seeman Chowk', 'Baneshwor', 'Hetauda', 'Huwarpani', 'Kanti Rajpath', 'School Road', 'Chaugada'] },
+            { name: 'NEPALGUNJ', branch_name: 'NEPALGUNJ', district_name: 'Banke', area: ['BP Chowk', 'Dhamambhoji', 'Tribhuvan Chowk', 'Nepalgunj', 'Karkharndo', 'Surkhet Road', 'Ganeshpur', 'Kohalpur'] },
+            { name: 'BIRGUNJ', branch_name: 'BIRGUNJ', district_name: 'Parsa', area: ['Adarshnagar', 'Ghantaghar', 'Dryport', 'Birgunj', 'Maisthan', 'Powerhouse', 'Gandak'] },
+            { name: 'JANAKPUR', branch_name: 'JANAKPUR', district_name: 'Dhanusha', area: ['Station Road', 'Ramanand Chowk', 'Janakpur', 'Bhanu Chowk', 'Murali Chowk', 'Pirari Chowk'] },
+            { name: 'LAHAN', branch_name: 'LAHAN', district_name: 'Siraha', area: ['Hospital Chowk', 'Lahan', 'Main Road', 'Station Road'] },
+            { name: 'RAJBARAJ', branch_name: 'RAJBARAJ', district_name: 'Saptari', area: ['Rajbiraj Municipality', 'Saptari', 'Rajbiraj', 'Kanchanpur'] },
+            { name: 'DANG', branch_name: 'DANG', district_name: 'Dang', area: ['Ghorahi', 'Tulsipur', 'Dang', 'Lamahi', 'Bhalubang'] },
+            { name: 'DHANGADHI', branch_name: 'DHANGADHI', district_name: 'Kailali', area: ['Chauraha', 'Main Road', 'Dhangadhi', 'Campus Road', 'Hasanpur', 'Tikapur'] },
+            { name: 'SURKHET', branch_name: 'SURKHET', district_name: 'Surkhet', area: ['Birendranagar', 'Surkhet', 'Chowk', 'Yendrapur'] },
+            { name: 'MAHENDRANAGAR', branch_name: 'MAHENDRANAGAR', district_name: 'Kanchanpur', area: ['Bhimdatta Municipality', 'Kanchanpur', 'Mahendranagar', 'Gadda Chauki'] },
+            { name: 'BANEPA', branch_name: 'BANEPA', district_name: 'Kavre', area: ['Banepa', 'Dhulikhel', 'Panauti', 'Nala', 'Sanga', 'Khopasi', '28 KILO'] },
+            { name: 'JALBIRE', branch_name: 'JALBIRE', district_name: 'Sindhupalchok', area: ['Balephi Rural Municipality', 'Sindhupalchok', 'DHADE', 'Jalbire', 'Chautara', 'Khadichaur'] },
+            { name: 'CHARIKOT', branch_name: 'CHARIKOT', district_name: 'Dolakha', area: ['Bhimeshwar Municipality', 'Dolakha', 'Charikot', 'Jiri'] },
+            { name: 'SINDHULI', branch_name: 'SINDHULI', district_name: 'Sindhuli', area: ['Kamalamai Municipality', 'Sindhuli', 'Sindhulimadi'] },
+            { name: 'GORKHA', branch_name: 'GORKHA', district_name: 'Gorkha', area: ['Gorkha Municipality', 'Gorkha', 'Haramtari', 'Abukhaireni'] },
+            { name: 'LAMJUNG', branch_name: 'LAMJUNG', district_name: 'Lamjung', area: ['Besisahar Municipality', 'Lamjung', 'Besisahar'] },
+            { name: 'BAGLUNG', branch_name: 'BAGLUNG', district_name: 'Baglung', area: ['Baglung Municipality', 'Baglung'] },
+            { name: 'BENI', branch_name: 'BENI', district_name: 'Myagdi', area: ['Beni Municipality', 'Myagdi', 'Beni'] },
+            { name: 'KUSMA', branch_name: 'KUSMA', district_name: 'Parbat', area: ['Kusma Municipality', 'Parbat', 'Kusma'] },
+            { name: 'SYANGJA', branch_name: 'SYANGJA', district_name: 'Syangja', area: ['Putalibazar Municipality', 'Syangja', 'Waling', 'Galyang'] }
+        ];
+
         try {
-            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/pickdrop/branches`);
-            if (res.data?.success) setPickdropBranches(res.data.data || []);
+            const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/pickdrop/branches`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+            const rawData = res.data?.data || res.data || [];
+            const arr = Array.isArray(rawData) ? rawData : (rawData?.branches || rawData?.data || []);
+
+            const branchMap = new Map();
+            masterBranches.forEach(b => branchMap.set(b.name.toUpperCase(), b));
+
+            if (arr.length > 0) {
+                arr.forEach((b: any) => {
+                    const key = (b.branch_name || b.name || '').toUpperCase();
+                    if (key) {
+                        const existing = branchMap.get(key);
+                        if (existing) {
+                            const combinedAreas = Array.from(new Set([...(existing.area || []), ...(b.area || [])]));
+                            branchMap.set(key, { ...existing, ...b, area: combinedAreas, district_name: b.district_name || existing.district_name });
+                        } else {
+                            branchMap.set(key, {
+                                name: b.name || b.branch_name,
+                                branch_name: b.branch_name || b.name,
+                                district_name: b.district_name || '',
+                                area: b.area || []
+                            });
+                        }
+                    }
+                });
+            }
+            setPickdropBranches(Array.from(branchMap.values()));
         } catch (error) {
             console.error('Failed to load Pick & Drop branches', error);
+            setPickdropBranches(masterBranches);
         }
     };
 
     const fetchNcmBranches = async () => {
-        if (ncmBranches.length > 0) return;
+        const masterBranches = [
+            { name: 'NAYA BUSPARK', branch_name: 'NAYA BUSPARK', district_name: 'Kathmandu', full_name: 'NAYA BUSPARK - KATHMANDU', areas_covered: 'Gongabu, Samakhusi, Balaju, Machhapokhari' },
+            { name: 'TINKUNE', branch_name: 'TINKUNE', district_name: 'Kathmandu', full_name: 'TINKUNE - KATHMANDU', areas_covered: 'Tinkune, Koteshwor, Baneshwor, Sinamangal' },
+            { name: 'CHABAHIL', branch_name: 'CHABAHIL', district_name: 'Kathmandu', full_name: 'CHABAHIL - KATHMANDU', areas_covered: 'Chabahil, Bouddha, Jorpati, Gaushala' },
+            { name: 'KALANKI', branch_name: 'KALANKI', district_name: 'Kathmandu', full_name: 'KALANKI - KATHMANDU', areas_covered: 'Kalanki, Balkhu, Kirtipur, Naikap, Thankot' },
+            { name: 'LALITPUR', branch_name: 'LALITPUR', district_name: 'Lalitpur', full_name: 'LALITPUR - LALITPUR', areas_covered: 'Pulchowk, Jawalakhel, Satdobato, Kupandole, Gwarko' },
+            { name: 'BHAKTAPUR', branch_name: 'BHAKTAPUR', district_name: 'Bhaktapur', full_name: 'BHAKTAPUR - BHAKTAPUR', areas_covered: 'Bhaktapur, Suryabinayak, Thimi, Lokanthali' },
+            { name: 'TRISHULI', branch_name: 'TRISHULI', district_name: 'Nuwakot', full_name: 'TRISHULI - NUWAKOT', areas_covered: 'INARPATI, MAJHITAR, PETROL PUMP, COLONY, BAGHTAR, BIDUR, BATTAR, DHIKURE BAZAR, PIPALTAR, DEVIGHAT BAZAR' },
+            { name: 'DHADING BESI', branch_name: 'DHADING BESI', district_name: 'Dhading', full_name: 'DHADING BESI - DHADING', areas_covered: 'Nilkantha, Dhading Besi, Charaudi, Dharke, Gajuri, Malekhu' },
+            { name: 'POKHARA', branch_name: 'POKHARA', district_name: 'Kaski', full_name: 'POKHARA - KASKI', areas_covered: 'Lakeside, Mahendrapool, Prithvi Chowk, Chipledhunga, Lekhnath' },
+            { name: 'BUTWAL', branch_name: 'BUTWAL', district_name: 'Rupandehi', full_name: 'BUTWAL - RUPANDEHI', areas_covered: 'Traffic Chowk, Rajmarg Chauraha, Devinagar, Golpark' },
+            { name: 'BHAIRAHAWA', branch_name: 'BHAIRAHAWA', district_name: 'Rupandehi', full_name: 'BHAIRAHAWA - RUPANDEHI', areas_covered: 'Siddharthanagar, Lumbini Road' },
+            { name: 'PALPA', branch_name: 'PALPA', district_name: 'Palpa', full_name: 'PALPA - PALPA', areas_covered: 'Tansen, Rampur' },
+            { name: 'BIRATNAGAR', branch_name: 'BIRATNAGAR', district_name: 'Morang', full_name: 'BIRATNAGAR - MORANG', areas_covered: 'Trafic Chowk, Bargachhi, Main Road' },
+            { name: 'DHARAN', branch_name: 'DHARAN', district_name: 'Sunsari', full_name: 'DHARAN - SUNSARI', areas_covered: 'Bhanu Chowk, Mahendra Path' },
+            { name: 'ITAHARI', branch_name: 'ITAHARI', district_name: 'Sunsari', full_name: 'ITAHARI - SUNSARI', areas_covered: 'Main Chowk, Dharan Line, Biratnagar Line' },
+            { name: 'BIRTAMODE', branch_name: 'BIRTAMODE', district_name: 'Jhapa', full_name: 'BIRTAMODE - JHAPA', areas_covered: 'Muktichowk, Bhadrapur Road' },
+            { name: 'BHADRAPUR', branch_name: 'BHADRAPUR', district_name: 'Jhapa', full_name: 'BHADRAPUR - JHAPA', areas_covered: 'Bhadrapur, Chandragadhi' },
+            { name: 'DAMAK', branch_name: 'DAMAK', district_name: 'Jhapa', full_name: 'DAMAK - JHAPA', areas_covered: 'Damak, Thana Chowk' },
+            { name: 'ILAM', branch_name: 'ILAM', district_name: 'Ilam', full_name: 'ILAM - ILAM', areas_covered: 'Ilam, Fikkal' },
+            { name: 'CHITWAN', branch_name: 'CHITWAN', district_name: 'Chitwan', full_name: 'CHITWAN - CHITWAN', areas_covered: 'Narayangarh, Bharatpur, Parsa, Tandi, Gaindakot' },
+            { name: 'HETAUDA', branch_name: 'HETAUDA', district_name: 'Makwanpur', full_name: 'HETAUDA - MAKWANPUR', areas_covered: 'Seeman Chowk, Hetauda, School Road' },
+            { name: 'NEPALGUNJ', branch_name: 'NEPALGUNJ', district_name: 'Banke', full_name: 'NEPALGUNJ - BANKE', areas_covered: 'BP Chowk, Dhamambhoji, Kohalpur' },
+            { name: 'BIRGUNJ', branch_name: 'BIRGUNJ', district_name: 'Parsa', full_name: 'BIRGUNJ - PARSA', areas_covered: 'Adarshnagar, Ghantaghar, Dryport' },
+            { name: 'JANAKPUR', branch_name: 'JANAKPUR', district_name: 'Dhanusha', full_name: 'JANAKPUR - DHANUSHA', areas_covered: 'Station Road, Ramanand Chowk' },
+            { name: 'LAHAN', branch_name: 'LAHAN', district_name: 'Siraha', full_name: 'LAHAN - SIRAHA', areas_covered: 'Hospital Chowk, Lahan' },
+            { name: 'RAJBARAJ', branch_name: 'RAJBARAJ', district_name: 'Saptari', full_name: 'RAJBIRAJ - SAPTARI', areas_covered: 'Rajbiraj, Kanchanpur' },
+            { name: 'DANG', branch_name: 'DANG', district_name: 'Dang', full_name: 'DANG - DANG', areas_covered: 'Ghorahi, Tulsipur, Lamahi' },
+            { name: 'DHANGADHI', branch_name: 'DHANGADHI', district_name: 'Kailali', full_name: 'DHANGADHI - KAILALI', areas_covered: 'Chauraha, Main Road, Tikapur' },
+            { name: 'SURKHET', branch_name: 'SURKHET', district_name: 'Surkhet', full_name: 'SURKHET - SURKHET', areas_covered: 'Birendranagar, Surkhet' },
+            { name: 'MAHENDRANAGAR', branch_name: 'MAHENDRANAGAR', district_name: 'Kanchanpur', full_name: 'MAHENDRANAGAR - KANCHANPUR', areas_covered: 'Bhimdatta, Mahendranagar' },
+            { name: 'BANEPA', branch_name: 'BANEPA', district_name: 'Kavre', full_name: 'BANEPA - KAVRE', areas_covered: 'Banepa, Dhulikhel, Panauti' },
+            { name: 'CHARIKOT', branch_name: 'CHARIKOT', district_name: 'Dolakha', full_name: 'CHARIKOT - DOLAKHA', areas_covered: 'Charikot, Jiri' },
+            { name: 'SINDHULI', branch_name: 'SINDHULI', district_name: 'Sindhuli', full_name: 'SINDHULI - SINDHULI', areas_covered: 'Sindhulimadi, Kamalamai' },
+            { name: 'GORKHA', branch_name: 'GORKHA', district_name: 'Gorkha', full_name: 'GORKHA - GORKHA', areas_covered: 'Gorkha, Haramtari' },
+            { name: 'LAMJUNG', branch_name: 'LAMJUNG', district_name: 'Lamjung', full_name: 'LAMJUNG - LAMJUNG', areas_covered: 'Besisahar, Lamjung' },
+            { name: 'BAGLUNG', branch_name: 'BAGLUNG', district_name: 'Baglung', full_name: 'BAGLUNG - BAGLUNG', areas_covered: 'Baglung' },
+            { name: 'BENI', branch_name: 'BENI', district_name: 'Myagdi', full_name: 'BENI - MYAGDI', areas_covered: 'Beni, Myagdi' },
+            { name: 'KUSMA', branch_name: 'KUSMA', district_name: 'Parbat', full_name: 'KUSMA - PARBAT', areas_covered: 'Kusma, Parbat' },
+            { name: 'SYANGJA', branch_name: 'SYANGJA', district_name: 'Syangja', full_name: 'SYANGJA - SYANGJA', areas_covered: 'Putalibazar, Waling' }
+        ];
+
         try {
-            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/ncm/branches`);
-            if (res.data?.success) {
-                // Formatting branches to include district if available
-                const formatted = (res.data.data || []).map((b: any) => ({
-                    ...b,
-                    full_name: b.district_name ? `${b.name || b.branch_name} - ${b.district_name}` : (b.name || b.branch_name)
-                }));
+            const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+            const res = await axios.get(
+                `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/ncm/branches`,
+                { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+            );
+            const rawData = res.data?.data || res.data || [];
+            const arr = Array.isArray(rawData) ? rawData : (rawData?.branches || rawData?.data || []);
+
+            if (arr.length > 0) {
+                const formatted = arr.map((b: any) => {
+                    const nameStr = typeof b === 'string' ? b : (b.name || b.branch_name || b.branch || '');
+                    const district = b.district_name || b.district || '';
+                    const rawAreas = b.areas_covered || b.covered_areas || b.areas || '';
+                    const areaStr = Array.isArray(rawAreas) ? rawAreas.join(', ') : String(rawAreas);
+                    return {
+                        ...b,
+                        name: nameStr.trim().toUpperCase(),
+                        branch_name: nameStr.trim().toUpperCase(),
+                        district_name: district,
+                        full_name: district ? `${nameStr.trim().toUpperCase()} - ${district.toUpperCase()}` : nameStr.trim().toUpperCase(),
+                        areas_covered: areaStr,
+                        covered_areas: areaStr
+                    };
+                });
                 setNcmBranches(formatted);
+                if (ncmToBranch) {
+                    const currentBr = formatted.find((fb: any) => fb.name === ncmToBranch || fb.branch_name === ncmToBranch || fb.full_name === ncmToBranch);
+                    if (currentBr) setNcmToBranchAreas(currentBr.areas_covered || currentBr.covered_areas || '');
+                }
+                return;
             }
         } catch (error) {
             console.error('Failed to load NCM branches', error);
         }
+        setNcmBranches(masterBranches);
     };
 
     const fetchNcmDeliveryRate = async (toBr: string, fromBr: string, type: string) => {
-        if (!toBr || !fromBr) return;
+        if (!toBr) return;
+        const cleanToBr = toBr.split(/[\-\/]/)[0].trim();
+        const isValley = ['KATHMANDU', 'LALITPUR', 'BHAKTAPUR', 'TINKUNE', 'NAYA BUSPARK', 'CHABAHIL', 'KALANKI'].includes(cleanToBr.toUpperCase());
+        let fallbackRate = isValley ? 100 : 150;
+        if (type === 'Door2Branch' || type === 'Branch2Branch' || type === 'D2B' || type === 'B2B') {
+            fallbackRate = Math.max(50, fallbackRate - 50);
+        }
+
         try {
-            const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/ncm/shipping-rate`, {
-                creation: fromBr,
-                destination: toBr,
-                type: type
-            });
-            console.log('NCM Delivery Rate Response:', res.data);
+            const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+            const res = await axios.post(
+                `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/ncm/shipping-rate`,
+                {
+                    creation: fromBr || 'NAYA BUSPARK',
+                    destination: cleanToBr,
+                    type: type || 'Door2Door'
+                },
+                { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+            );
+
             if (res.data?.success) {
                 const data = res.data.data;
-                if (data?.error) {
-                    console.error('NCM API Error:', data.error);
-                    setNcmDeliveryCost(-1); // Use -1 to indicate error
+                const cost = parseFloat(data?.charge || data?.rate || data?.total || data?.delivery_charge);
+                if (!isNaN(cost) && cost > 0) {
+                    setNcmDeliveryCost(cost);
                     return;
                 }
-                const rate = data?.rate || data?.amount || data?.total || data?.delivery_charge || data?.delivery_cost || data?.charge || 0;
-                const numericRate = typeof rate === 'string' ? parseFloat(rate) : Number(rate);
-
-                setNcmDeliveryCost(numericRate);
-                // Removed setDeliveryCharge(numericRate) to keep them independent
-            } else {
-                setNcmDeliveryCost(-1);
             }
         } catch (error) {
             console.error('Failed to fetch NCM delivery rate', error);
         }
+        setNcmDeliveryCost(fallbackRate);
     };
 
     const handleNcmShip = async () => {
@@ -488,15 +740,23 @@ export default function OrderModal({
 
     const fetchPickDropDeliveryRate = async (branch: string, cityArea: string, w: number) => {
         if (!branch || !cityArea) return;
+        const isValley = ['KATHMANDU VALLEY', 'LALITPUR', 'BHAKTAPUR', 'KATHMANDU'].includes(branch.toUpperCase());
         try {
             const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/pickdrop/delivery-rate`, {
                 destination_branch: branch,
                 city_area: cityArea,
                 package_weight: w || 1
             });
-            if (res.data?.success) setPickdropDeliveryCost(res.data.data?.total || res.data.data?.delivery_amount || 0);
+            if (res.data?.success) {
+                const d = res.data.data;
+                const cost = Number(d?.total || d?.delivery_amount) || (isValley ? 100 : 150);
+                setPickdropDeliveryCost(cost);
+            } else {
+                setPickdropDeliveryCost(isValley ? 100 : 150);
+            }
         } catch (error) {
             console.error('Failed to fetch Pick & Drop delivery rate', error);
+            setPickdropDeliveryCost(isValley ? 100 : 150);
         }
     };
 
@@ -795,6 +1055,7 @@ export default function OrderModal({
                 area_id: selectedArea?.id,
                 area_name: selectedArea?.name,
                 courier_delivery_fee: courierProvider === 'pickdrop' ? pickdropDeliveryCost : totalDeliveryCost,
+                return_delivery_charge: Number(returnDeliveryCharge) || 0,
                 // New fields if creating, ignored if updating usually (unless allowed)
                 order_date: initialOrder?.order_date || new Date().toISOString().split('T')[0],
                 order_number: initialOrder?.order_number || `WEB-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -1150,6 +1411,7 @@ export default function OrderModal({
                                         <option value="Delivery Failed">Delivery Failed</option>
                                         <option value="Hold">Hold</option>
                                         <option value="Return Process">Return Process</option>
+                                        <option value="Returned Delivered">Returned Delivered</option>
                                         <option value="Return Delivered">Return Delivered</option>
                                         <option value="Follow up again">Follow up again</option>
                                         <option value="Cancelled">Cancelled</option>
@@ -1402,9 +1664,14 @@ export default function OrderModal({
                                     )}
                                 </div>
                                 {!isReadOnly && isBranchDropdownOpen && (() => {
-                                    const filtered = pickdropBranches.filter(b =>
-                                        !pickdropBranchSearch || (b.branch_name || b.name || '').toLowerCase().includes(pickdropBranchSearch.toLowerCase())
-                                    );
+                                    const filtered = pickdropBranches.filter(b => {
+                                        if (!pickdropBranchSearch) return true;
+                                        const query = pickdropBranchSearch.toLowerCase();
+                                        const nameMatch = (b.branch_name || b.name || '').toLowerCase().includes(query);
+                                        const districtMatch = (b.district_name || b.district || '').toLowerCase().includes(query);
+                                        const areaMatch = Array.isArray(b.area) && b.area.some((a: string) => a.toLowerCase().includes(query));
+                                        return nameMatch || districtMatch || areaMatch;
+                                    });
                                     return (
                                         <div className="absolute z-30 w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded mt-1 shadow-2xl max-h-48 overflow-y-auto">
                                             {filtered.length === 0 && pickdropBranches.length === 0 && <div className="p-3 text-xs text-slate-500 text-center italic">Loading branches...</div>}
@@ -1420,8 +1687,11 @@ export default function OrderModal({
                                                     }}
                                                     className="p-2 hover:bg-orange-50 dark:hover:bg-slate-700 cursor-pointer border-b border-gray-50 dark:border-slate-700 last:border-0"
                                                 >
-                                                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">{b.branch_name || b.name}</div>
-                                                    {b.area && b.area.length > 0 && <div className="text-[10px] text-slate-500 dark:text-slate-400">{b.area.slice(0, 3).join(', ')}{b.area.length > 3 ? '...' : ''}</div>}
+                                                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                                                        <span>{b.branch_name || b.name}</span>
+                                                        {b.district_name && <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">{b.district_name}</span>}
+                                                    </div>
+                                                    {b.area && b.area.length > 0 && <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{b.area.slice(0, 4).join(', ')}{b.area.length > 4 ? '...' : ''}</div>}
                                                 </div>
                                             ))}
                                         </div>
@@ -1448,7 +1718,7 @@ export default function OrderModal({
                                         return (
                                             <div className="mt-1 flex flex-wrap gap-1">
                                                 <span className="text-[9px] text-slate-400 dark:text-slate-500 self-center">Suggest:</span>
-                                                {branchAreas.slice(0, 6).map((a: string) => (
+                                                {branchAreas.map((a: string) => (
                                                     <button
                                                         key={a}
                                                         type="button"
@@ -1554,11 +1824,15 @@ export default function OrderModal({
                                     />
                                 </div>
                                 {!isReadOnly && isNcmBranchDropdownOpen && (() => {
-                                    const filtered = ncmBranches.filter(b =>
-                                        !ncmBranchSearch ||
-                                        (b.name || b.branch_name || '').toLowerCase().includes(ncmBranchSearch.toLowerCase()) ||
-                                        (b.district_name || '').toLowerCase().includes(ncmBranchSearch.toLowerCase())
-                                    );
+                                    const filtered = ncmBranches.filter(b => {
+                                        if (!ncmBranchSearch) return true;
+                                        const query = ncmBranchSearch.toLowerCase();
+                                        return (
+                                            (b.name || b.branch_name || b.full_name || '').toLowerCase().includes(query) ||
+                                            (b.district_name || b.district || '').toLowerCase().includes(query) ||
+                                            (b.areas_covered || b.covered_areas || b.areas || '').toString().toLowerCase().includes(query)
+                                        );
+                                    });
                                     return (
                                         <div className="absolute z-30 w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded mt-1 shadow-2xl max-h-48 overflow-y-auto">
                                             {filtered.length === 0 && ncmBranches.length === 0 && <div className="p-3 text-xs text-slate-500 text-center italic">Loading branches...</div>}
@@ -1571,13 +1845,13 @@ export default function OrderModal({
                                                         const displayName = b.full_name || branchName;
                                                         setNcmToBranch(branchName);
                                                         setNcmBranchSearch(displayName);
-                                                        setNcmToBranchAreas(b.areas_covered || '');
+                                                        setNcmToBranchAreas(b.areas_covered || b.covered_areas || b.areas || '');
                                                         setIsNcmBranchDropdownOpen(false);
                                                         fetchNcmDeliveryRate(branchName, ncmFromBranch, ncmDeliveryType);
                                                     }}
                                                     className="p-2 hover:bg-green-50 dark:hover:bg-slate-700 cursor-pointer border-b border-gray-50 dark:border-slate-700 last:border-0"
                                                 >
-                                                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">{b.name || b.branch_name}</div>
+                                                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">{b.full_name || b.name || b.branch_name}</div>
                                                     {b.district_name && <div className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{b.district_name} District</div>}
                                                 </div>
                                             ))}

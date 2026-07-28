@@ -32,12 +32,22 @@ const CreateOrderScreen = ({ route, navigation }: any) => {
         customerName: initialCustomerName,
         platform,
         pageName,
+        pageId,
         phone: extractedPhone,
         address: extractedAddress
     } = route.params || {};
 
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+
+    // Platform & Page State (web-app logic)
+    const [orderPlatform, setOrderPlatform] = useState<string>('Facebook');
+    const [orderPageName, setOrderPageName] = useState<string>(pageName || '');
+    const [orderPageId, setOrderPageId] = useState<string>(pageId || '');
+    const [connectedPages, setConnectedPages] = useState<any[]>([]);
+    const [platformModalVisible, setPlatformModalVisible] = useState(false);
+    const [pageModalVisible, setPageModalVisible] = useState(false);
+    const platformOptions = ['Facebook', 'Instagram', 'Tiktok', 'Website', 'Others'];
 
     // Form State
     const [customerName, setCustomerName] = useState(initialCustomerName || '');
@@ -115,7 +125,54 @@ const CreateOrderScreen = ({ route, navigation }: any) => {
 
     useEffect(() => {
         fetchCities();
+        fetchConnectedPages();
     }, []);
+
+    const fetchConnectedPages = async () => {
+        try {
+            const response = await fetch(`${API_URL}/api/pages`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const pagesList = Array.isArray(data) ? data : [];
+                setConnectedPages(pagesList);
+            }
+        } catch (err) {
+            console.error('Failed to fetch pages in CreateOrderScreen:', err);
+        }
+    };
+
+    useEffect(() => {
+        // Platform normalization matching web-app logic
+        let initialPlat = platform;
+        if (initialPlat) {
+            const pLower = initialPlat.toLowerCase();
+            if (pLower === 'facebook' || pLower === 'facebook_marketplace') initialPlat = 'Facebook';
+            else if (pLower === 'instagram') initialPlat = 'Instagram';
+            else if (pLower === 'tiktok') initialPlat = 'Tiktok';
+            else if (pLower === 'website') initialPlat = 'Website';
+            else if (pLower === 'others') initialPlat = 'Others';
+            else initialPlat = initialPlat.charAt(0).toUpperCase() + initialPlat.slice(1);
+            setOrderPlatform(initialPlat);
+        } else {
+            setOrderPlatform('Facebook');
+        }
+
+        if (pageName) {
+            setOrderPageName(pageName);
+        } else if (pageId && connectedPages.length > 0) {
+            const found = connectedPages.find(p => p.page_id === pageId || p.page_name?.toLowerCase() === pageId.toLowerCase());
+            if (found) {
+                setOrderPageName(found.page_name || pageId);
+                setOrderPageId(found.page_id || pageId);
+                if (!platform && found.platform) {
+                    const pLower = found.platform.toLowerCase();
+                    setOrderPlatform(pLower === 'facebook' ? 'Facebook' : pLower === 'instagram' ? 'Instagram' : pLower === 'tiktok' ? 'Tiktok' : found.platform);
+                }
+            }
+        }
+    }, [platform, pageName, pageId, connectedPages]);
 
     useEffect(() => {
         if (citySearchQuery.trim() === '') {
@@ -473,8 +530,9 @@ const CreateOrderScreen = ({ route, navigation }: any) => {
                 phone_number: phone,
                 alternative_phone: altPhone,
                 address: address,
-                platform: platform || 'manual', // Use passed platform or manual
-                page_name: pageName || '',
+                platform: orderPlatform || 'Facebook',
+                page_name: orderPageName || pageName || '',
+                platform_account: orderPageId || pageId || orderPageName || pageName || '',
 
                 items: items,
                 delivery_charge: parseFloat(deliveryCharge) || 0,
@@ -622,6 +680,32 @@ const CreateOrderScreen = ({ route, navigation }: any) => {
                             <Text style={styles.input}>{orderType}</Text>
                             <ChevronDown size={18} color={Colors.textSecondary} />
                         </TouchableOpacity>
+                    </View>
+
+                    {/* Platform & Page Name Section (Web-app matched logic) */}
+                    <View style={[styles.row, { marginBottom: 16 }]}>
+                        <View style={{ flex: 1, marginRight: 8 }}>
+                            <Text style={styles.label}>Platform <Text style={{ color: '#EF4444' }}>*</Text></Text>
+                            <TouchableOpacity
+                                style={styles.dropdownButton}
+                                onPress={() => setPlatformModalVisible(true)}
+                            >
+                                <Text style={styles.dropdownText}>{orderPlatform}</Text>
+                                <ChevronDown size={18} color={Colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.label}>Page Name</Text>
+                            <TouchableOpacity
+                                style={styles.dropdownButton}
+                                onPress={() => setPageModalVisible(true)}
+                            >
+                                <Text style={styles.dropdownText} numberOfLines={1}>
+                                    {orderPageName || 'Select Page'}
+                                </Text>
+                                <ChevronDown size={18} color={Colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
                     </View>
 
 
@@ -1254,6 +1338,101 @@ const CreateOrderScreen = ({ route, navigation }: any) => {
                                 </TouchableOpacity>
                             )}
                         />
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+            {/* Platform Selection Modal */}
+            <Modal
+                visible={platformModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setPlatformModalVisible(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setPlatformModalVisible(false)}
+                >
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Select Platform</Text>
+                            <TouchableOpacity onPress={() => setPlatformModalVisible(false)}>
+                                <X size={20} color={Colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        {platformOptions.map((item) => (
+                            <TouchableOpacity
+                                key={item}
+                                style={styles.modalItem}
+                                onPress={() => {
+                                    setOrderPlatform(item);
+                                    if (item === 'Others') {
+                                        setOrderPageName('Others');
+                                        setOrderPageId('Others');
+                                    }
+                                    setPlatformModalVisible(false);
+                                }}
+                            >
+                                <Text style={[styles.modalItemText, orderPlatform === item && styles.selectedItemText]}>
+                                    {item}
+                                </Text>
+                                {orderPlatform === item && <Check size={18} color={Colors.primary} />}
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
+            {/* Page Selection Modal */}
+            <Modal
+                visible={pageModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setPageModalVisible(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setPageModalVisible(false)}
+                >
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Select Page</Text>
+                            <TouchableOpacity onPress={() => setPageModalVisible(false)}>
+                                <X size={20} color={Colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView style={{ maxHeight: 300 }}>
+                            {connectedPages
+                                .filter(p => !orderPlatform || orderPlatform === 'Others' || (p.platform && p.platform.toLowerCase() === orderPlatform.toLowerCase()))
+                                .map((page) => (
+                                    <TouchableOpacity
+                                        key={page.id || page.page_id || page.page_name}
+                                        style={styles.modalItem}
+                                        onPress={() => {
+                                            setOrderPageName(page.page_name || page.page_id);
+                                            setOrderPageId(page.page_id || page.id || page.page_name);
+                                            setPageModalVisible(false);
+                                        }}
+                                    >
+                                        <Text style={[styles.modalItemText, orderPageName === page.page_name && styles.selectedItemText]}>
+                                            {page.page_name || page.page_id}
+                                        </Text>
+                                        {orderPageName === page.page_name && <Check size={18} color={Colors.primary} />}
+                                    </TouchableOpacity>
+                                ))}
+                            {connectedPages.length === 0 && (
+                                <TouchableOpacity
+                                    style={styles.modalItem}
+                                    onPress={() => {
+                                        setOrderPageName('Others');
+                                        setPageModalVisible(false);
+                                    }}
+                                >
+                                    <Text style={styles.modalItemText}>Others</Text>
+                                </TouchableOpacity>
+                            )}
+                        </ScrollView>
                     </View>
                 </TouchableOpacity>
             </Modal>

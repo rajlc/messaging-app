@@ -53,7 +53,7 @@ export class OrdersController {
         @Query('offset') offset?: string,
         @Query('customer_id') customerId?: string,
     ) {
-        const limitNum = limit ? parseInt(limit) : 1000;
+        const limitNum = limit ? parseInt(limit) : 10000;
         const offsetNum = offset ? parseInt(offset) : 0;
 
         if (customerId) {

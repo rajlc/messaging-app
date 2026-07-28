@@ -9,7 +9,7 @@ export declare class PickDropService {
         base_url: string;
         api_key: string;
         api_secret: string;
-    } | null>;
+    }>;
     private authHeader;
     getBranches(): Promise<any>;
     getDeliveryRate(body: {

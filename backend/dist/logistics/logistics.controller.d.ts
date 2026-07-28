@@ -72,7 +72,7 @@ export declare class LogisticsController {
     }>;
     getNcmBranches(): Promise<{
         success: boolean;
-        data: any[];
+        data: any;
         error?: undefined;
     } | {
         success: boolean;
@@ -81,7 +81,19 @@ export declare class LogisticsController {
     }>;
     getNcmShippingRate(body: any): Promise<{
         success: boolean;
-        data: any;
+        data: {
+            success: boolean;
+            charge: number;
+            error: string;
+            rate?: undefined;
+            total?: undefined;
+        } | {
+            success: boolean;
+            charge: number;
+            rate: number;
+            total: number;
+            error?: undefined;
+        };
         error?: undefined;
     } | {
         success: boolean;

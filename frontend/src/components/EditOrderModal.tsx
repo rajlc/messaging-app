@@ -85,7 +85,8 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
                 ...order
             });
             // Initialize Logistics
-            if (order.courier_provider) setCourierProvider(order.courier_provider);
+            const provider = order.courier_provider || (order.logistic_name ? 'local' : '') || 'pathao';
+            setCourierProvider(provider);
 
             // Fetch dependent logistics data if needed
             fetchCities();
@@ -133,9 +134,10 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
         }
     }, [order, isOpen]);
 
-    // Fetch Pick & Drop branches when provider switches
+    // Fetch branches when provider switches
     useEffect(() => {
         if (courierProvider === 'pickdrop') fetchPickDropBranches();
+        if (courierProvider === 'ncm') fetchNcmBranches();
     }, [courierProvider]);
 
     // Calculate Pick & Drop rate when relevant fields change
@@ -146,7 +148,17 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
             }, 500);
             return () => clearTimeout(timer);
         }
-    }, [selectedPickdropBranch, pickdropCityArea, editedOrder?.items]);
+    }, [courierProvider, selectedPickdropBranch, pickdropCityArea, editedOrder?.items]);
+
+    // Calculate NCM rate when branch or delivery type changes
+    useEffect(() => {
+        if (courierProvider === 'ncm' && ncmToBranch) {
+            const timer = setTimeout(() => {
+                fetchNcmDeliveryRate(ncmToBranch, ncmFromBranch, ncmDeliveryType);
+            }, 300);
+            return () => clearTimeout(timer);
+        }
+    }, [courierProvider, ncmToBranch, ncmFromBranch, ncmDeliveryType]);
 
     useEffect(() => {
         setCitySearch(selectedCity?.name || '');
@@ -198,57 +210,198 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
     };
 
     const fetchPickDropBranches = async () => {
+        const masterBranches = [
+            { name: 'KATHMANDU VALLEY', branch_name: 'KATHMANDU VALLEY', district_name: 'Kathmandu', area: ['Kathmandu', 'New Road', 'Thamel', 'Baneshwor', 'Kalanki', 'Chabahil', 'Koteshwor', 'Balaju Industrial Area', 'Asan', 'Indrachowk', 'Lazimpat', 'Maharajgunj', 'Gongabu', 'Samakhusi', 'Bouddha', 'Jorpati', 'Pashupati', 'Gaushala', 'Sinamangal', 'Tinkune', 'Balkhu', 'Kirtipur', 'Kalimati', 'Teku', 'Tripureshwor', 'Jamal', 'Durbarmarg', 'Naxal', 'Kamalpokhari', 'Maitidevi', 'Old Baneshwor', 'New Baneshwor', 'Shankhamul'] },
+            { name: 'LALITPUR', branch_name: 'LALITPUR', district_name: 'Lalitpur', area: ['Lalitpur Valley', 'Kupandole', 'Pulchowk', 'Jawalakhel', 'Satdobato', 'Mangalbazar', 'Lagankhel', 'Kumaripati', 'Balkhu', 'Gwarko', 'Imadol', 'Sanepa', 'Jhamsikhel', 'Bhadrakali', 'Bhanimandal', 'Dhapakhel', 'Harisiddhi', 'Thaiba', 'Godavari', 'Bungamati', 'Khokana', 'Lubhu'] },
+            { name: 'BHAKTAPUR', branch_name: 'BHAKTAPUR', district_name: 'Bhaktapur', area: ['Bhaktapur', 'Suryabinayak', 'Thimi', 'Lokanthali', 'Kaushaltar', 'Gatthaghar', 'Sallaghari', 'Byasi', 'Kamalbinayak', 'Dadapati', 'Duwakot', 'Balkot', 'Changunarayan', 'Nagarkot', 'Sipadol'] },
+            { name: 'DHADING BESI', branch_name: 'DHADING BESI', district_name: 'Dhading', area: ['Nilkantha Municipality', 'Dhading', 'DHADING BESI', 'MURALI BHANJYANG', 'NILKANTHA', 'SANGKOSH', 'BICHHAUR', 'JAMPAL', 'SUNGAVA'] },
+            { name: 'CHARAUDI', branch_name: 'CHARAUDI', district_name: 'Dhading', area: ['Benighat Rorang Rural Municipality', 'Dhading', 'BISHALTAR', 'CHARAUDI', 'DHUSA', 'HUGDIKHOLA', 'JYAMIREGHAT', 'KHATAUTI', 'KRISHNABHIR', 'LALTIN BAZAR', 'MAJHIMTAR', 'MOWAKHOLA'] },
+            { name: 'DHARKE', branch_name: 'DHARKE', district_name: 'Dhading', area: ['Dhunibenshi Municipality', 'Dhading', 'DHARKE', 'KHANI KHOLA', 'MAHADEVESTHAN', 'NAUBISE', 'THAKRE', 'JIWANPUR'] },
+            { name: 'GAJURI', branch_name: 'GAJURI', district_name: 'Dhading', area: ['Gajuri Rural Municipality', 'Dhading', 'GAJURI', 'MALEKHU', 'PIDA', 'BENIGHAT', 'KIRENI'] },
+            { name: 'TRISHULI', branch_name: 'TRISHULI', district_name: 'Nuwakot', area: ['Bidur Municipality', 'Nuwakot', 'Battar', 'Betrawati', 'Bidur', 'Devighat Bazar', 'Dhikure Bazar', 'Gerkhutar', 'Pipalntar', 'Sole Bazar', 'Tupche', 'Trishuli Bazar', 'Ranipauwa', 'Kakani'] },
+            { name: 'POKHARA', branch_name: 'POKHARA', district_name: 'Kaski', area: ['ARCHALBOT', 'BAGAR', 'BHADRAKALI', 'BINDABASINI', 'BIRAUTA', 'BOTECHAUTARA', 'CHAUTHE', 'CHINEDADA', 'CHIPLEDHUNGA', 'CHOREPATAN', 'DAMSIDE', 'DEEP', 'DIGOPATAN', 'FULBARI', 'GAIRAPATAN', 'GALESHWOR', 'GHARIPATAN', 'HALANCHOWK', 'HARICHOWK', 'JAIMURE', 'JAREBAR', 'KALIMATI', 'KHAHARE', 'LAMACHAUR', 'MAASBAR', 'MAHENDRA GUFA', 'MAHENDRAPOOL', 'MALEPATAN', 'MANIPAL', 'MATEPANI', 'MATGAUDA', 'MEYAPATAN', 'NADIPUR', 'NAGDHUNGA', 'NAVA GALI', 'Lakeside', 'Prithvi Chowk', 'Lekhnath', 'Sarangkot', 'Hemja', 'Shishuwa'] },
+            { name: 'BUTWAL', branch_name: 'BUTWAL', district_name: 'Rupandehi', area: ['Traffic Chowk', 'Rajmarg Chauraha', 'Butwal', 'Golpark', 'Devinagar', 'Milanchowk', 'Hospitalline', 'Haatbazar', 'Deepnagar', 'Kalikanagar', 'Belbas', 'Nayagaun', 'Tamnagar'] },
+            { name: 'BHAIRAHAWA', branch_name: 'BHAIRAHAWA', district_name: 'Rupandehi', area: ['Bhairahawa', 'Siddharthanagar', 'Bankasya', 'Barmeli Tole', 'Devkota Chowk', 'Dhakdhai', 'Lumbini Road', 'Milan Chowk'] },
+            { name: 'PALPA', branch_name: 'PALPA', district_name: 'Palpa', area: ['Tansen Municipality', 'Palpa', 'Tansen', 'Barthang', 'Rampur', 'Aryabhanjyang'] },
+            { name: 'BIRATNAGAR', branch_name: 'BIRATNAGAR', district_name: 'Morang', area: ['Bargachhi', 'Trafic Chowk', 'Main Road', 'Biratnagar', 'Maina Road', 'Airport Mode', 'Kanchanbari', 'Puspalal Chowk', 'Rangashala', 'Tintulia'] },
+            { name: 'DHARAN', branch_name: 'DHARAN', district_name: 'Sunsari', area: ['Bhanu Chowk', 'Mahendra Path', 'Dharan', 'Bhedetar', 'Putali Line', 'Chatara Line', 'Prithvi Path'] },
+            { name: 'ITAHARI', branch_name: 'ITAHARI', district_name: 'Sunsari', area: ['Main Chowk', 'Biratnagar Line', 'Itahari', 'Dharan Line', 'Auraabani', 'Talgachhi', 'Khanar'] },
+            { name: 'BIRTAMODE', branch_name: 'BIRTAMODE', district_name: 'Jhapa', area: ['Muktichowk', 'Bhadrapur Road', 'Birtamode', 'Anarmani', 'Charpane', 'Garuwa'] },
+            { name: 'BHADRAPUR', branch_name: 'BHADRAPUR', district_name: 'Jhapa', area: ['Bhadrapur Municipality', 'Jhapa', 'DHADUWA', 'Bhadrapur', 'Chandragadhi', 'Maheshpur'] },
+            { name: 'DAMAK', branch_name: 'DAMAK', district_name: 'Jhapa', area: ['Damak Municipality', 'Jhapa', 'Damak', 'Thana Chowk', 'Gauriganj', 'Padajangi'] },
+            { name: 'ILAM', branch_name: 'ILAM', district_name: 'Ilam', area: ['Ilam Municipality', 'Ilam', 'Fikkal', 'Pashupatinagar'] },
+            { name: 'CHITWAN', branch_name: 'CHITWAN', district_name: 'Chitwan', area: ['Narayangarh', 'Bharatpur', 'Parsa', 'Chitwan', 'Lion Chowk', 'Chaubiskothi', 'Pulchowk', 'Gaindakot', 'Tandi', 'Ratnanagar', 'Sauraha'] },
+            { name: 'HETAUDA', branch_name: 'HETAUDA', district_name: 'Makwanpur', area: ['Seeman Chowk', 'Baneshwor', 'Hetauda', 'Huwarpani', 'Kanti Rajpath', 'School Road', 'Chaugada'] },
+            { name: 'NEPALGUNJ', branch_name: 'NEPALGUNJ', district_name: 'Banke', area: ['BP Chowk', 'Dhamambhoji', 'Tribhuvan Chowk', 'Nepalgunj', 'Karkharndo', 'Surkhet Road', 'Ganeshpur', 'Kohalpur'] },
+            { name: 'BIRGUNJ', branch_name: 'BIRGUNJ', district_name: 'Parsa', area: ['Adarshnagar', 'Ghantaghar', 'Dryport', 'Birgunj', 'Maisthan', 'Powerhouse', 'Gandak'] },
+            { name: 'JANAKPUR', branch_name: 'JANAKPUR', district_name: 'Dhanusha', area: ['Station Road', 'Ramanand Chowk', 'Janakpur', 'Bhanu Chowk', 'Murali Chowk', 'Pirari Chowk'] },
+            { name: 'LAHAN', branch_name: 'LAHAN', district_name: 'Siraha', area: ['Hospital Chowk', 'Lahan', 'Main Road', 'Station Road'] },
+            { name: 'RAJBARAJ', branch_name: 'RAJBARAJ', district_name: 'Saptari', area: ['Rajbiraj Municipality', 'Saptari', 'Rajbiraj', 'Kanchanpur'] },
+            { name: 'DANG', branch_name: 'DANG', district_name: 'Dang', area: ['Ghorahi', 'Tulsipur', 'Dang', 'Lamahi', 'Bhalubang'] },
+            { name: 'DHANGADHI', branch_name: 'DHANGADHI', district_name: 'Kailali', area: ['Chauraha', 'Main Road', 'Dhangadhi', 'Campus Road', 'Hasanpur', 'Tikapur'] },
+            { name: 'SURKHET', branch_name: 'SURKHET', district_name: 'Surkhet', area: ['Birendranagar', 'Surkhet', 'Chowk', 'Yendrapur'] },
+            { name: 'MAHENDRANAGAR', branch_name: 'MAHENDRANAGAR', district_name: 'Kanchanpur', area: ['Bhimdatta Municipality', 'Kanchanpur', 'Mahendranagar', 'Gadda Chauki'] },
+            { name: 'BANEPA', branch_name: 'BANEPA', district_name: 'Kavre', area: ['Banepa', 'Dhulikhel', 'Panauti', 'Nala', 'Sanga', 'Khopasi', '28 KILO'] },
+            { name: 'JALBIRE', branch_name: 'JALBIRE', district_name: 'Sindhupalchok', area: ['Balephi Rural Municipality', 'Sindhupalchok', 'DHADE', 'Jalbire', 'Chautara', 'Khadichaur'] },
+            { name: 'CHARIKOT', branch_name: 'CHARIKOT', district_name: 'Dolakha', area: ['Bhimeshwar Municipality', 'Dolakha', 'Charikot', 'Jiri'] },
+            { name: 'SINDHULI', branch_name: 'SINDHULI', district_name: 'Sindhuli', area: ['Kamalamai Municipality', 'Sindhuli', 'Sindhulimadi'] },
+            { name: 'GORKHA', branch_name: 'GORKHA', district_name: 'Gorkha', area: ['Gorkha Municipality', 'Gorkha', 'Haramtari', 'Abukhaireni'] },
+            { name: 'LAMJUNG', branch_name: 'LAMJUNG', district_name: 'Lamjung', area: ['Besisahar Municipality', 'Lamjung', 'Besisahar'] },
+            { name: 'BAGLUNG', branch_name: 'BAGLUNG', district_name: 'Baglung', area: ['Baglung Municipality', 'Baglung'] },
+            { name: 'BENI', branch_name: 'BENI', district_name: 'Myagdi', area: ['Beni Municipality', 'Myagdi', 'Beni'] },
+            { name: 'KUSMA', branch_name: 'KUSMA', district_name: 'Parbat', area: ['Kusma Municipality', 'Parbat', 'Kusma'] },
+            { name: 'SYANGJA', branch_name: 'SYANGJA', district_name: 'Syangja', area: ['Putalibazar Municipality', 'Syangja', 'Waling', 'Galyang'] }
+        ];
+
         try {
             const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/pickdrop/branches`);
-            if (res.data?.success) {
-                setPickdropBranches(res.data.data || []);
+            const rawData = res.data?.data || res.data || [];
+            const arr = Array.isArray(rawData) ? rawData : (rawData?.branches || rawData?.data || []);
+
+            const branchMap = new Map();
+            masterBranches.forEach(b => branchMap.set(b.name.toUpperCase(), b));
+
+            if (arr.length > 0) {
+                arr.forEach((b: any) => {
+                    const key = (b.branch_name || b.name || '').toUpperCase();
+                    if (key) {
+                        const existing = branchMap.get(key);
+                        if (existing) {
+                            const combinedAreas = Array.from(new Set([...(existing.area || []), ...(b.area || [])]));
+                            branchMap.set(key, { ...existing, ...b, area: combinedAreas, district_name: b.district_name || existing.district_name });
+                        } else {
+                            branchMap.set(key, {
+                                name: b.name || b.branch_name,
+                                branch_name: b.branch_name || b.name,
+                                district_name: b.district_name || '',
+                                area: b.area || []
+                            });
+                        }
+                    }
+                });
             }
+            setPickdropBranches(Array.from(branchMap.values()));
         } catch (err) {
             console.error('Failed to fetch Pick & Drop branches', err);
+            setPickdropBranches(masterBranches);
         }
     };
 
     const fetchNcmBranches = async () => {
-        if (ncmBranches.length > 0) return;
+        const masterBranches = [
+            { name: 'NAYA BUSPARK', branch_name: 'NAYA BUSPARK', district_name: 'Kathmandu', full_name: 'NAYA BUSPARK - KATHMANDU', areas_covered: 'Gongabu, Samakhusi, Balaju, Machhapokhari' },
+            { name: 'TINKUNE', branch_name: 'TINKUNE', district_name: 'Kathmandu', full_name: 'TINKUNE - KATHMANDU', areas_covered: 'Tinkune, Koteshwor, Baneshwor, Sinamangal' },
+            { name: 'CHABAHIL', branch_name: 'CHABAHIL', district_name: 'Kathmandu', full_name: 'CHABAHIL - KATHMANDU', areas_covered: 'Chabahil, Bouddha, Jorpati, Gaushala' },
+            { name: 'KALANKI', branch_name: 'KALANKI', district_name: 'Kathmandu', full_name: 'KALANKI - KATHMANDU', areas_covered: 'Kalanki, Balkhu, Kirtipur, Naikap, Thankot' },
+            { name: 'LALITPUR', branch_name: 'LALITPUR', district_name: 'Lalitpur', full_name: 'LALITPUR - LALITPUR', areas_covered: 'Pulchowk, Jawalakhel, Satdobato, Kupandole, Gwarko' },
+            { name: 'BHAKTAPUR', branch_name: 'BHAKTAPUR', district_name: 'Bhaktapur', full_name: 'BHAKTAPUR - BHAKTAPUR', areas_covered: 'Bhaktapur, Suryabinayak, Thimi, Lokanthali' },
+            { name: 'TRISHULI', branch_name: 'TRISHULI', district_name: 'Nuwakot', full_name: 'TRISHULI - NUWAKOT', areas_covered: 'INARPATI, MAJHITAR, PETROL PUMP, COLONY, BAGHTAR, BIDUR, BATTAR, DHIKURE BAZAR, PIPALTAR, DEVIGHAT BAZAR' },
+            { name: 'DHADING BESI', branch_name: 'DHADING BESI', district_name: 'Dhading', full_name: 'DHADING BESI - DHADING', areas_covered: 'Nilkantha, Dhading Besi, Charaudi, Dharke, Gajuri, Malekhu' },
+            { name: 'POKHARA', branch_name: 'POKHARA', district_name: 'Kaski', full_name: 'POKHARA - KASKI', areas_covered: 'Lakeside, Mahendrapool, Prithvi Chowk, Chipledhunga, Lekhnath' },
+            { name: 'BUTWAL', branch_name: 'BUTWAL', district_name: 'Rupandehi', full_name: 'BUTWAL - RUPANDEHI', areas_covered: 'Traffic Chowk, Rajmarg Chauraha, Devinagar, Golpark' },
+            { name: 'BHAIRAHAWA', branch_name: 'BHAIRAHAWA', district_name: 'Rupandehi', full_name: 'BHAIRAHAWA - RUPANDEHI', areas_covered: 'Siddharthanagar, Lumbini Road' },
+            { name: 'PALPA', branch_name: 'PALPA', district_name: 'Palpa', full_name: 'PALPA - PALPA', areas_covered: 'Tansen, Rampur' },
+            { name: 'BIRATNAGAR', branch_name: 'BIRATNAGAR', district_name: 'Morang', full_name: 'BIRATNAGAR - MORANG', areas_covered: 'Trafic Chowk, Bargachhi, Main Road' },
+            { name: 'DHARAN', branch_name: 'DHARAN', district_name: 'Sunsari', full_name: 'DHARAN - SUNSARI', areas_covered: 'Bhanu Chowk, Mahendra Path' },
+            { name: 'ITAHARI', branch_name: 'ITAHARI', district_name: 'Sunsari', full_name: 'ITAHARI - SUNSARI', areas_covered: 'Main Chowk, Dharan Line, Biratnagar Line' },
+            { name: 'BIRTAMODE', branch_name: 'BIRTAMODE', district_name: 'Jhapa', full_name: 'BIRTAMODE - JHAPA', areas_covered: 'Muktichowk, Bhadrapur Road' },
+            { name: 'BHADRAPUR', branch_name: 'BHADRAPUR', district_name: 'Jhapa', full_name: 'BHADRAPUR - JHAPA', areas_covered: 'Bhadrapur, Chandragadhi' },
+            { name: 'DAMAK', branch_name: 'DAMAK', district_name: 'Jhapa', full_name: 'DAMAK - JHAPA', areas_covered: 'Damak, Thana Chowk' },
+            { name: 'ILAM', branch_name: 'ILAM', district_name: 'Ilam', full_name: 'ILAM - ILAM', areas_covered: 'Ilam, Fikkal' },
+            { name: 'CHITWAN', branch_name: 'CHITWAN', district_name: 'Chitwan', full_name: 'CHITWAN - CHITWAN', areas_covered: 'Narayangarh, Bharatpur, Parsa, Tandi, Gaindakot' },
+            { name: 'HETAUDA', branch_name: 'HETAUDA', district_name: 'Makwanpur', full_name: 'HETAUDA - MAKWANPUR', areas_covered: 'Seeman Chowk, Hetauda, School Road' },
+            { name: 'NEPALGUNJ', branch_name: 'NEPALGUNJ', district_name: 'Banke', full_name: 'NEPALGUNJ - BANKE', areas_covered: 'BP Chowk, Dhamambhoji, Kohalpur' },
+            { name: 'BIRGUNJ', branch_name: 'BIRGUNJ', district_name: 'Parsa', full_name: 'BIRGUNJ - PARSA', areas_covered: 'Adarshnagar, Ghantaghar, Dryport' },
+            { name: 'JANAKPUR', branch_name: 'JANAKPUR', district_name: 'Dhanusha', full_name: 'JANAKPUR - DHANUSHA', areas_covered: 'Station Road, Ramanand Chowk' },
+            { name: 'LAHAN', branch_name: 'LAHAN', district_name: 'Siraha', full_name: 'LAHAN - SIRAHA', areas_covered: 'Hospital Chowk, Lahan' },
+            { name: 'RAJBARAJ', branch_name: 'RAJBARAJ', district_name: 'Saptari', full_name: 'RAJBIRAJ - SAPTARI', areas_covered: 'Rajbiraj, Kanchanpur' },
+            { name: 'DANG', branch_name: 'DANG', district_name: 'Dang', full_name: 'DANG - DANG', areas_covered: 'Ghorahi, Tulsipur, Lamahi' },
+            { name: 'DHANGADHI', branch_name: 'DHANGADHI', district_name: 'Kailali', full_name: 'DHANGADHI - KAILALI', areas_covered: 'Chauraha, Main Road, Tikapur' },
+            { name: 'SURKHET', branch_name: 'SURKHET', district_name: 'Surkhet', full_name: 'SURKHET - SURKHET', areas_covered: 'Birendranagar, Surkhet' },
+            { name: 'MAHENDRANAGAR', branch_name: 'MAHENDRANAGAR', district_name: 'Kanchanpur', full_name: 'MAHENDRANAGAR - KANCHANPUR', areas_covered: 'Bhimdatta, Mahendranagar' },
+            { name: 'BANEPA', branch_name: 'BANEPA', district_name: 'Kavre', full_name: 'BANEPA - KAVRE', areas_covered: 'Banepa, Dhulikhel, Panauti' },
+            { name: 'CHARIKOT', branch_name: 'CHARIKOT', district_name: 'Dolakha', full_name: 'CHARIKOT - DOLAKHA', areas_covered: 'Charikot, Jiri' },
+            { name: 'SINDHULI', branch_name: 'SINDHULI', district_name: 'Sindhuli', full_name: 'SINDHULI - SINDHULI', areas_covered: 'Sindhulimadi, Kamalamai' },
+            { name: 'GORKHA', branch_name: 'GORKHA', district_name: 'Gorkha', full_name: 'GORKHA - GORKHA', areas_covered: 'Gorkha, Haramtari' },
+            { name: 'LAMJUNG', branch_name: 'LAMJUNG', district_name: 'Lamjung', full_name: 'LAMJUNG - LAMJUNG', areas_covered: 'Besisahar, Lamjung' },
+            { name: 'BAGLUNG', branch_name: 'BAGLUNG', district_name: 'Baglung', full_name: 'BAGLUNG - BAGLUNG', areas_covered: 'Baglung' },
+            { name: 'BENI', branch_name: 'BENI', district_name: 'Myagdi', full_name: 'BENI - MYAGDI', areas_covered: 'Beni, Myagdi' },
+            { name: 'KUSMA', branch_name: 'KUSMA', district_name: 'Parbat', full_name: 'KUSMA - PARBAT', areas_covered: 'Kusma, Parbat' },
+            { name: 'SYANGJA', branch_name: 'SYANGJA', district_name: 'Syangja', full_name: 'SYANGJA - SYANGJA', areas_covered: 'Putalibazar, Waling' }
+        ];
+
         try {
-            const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/ncm/branches`);
-            if (res.data?.success) {
-                const formatted = (res.data.data || []).map((b: any) => ({
-                    ...b,
-                    full_name: b.district_name ? `${b.name || b.branch_name} - ${b.district_name}` : (b.name || b.branch_name)
-                }));
+            const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+            const res = await axios.get(
+                `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/ncm/branches`,
+                { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+            );
+            const rawData = res.data?.data || res.data || [];
+            const arr = Array.isArray(rawData) ? rawData : (rawData?.branches || rawData?.data || []);
+
+            if (arr.length > 0) {
+                const formatted = arr.map((b: any) => {
+                    const nameStr = typeof b === 'string' ? b : (b.name || b.branch_name || b.branch || '');
+                    const district = b.district_name || b.district || '';
+                    const rawAreas = b.areas_covered || b.covered_areas || b.areas || '';
+                    const areaStr = Array.isArray(rawAreas) ? rawAreas.join(', ') : String(rawAreas);
+                    return {
+                        ...b,
+                        name: nameStr.trim().toUpperCase(),
+                        branch_name: nameStr.trim().toUpperCase(),
+                        district_name: district,
+                        full_name: district ? `${nameStr.trim().toUpperCase()} - ${district.toUpperCase()}` : nameStr.trim().toUpperCase(),
+                        areas_covered: areaStr,
+                        covered_areas: areaStr
+                    };
+                });
                 setNcmBranches(formatted);
 
-                // If we already have a toBranch selected (from initialOrder), set its areas_covered
                 if (ncmToBranch) {
                     const currentBr = formatted.find((fb: any) => fb.name === ncmToBranch || fb.branch_name === ncmToBranch);
                     if (currentBr) setNcmToBranchAreas(currentBr.areas_covered || '');
                 }
+                return;
             }
         } catch (error) {
             console.error('Failed to load NCM branches', error);
         }
+        setNcmBranches(masterBranches);
     };
 
     const fetchNcmDeliveryRate = async (toBr: string, fromBr: string, type: string) => {
-        if (!toBr || !fromBr) return;
+        if (!toBr) return;
+        const cleanToBr = toBr.split(/[\-\/]/)[0].trim();
+        const isValley = ['KATHMANDU', 'LALITPUR', 'BHAKTAPUR', 'TINKUNE', 'NAYA BUSPARK', 'CHABAHIL', 'KALANKI'].includes(cleanToBr.toUpperCase());
+        let fallbackRate = isValley ? 100 : 150;
+        if (type === 'Door2Branch' || type === 'Branch2Branch' || type === 'D2B' || type === 'B2B') {
+            fallbackRate = Math.max(50, fallbackRate - 50);
+        }
+
         try {
-            const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/ncm/shipping-rate`, {
-                creation: fromBr,
-                destination: toBr,
-                type: type
-            });
+            const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+            const res = await axios.post(
+                `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/ncm/shipping-rate`,
+                {
+                    creation: fromBr || 'NAYA BUSPARK',
+                    destination: cleanToBr,
+                    type: type || 'Door2Door'
+                },
+                { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+            );
+
             if (res.data?.success) {
                 const data = res.data.data;
-                const rate = data?.rate || data?.amount || data?.total || data?.delivery_charge || data?.delivery_cost || data?.charge || 0;
-                setNcmDeliveryCost(Number(rate));
-            } else {
-                setNcmDeliveryCost(-1);
+                const cost = parseFloat(data?.charge || data?.rate || data?.total || data?.delivery_charge);
+                if (!isNaN(cost) && cost > 0) {
+                    setNcmDeliveryCost(cost);
+                    return;
+                }
             }
         } catch (error) {
             console.error('Failed to fetch NCM delivery rate', error);
-            setNcmDeliveryCost(-1);
         }
+        setNcmDeliveryCost(fallbackRate);
     };
 
     const handleNcmShip = async () => {
@@ -284,6 +437,8 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
     };
 
     const fetchPickDropRate = async () => {
+        if (!selectedPickdropBranch || !pickdropCityArea) return;
+        const isValley = ['KATHMANDU VALLEY', 'LALITPUR', 'BHAKTAPUR', 'KATHMANDU'].includes(selectedPickdropBranch.toUpperCase());
         try {
             const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/pickdrop/delivery-rate`, {
                 destination_branch: selectedPickdropBranch,
@@ -291,10 +446,15 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
                 package_weight: editedOrder?.weight || 1
             });
             if (res.data?.success) {
-                setPickdropDeliveryCost(res.data.data?.total || res.data.data?.delivery_amount || 0);
+                const d = res.data.data;
+                const cost = Number(d?.total || d?.delivery_amount) || (isValley ? 100 : 150);
+                setPickdropDeliveryCost(cost);
+            } else {
+                setPickdropDeliveryCost(isValley ? 100 : 150);
             }
         } catch (err) {
             console.error('Failed to fetch PND rate', err);
+            setPickdropDeliveryCost(isValley ? 100 : 150);
         }
     };
 
@@ -764,6 +924,7 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
                             <option value="Delivery Failed">Delivery Failed</option>
                             <option value="Hold">Hold</option>
                             <option value="Return Process">Return Process</option>
+                            <option value="Returned Delivered">Returned Delivered</option>
                             <option value="Return Delivered">Return Delivered</option>
                             <option value="Follow up again">Follow up again</option>
                             <option value="Cancel">Cancel</option>
@@ -935,11 +1096,15 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
                                     />
                                 </div>
                                 {isNcmBranchDropdownOpen && (() => {
-                                    const filtered = ncmBranches.filter(b =>
-                                        !ncmBranchSearch ||
-                                        (b.name || b.branch_name || '').toLowerCase().includes(ncmBranchSearch.toLowerCase()) ||
-                                        (b.district_name || '').toLowerCase().includes(ncmBranchSearch.toLowerCase())
-                                    );
+                                    const filtered = ncmBranches.filter(b => {
+                                        if (!ncmBranchSearch) return true;
+                                        const query = ncmBranchSearch.toLowerCase();
+                                        return (
+                                            (b.name || b.branch_name || b.full_name || '').toLowerCase().includes(query) ||
+                                            (b.district_name || b.district || '').toLowerCase().includes(query) ||
+                                            (b.areas_covered || b.covered_areas || b.areas || '').toString().toLowerCase().includes(query)
+                                        );
+                                    });
                                     return (
                                         <div className="absolute z-30 w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded mt-1 shadow-2xl max-h-48 overflow-y-auto">
                                             {filtered.length === 0 && ncmBranches.length === 0 && <div className="p-3 text-xs text-slate-500 text-center italic">Loading branches...</div>}
@@ -952,13 +1117,13 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
                                                         const displayName = b.full_name || branchName;
                                                         setNcmToBranch(branchName);
                                                         setNcmBranchSearch(displayName);
-                                                        setNcmToBranchAreas(b.areas_covered || '');
+                                                        setNcmToBranchAreas(b.areas_covered || b.covered_areas || b.areas || '');
                                                         setIsNcmBranchDropdownOpen(false);
                                                         fetchNcmDeliveryRate(branchName, ncmFromBranch, ncmDeliveryType);
                                                     }}
                                                     className="p-2 hover:bg-green-50 dark:hover:bg-slate-700 cursor-pointer border-b border-gray-50 dark:border-slate-700 last:border-0"
                                                 >
-                                                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">{b.name || b.branch_name}</div>
+                                                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">{b.full_name || b.name || b.branch_name}</div>
                                                     {b.district_name && <div className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{b.district_name} District</div>}
                                                 </div>
                                             ))}
@@ -1002,7 +1167,7 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
                         </div>
                     )}
 
-                    {(editedOrder.order_status === 'Confirmed Order' || editedOrder.order_status === 'Ready to Ship') && courierProvider === 'local' && (
+                    {courierProvider === 'local' && (
                         <div className="bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-500/30 rounded-lg p-3 space-y-3">
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
@@ -1012,7 +1177,7 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
                                         value={editedOrder.logistic_name || ''}
                                         disabled={isRestricted}
                                         onChange={(e) => setEditedOrder({ ...editedOrder, logistic_name: e.target.value })}
-                                        placeholder="e.g. Local Bus"
+                                        placeholder="e.g. Daraz 3PV"
                                         className="w-full bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
                                 </div>
@@ -1023,7 +1188,7 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
                                         value={editedOrder.delivery_branch || ''}
                                         disabled={isRestricted}
                                         onChange={(e) => setEditedOrder({ ...editedOrder, delivery_branch: e.target.value })}
-                                        placeholder="e.g. Kalanki Branch"
+                                        placeholder="e.g. Nepalgunj"
                                         className="w-full bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
                                 </div>
@@ -1035,7 +1200,7 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
                                     type="number"
                                     value={editedOrder.courier_delivery_fee || 0}
                                     disabled={isRestricted}
-                                    onChange={(e) => setEditedOrder({ ...editedOrder, courier_delivery_fee: parseFloat(e.target.value) || 0 })}
+                                    onChange={(e) => setEditedOrder({ ...editedOrder, courier_delivery_fee: parseFloat(e.target.value) || 0, delivery_charge: parseFloat(e.target.value) || 0 })}
                                     placeholder="0"
                                     className="w-full bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-1 focus:ring-emerald-500 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
@@ -1073,9 +1238,14 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
                                     )}
                                 </div>
                                 {!isRestricted && isBranchDropdownOpen && (() => {
-                                    const filtered = pickdropBranches.filter(b =>
-                                        !pickdropBranchSearch || (b.branch_name || b.name || '').toLowerCase().includes(pickdropBranchSearch.toLowerCase())
-                                    );
+                                    const filtered = pickdropBranches.filter(b => {
+                                        if (!pickdropBranchSearch) return true;
+                                        const query = pickdropBranchSearch.toLowerCase();
+                                        const nameMatch = (b.branch_name || b.name || '').toLowerCase().includes(query);
+                                        const districtMatch = (b.district_name || b.district || '').toLowerCase().includes(query);
+                                        const areaMatch = Array.isArray(b.area) && b.area.some((a: string) => a.toLowerCase().includes(query));
+                                        return nameMatch || districtMatch || areaMatch;
+                                    });
                                     return (
                                         <div className="absolute z-30 w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded mt-1 shadow-2xl max-h-48 overflow-y-auto">
                                             {filtered.length === 0 && pickdropBranches.length === 0 && <div className="p-3 text-xs text-slate-500 text-center italic">Loading branches...</div>}
@@ -1091,8 +1261,11 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
                                                     }}
                                                     className="p-2 hover:bg-orange-50 dark:hover:bg-slate-700 cursor-pointer border-b border-gray-50 dark:border-slate-700 last:border-0"
                                                 >
-                                                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">{b.branch_name || b.name}</div>
-                                                    {b.area && b.area.length > 0 && <div className="text-[10px] text-slate-500 dark:text-slate-400">{b.area.slice(0, 3).join(', ')}{b.area.length > 3 ? '...' : ''}</div>}
+                                                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                                                        <span>{b.branch_name || b.name}</span>
+                                                        {b.district_name && <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">{b.district_name}</span>}
+                                                    </div>
+                                                    {b.area && b.area.length > 0 && <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{b.area.slice(0, 4).join(', ')}{b.area.length > 4 ? '...' : ''}</div>}
                                                 </div>
                                             ))}
                                         </div>
@@ -1118,7 +1291,7 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
                                         return (
                                             <div className="mt-1 flex flex-wrap gap-1">
                                                 <span className="text-[9px] text-slate-400 dark:text-slate-500 self-center">Suggest:</span>
-                                                {branchAreas.slice(0, 6).map((a: string) => (
+                                                {branchAreas.map((a: string) => (
                                                     <button
                                                         key={a}
                                                         type="button"

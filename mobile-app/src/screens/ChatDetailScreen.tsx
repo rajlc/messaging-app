@@ -43,15 +43,21 @@ interface Order {
 }
 
 import { API_URL } from '../api/config';
+import { useAuth } from '../context/AuthContext';
 
 export default function ChatDetailScreen({ route, navigation }: any) {
+    const { token } = useAuth();
     const { conversationId, customerId, customerName, platform } = route.params;
     const [messages, setMessages] = useState<Message[]>([]);
     const [inputText, setInputText] = useState('');
-    const [recipientId, setRecipientId] = useState<string | null>(null);
+    const [recipientId, setRecipientId] = useState<string | null>(customerId || null);
     const [pageId, setPageId] = useState<string | null>(null);
-    const [pageName, setPageName] = useState<string | null>(null);
-    const [platformName, setPlatformName] = useState<string | null>(null);
+    const [pageName, setPageName] = useState<string | null>(route.params?.pageName || null);
+    const [platformName, setPlatformName] = useState<string | null>(platform || null);
+    const [customerProfilePic, setCustomerProfilePic] = useState<string | null>(route.params?.customerProfilePic || null);
+    const [productName, setProductName] = useState<string | null>(route.params?.productName || null);
+    const [productPrice, setProductPrice] = useState<string | null>(route.params?.productPrice || null);
+    const [isPageOnline, setIsPageOnline] = useState<boolean>(true);
     const isMarketplace = platform === 'facebook_marketplace' || platformName === 'facebook_marketplace';
     const [showQuickReplies, setShowQuickReplies] = useState(false);
     const [quickReplies, setQuickReplies] = useState<{ title: string, message: string }[]>([]);
@@ -62,6 +68,25 @@ export default function ChatDetailScreen({ route, navigation }: any) {
     const [ordersModalVisible, setOrdersModalVisible] = useState(false);
     const flatListRef = useRef<FlatList>(null);
     const insets = useSafeAreaInsets();
+
+    const checkPageOnlineStatus = async (targetPageId: string | null) => {
+        try {
+            const res = await fetch(`${API_URL}/api/pages`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const pages = await res.json();
+                if (Array.isArray(pages)) {
+                    const match = pages.find((p: any) => p.page_id === targetPageId || p.page_name === pageName);
+                    if (match && typeof match.isOnline === 'boolean') {
+                        setIsPageOnline(match.isOnline);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to check page online status:', e);
+        }
+    };
 
     const pickImage = async () => {
         // No permissions request is necessary for launching the image library
@@ -141,16 +166,23 @@ export default function ChatDetailScreen({ route, navigation }: any) {
         try {
             const { data, error } = await supabase
                 .from('conversations')
-                .select('customer_id, page_id, page_name, platform')
+                .select('customer_id, page_id, page_name, platform, customer_profile_pic, product_name, product_price')
                 .eq('id', conversationId)
                 .single();
 
             if (data && !error) {
                 console.log('✅ Fetched conversation details:', data);
-                setRecipientId(data.customer_id);
-                setPageId(data.page_id);
-                setPageName(data.page_name);
-                setPlatformName(data.platform);
+                if (data.customer_id) setRecipientId(data.customer_id);
+                if (data.page_id) setPageId(data.page_id);
+                if (data.page_name) setPageName(data.page_name);
+                if (data.platform) setPlatformName(data.platform);
+                if (data.customer_profile_pic) setCustomerProfilePic(data.customer_profile_pic);
+                if (data.product_name) setProductName(data.product_name);
+                if (data.product_price) setProductPrice(data.product_price);
+
+                if (data.platform === 'facebook_marketplace' || platform === 'facebook_marketplace') {
+                    checkPageOnlineStatus(data.page_id || pageId);
+                }
             } else {
                 console.error('⚠️ Could not fetch conversation details or data empty:', error);
             }
@@ -224,7 +256,32 @@ export default function ChatDetailScreen({ route, navigation }: any) {
                 (payload) => {
                     const newMessage = payload.new as any;
                     setMessages((prev) => {
-                        if (prev.find((m) => m.id === newMessage.id)) return prev;
+                        // 1. If exact message ID already exists, ignore
+                        if (prev.some((m) => m.id === newMessage.id)) return prev;
+
+                        // 2. If an optimistic message or duplicate exists for agent with same text within 15s, replace it
+                        const duplicateIndex = prev.findIndex(m =>
+                            m.sender === newMessage.sender &&
+                            (m.text === newMessage.text || (newMessage.file_type === 'image' && m.file_type === 'image')) &&
+                            Math.abs(new Date(m.created_at).getTime() - new Date(newMessage.created_at).getTime()) < 15000
+                        );
+
+                        if (duplicateIndex !== -1) {
+                            const updated = [...prev];
+                            updated[duplicateIndex] = {
+                                id: newMessage.id,
+                                conversation_id: newMessage.conversation_id,
+                                text: newMessage.text,
+                                sender: newMessage.sender,
+                                created_at: newMessage.created_at,
+                                platform: newMessage.platform,
+                                image_url: newMessage.image_url,
+                                file_type: newMessage.file_type
+                            };
+                            return updated;
+                        }
+
+                        // 3. Otherwise append new message
                         return [{
                             id: newMessage.id,
                             conversation_id: newMessage.conversation_id,
@@ -314,10 +371,11 @@ export default function ChatDetailScreen({ route, navigation }: any) {
 
         navigation.navigate('CreateOrder', {
             conversationId,
-            customerId: recipientId,
+            customerId: recipientId || customerId,
             customerName: route.params.customerName,
-            platform: platformName,
-            pageName: pageName,
+            platform: platformName || platform || route.params.platform,
+            pageName: pageName || route.params.pageName,
+            pageId: pageId,
             phone,
             address
         });
@@ -325,6 +383,14 @@ export default function ChatDetailScreen({ route, navigation }: any) {
 
     const handleSend = async (text: string = inputText, imageUrl?: string, fileType?: string) => {
         console.log('🔵 handleSend triggered:', { text: text.substring(0, 20), hasImage: !!imageUrl, recipientId, conversationId });
+
+        if (isMarketplace && !isPageOnline) {
+            Alert.alert(
+                'Marketplace Profile Offline',
+                'Marketplace Profile is offline. Please make sure your Facebook Marketplace browser session / Chrome extension is logged in and Online.'
+            );
+            return;
+        }
 
         if ((!text.trim() && !imageUrl) || !conversationId || !recipientId) {
             if (!recipientId) {
@@ -358,12 +424,14 @@ export default function ChatDetailScreen({ route, navigation }: any) {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
                 },
                 body: JSON.stringify({
                     recipientId: recipientId,
                     text: textToSend,
-                    platform: platform || 'facebook',
+                    platform: platformName || platform || 'facebook',
                     pageId: pageId,
+                    page_name: pageName,
                     imageUrl: imageUrl,
                     fileType: fileType
                 }),
@@ -375,6 +443,21 @@ export default function ChatDetailScreen({ route, navigation }: any) {
                 const data = await response.json();
                 console.error('❌ API Error data:', data);
                 throw new Error(data.message || 'Failed to send message');
+            }
+
+            const resData = await response.json();
+            if (resData && resData.data && resData.data.id) {
+                const savedMsg = resData.data;
+                setMessages(prev => prev.map(m => (m.id === optimisticId ? {
+                    id: savedMsg.id,
+                    conversation_id: savedMsg.conversation_id || conversationId,
+                    text: savedMsg.text || textToSend,
+                    sender: savedMsg.sender || 'agent',
+                    created_at: savedMsg.created_at || new Date().toISOString(),
+                    platform: savedMsg.platform || platform,
+                    image_url: savedMsg.image_url || imageUrl,
+                    file_type: savedMsg.file_type || fileType || 'text'
+                } : m)));
             }
 
             console.log('✅ Message sent successfully via API');
@@ -438,7 +521,7 @@ export default function ChatDetailScreen({ route, navigation }: any) {
         );
     };
 
-    const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(customerName)}&background=random`;
+    const avatarUrl = customerProfilePic || route.params?.customerProfilePic || `https://ui-avatars.com/api/?name=${encodeURIComponent(customerName)}&background=random`;
 
     return (
         <View style={styles.container}>
@@ -453,11 +536,9 @@ export default function ChatDetailScreen({ route, navigation }: any) {
                     <Text style={styles.headerStatus}>Active now</Text>
                 </View>
 
-                {isMarketplace && (
-                    <TouchableOpacity onPress={handleCreateOrder} style={styles.headerPlusButton}>
-                        <Plus size={24} color={Colors.primary} />
-                    </TouchableOpacity>
-                )}
+                <TouchableOpacity onPress={handleCreateOrder} style={styles.headerPlusButton}>
+                    <Plus size={24} color={Colors.primary} />
+                </TouchableOpacity>
 
                 {latestOrder && (
                     <TouchableOpacity
@@ -497,6 +578,25 @@ export default function ChatDetailScreen({ route, navigation }: any) {
                 )}
             </View>
 
+            {/* Offline Marketplace Warning Banner */}
+            {isMarketplace && !isPageOnline && (
+                <View style={styles.offlineBanner}>
+                    <Text style={styles.offlineBannerTitle}>Marketplace Profile is Offline</Text>
+                    <Text style={styles.offlineBannerText}>
+                        Please open Facebook Marketplace on your browser and verify that the Chrome Extension / backend runner is logged in and Online.
+                    </Text>
+                </View>
+            )}
+
+            {/* Marketplace Listing Card */}
+            {(productName || productPrice) && (
+                <View style={styles.listingCard}>
+                    <Text style={styles.listingCardTag}>MARKETPLACE LISTING</Text>
+                    {productName ? <Text style={styles.listingCardTitle}>{productName}</Text> : null}
+                    {productPrice ? <Text style={styles.listingCardPrice}>{productPrice}</Text> : null}
+                </View>
+            )}
+
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -519,7 +619,7 @@ export default function ChatDetailScreen({ route, navigation }: any) {
                     )}
 
                     {/* Quick Replies Modal/Sheet */}
-                    {!isMarketplace && showQuickReplies && (
+                    {showQuickReplies && (
                         <View style={styles.quickRepliesContainer}>
                             <Text style={styles.quickReplyTitle}>Quick Replies</Text>
                             <View style={styles.quickReplyGrid}>
@@ -539,42 +639,40 @@ export default function ChatDetailScreen({ route, navigation }: any) {
                         </View>
                     )}
 
-                    {!isMarketplace && (
-                        <View style={[
-                            styles.inputBar,
-                            { paddingBottom: Math.max(insets.bottom, Spacing.s) }
-                        ]}>
-                            <TouchableOpacity style={styles.inputAction} onPress={pickImage}>
-                                <Camera size={24} color={Colors.primary} />
-                            </TouchableOpacity>
-                            <View style={styles.inputContainer}>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Message..."
-                                    value={inputText}
-                                    onChangeText={setInputText}
-                                    multiline
-                                />
-                            </View>
-
-                            <TouchableOpacity
-                                style={styles.inputAction}
-                                onPress={() => setShowQuickReplies(!showQuickReplies)}
-                            >
-                                <MessageCircle size={24} color={Colors.primary} />
-                            </TouchableOpacity>
-
-                            <TouchableOpacity style={styles.inputAction} onPress={handleCreateOrder}>
-                                <Plus size={24} color={Colors.primary} />
-                            </TouchableOpacity>
-
-                            {inputText.trim() ? (
-                                <TouchableOpacity onPress={() => handleSend()} disabled={sending} style={styles.sendButton}>
-                                    <Send size={24} color={Colors.primary} />
-                                </TouchableOpacity>
-                            ) : null}
+                    <View style={[
+                        styles.inputBar,
+                        { paddingBottom: Math.max(insets.bottom, Spacing.s) }
+                    ]}>
+                        <TouchableOpacity style={styles.inputAction} onPress={pickImage}>
+                            <Camera size={24} color={Colors.primary} />
+                        </TouchableOpacity>
+                        <View style={styles.inputContainer}>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Message..."
+                                value={inputText}
+                                onChangeText={setInputText}
+                                multiline
+                            />
                         </View>
-                    )}
+
+                        <TouchableOpacity
+                            style={styles.inputAction}
+                            onPress={() => setShowQuickReplies(!showQuickReplies)}
+                        >
+                            <MessageCircle size={24} color={Colors.primary} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.inputAction} onPress={handleCreateOrder}>
+                            <Plus size={24} color={Colors.primary} />
+                        </TouchableOpacity>
+
+                        {inputText.trim() ? (
+                            <TouchableOpacity onPress={() => handleSend()} disabled={sending} style={styles.sendButton}>
+                                <Send size={24} color={Colors.primary} />
+                            </TouchableOpacity>
+                        ) : null}
+                    </View>
                 </View>
             </KeyboardAvoidingView>
 
@@ -842,5 +940,47 @@ const styles = StyleSheet.create({
         width: 10,
         height: 10,
         borderRadius: 5,
+    },
+    offlineBanner: {
+        backgroundColor: '#FEF2F2',
+        borderBottomWidth: 1,
+        borderBottomColor: '#FCA5A5',
+        paddingHorizontal: Spacing.m,
+        paddingVertical: Spacing.s,
+    },
+    offlineBannerTitle: {
+        fontSize: 13,
+        fontWeight: 'bold',
+        color: '#DC2626',
+    },
+    offlineBannerText: {
+        fontSize: 11,
+        color: '#991B1B',
+        marginTop: 2,
+    },
+    listingCard: {
+        backgroundColor: '#EEF2FF',
+        borderBottomWidth: 1,
+        borderBottomColor: '#E0E7FF',
+        paddingHorizontal: Spacing.m,
+        paddingVertical: 10,
+    },
+    listingCardTag: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: Colors.primary,
+        letterSpacing: 0.5,
+    },
+    listingCardTitle: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: Colors.text,
+        marginTop: 2,
+    },
+    listingCardPrice: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#10B981',
+        marginTop: 2,
     },
 });

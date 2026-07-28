@@ -1961,7 +1961,9 @@ function UnifiedInboxContent() {
           onClose={() => setIsOrderModalOpen(false)}
           customerName={activeConversation?.customerName}
           customerId={activeConversation?.customerId}
-          pageName={activeConversation?.pageName}
+          pageName={activeConversation?.pageName || connectedPages.find(p => p.page_id === activeConversation?.pageId)?.page_name}
+          pageId={activeConversation?.pageId || connectedPages.find(p => p.page_name?.toLowerCase() === activeConversation?.pageName?.toLowerCase())?.page_id}
+          platform={activeConversation?.platform || connectedPages.find(p => p.page_id === activeConversation?.pageId || p.page_name?.toLowerCase() === activeConversation?.pageName?.toLowerCase())?.platform}
           mode={orderModalMode}
           initialOrder={selectedOrder}
           onOrderUpdate={() => {

@@ -19,15 +19,18 @@ import { Colors, Spacing, Radius } from '../theme/theme';
 import { Edit2, MessageCircle, Filter, ChevronDown, ChevronUp, X } from 'lucide-react-native';
 import { supabase } from '../api/supabase';
 import { format } from 'date-fns';
+import { API_URL } from '../api/config';
+import { useAuth } from '../context/AuthContext';
 
 interface Conversation {
     id: string;
     customer_name: string;
+    customer_profile_pic?: string;
     last_message: string;
     last_message_at: string;
     platform: string;
     page_name: string;
-    unread_count?: number;
+    page_id?: string;
     customer_id?: string;
     has_phone_number?: boolean;
     orders?: {
@@ -48,10 +51,24 @@ const ConversationItem = ({ item, navigation }: { item: Conversation, navigation
         ? format(new Date(item.last_message_at), 'p')
         : '';
 
-    // Avatar placeholder based on platform or name
-    const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.customer_name)}&background=random`;
+    // Use Facebook customer profile pic if available, fallback to UI avatars
+    const avatarUrl = item.customer_profile_pic || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.customer_name)}&background=random`;
 
     const containsPhone = item.has_phone_number || hasPhoneNumber(item.last_message) || hasPhoneNumber(item.customer_name);
+
+    // Helper to clean page name
+    const cleanPageName = (name?: string) => {
+        if (!name) return '';
+        let cleaned = name;
+        const match = name.match(/Marketplace Profile \(([^)]+)\)/i);
+        if (match && match[1]) {
+            cleaned = match[1];
+        } else {
+            cleaned = cleaned.replace(/Marketplace Profile/gi, '').trim();
+        }
+        cleaned = cleaned.replace(/[()]/g, '').trim();
+        return (cleaned || name).toUpperCase();
+    };
 
     return (
         <TouchableOpacity style={styles.messageItem} onPress={() => {
@@ -60,6 +77,7 @@ const ConversationItem = ({ item, navigation }: { item: Conversation, navigation
                 conversationId: item.id,
                 customerId: item.customer_id,
                 customerName: item.customer_name,
+                customerProfilePic: item.customer_profile_pic,
                 platform: item.platform,
                 pageName: item.page_name
             });
@@ -88,39 +106,51 @@ const ConversationItem = ({ item, navigation }: { item: Conversation, navigation
                                 <Text style={styles.phoneBadgeText}>N</Text>
                             </View>
                         )}
-                        {item.orders && item.orders.length > 0 && (
-                            <View style={[
-                                styles.statusBadge,
-                                {
-                                    backgroundColor:
-                                        item.orders[0].order_status === 'New Order' ? '#FEF9C3' :
-                                            item.orders[0].order_status === 'Shipped' ? '#DBEAFE' :
-                                                item.orders[0].order_status === 'Delivered' ? '#DCFCE7' :
-                                                    item.orders[0].order_status === 'Returned' ? '#FEE2E2' : '#F3F4F6'
-                                }
-                            ]}>
-                                <Text style={[
-                                    styles.statusBadgeText,
-                                    {
-                                        color:
-                                            item.orders[0].order_status === 'New Order' ? '#854D0E' :
-                                                item.orders[0].order_status === 'Shipped' ? '#1E40AF' :
-                                                    item.orders[0].order_status === 'Delivered' ? '#166534' :
-                                                        item.orders[0].order_status === 'Returned' ? '#991B1B' : '#374151'
-                                    }
-                                ]}>
-                                    #{item.orders[0].order_number}{item.orders.length > 1 ? ` +${item.orders.length - 1}` : ''}
-                                </Text>
-                            </View>
-                        )}
                     </View>
                     <Text style={styles.timeText}>{formattedTime}</Text>
                 </View>
+
+                {/* Line 2: Page Name Pill Badge + Order Badge */}
+                <View style={styles.badgesRow}>
+                    {item.page_name ? (
+                        <View style={styles.pageBadge}>
+                            <Text style={styles.pageBadgeText} numberOfLines={1}>
+                                {cleanPageName(item.page_name)}
+                            </Text>
+                        </View>
+                    ) : null}
+                    {item.orders && item.orders.length > 0 && (
+                        <View style={[
+                            styles.statusBadge,
+                            {
+                                backgroundColor:
+                                    item.orders[0].order_status === 'New Order' ? '#FEF9C3' :
+                                        item.orders[0].order_status === 'Shipped' ? '#DBEAFE' :
+                                            item.orders[0].order_status === 'Delivered' ? '#DCFCE7' :
+                                                item.orders[0].order_status === 'Returned' ? '#FEE2E2' : '#F3F4F6'
+                            }
+                        ]}>
+                            <Text style={[
+                                styles.statusBadgeText,
+                                {
+                                    color:
+                                        item.orders[0].order_status === 'New Order' ? '#854D0E' :
+                                            item.orders[0].order_status === 'Shipped' ? '#1E40AF' :
+                                                item.orders[0].order_status === 'Delivered' ? '#166534' :
+                                                    item.orders[0].order_status === 'Returned' ? '#991B1B' : '#374151'
+                                }
+                            ]}>
+                                #{item.orders[0].order_number}{item.orders.length > 1 ? ` +${item.orders.length - 1}` : ''}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+
+                {/* Line 3: Last Message Preview */}
                 <View style={styles.messageSubHeader}>
                     <Text style={styles.lastMessage} numberOfLines={1}>
                         {item.last_message || 'No messages yet'}
                     </Text>
-                    <Text style={styles.pageName}>{item.page_name}</Text>
                 </View>
             </View>
         </TouchableOpacity>
@@ -128,6 +158,7 @@ const ConversationItem = ({ item, navigation }: { item: Conversation, navigation
 };
 
 export default function MessagesScreen({ navigation }: any) {
+    const { token } = useAuth();
     const [activeTab, setActiveTab] = useState('Messages');
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [loading, setLoading] = useState(true);
@@ -142,11 +173,58 @@ export default function MessagesScreen({ navigation }: any) {
     const [availablePageNames, setAvailablePageNames] = useState<string[]>([]);
     const [activeSelector, setActiveSelector] = useState<'status' | 'platform' | null>(null);
 
-    const orderStatuses = ['New Order', 'Confirmed Order', 'Shipped', 'Delivered', 'Returned'];
+    const orderStatuses = [
+        'New Order',
+        'Confirmed Order',
+        'Ready to Ship',
+        'Shipped',
+        'Delivery Process',
+        'Delivered',
+        'Delivery Failed',
+        'Hold',
+        'Return Process',
+        'Return Delivered',
+        'Cancelled'
+    ];
 
     const fetchConversations = async (isRefreshing = false) => {
         if (!isRefreshing) setLoading(true);
         try {
+            // Build pages mapping (page_id -> page_name)
+            const pagesMap: Record<string, string> = {};
+            try {
+                const { data: dbPages } = await supabase.from('facebook_pages').select('page_id, page_name');
+                if (dbPages) {
+                    dbPages.forEach((p: any) => {
+                        if (p.page_id && p.page_name) {
+                            pagesMap[p.page_id] = p.page_name;
+                        }
+                    });
+                }
+            } catch (e) {
+                console.log('Error fetching facebook_pages:', e);
+            }
+
+            try {
+                if (token) {
+                    const res = await fetch(`${API_URL}/api/pages`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const apiPages = await res.json();
+                        if (Array.isArray(apiPages)) {
+                            apiPages.forEach((p: any) => {
+                                if (p.page_id && p.page_name) {
+                                    pagesMap[p.page_id] = p.page_name;
+                                }
+                            });
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log('Error fetching API pages:', e);
+            }
+
             const { data, error } = await supabase
                 .from('conversations')
                 .select('*')
@@ -158,41 +236,37 @@ export default function MessagesScreen({ navigation }: any) {
                 const conversationIds = data.map(c => c.id);
                 const customerIds = data.map(c => c.customer_id).filter(Boolean);
 
-                // Fetch the latest order status for these conversations
-                // Filter by either UUID (conversation_id) or PSID (customer_id)
-                console.log('Fetching orders for conversations:', conversationIds);
                 const { data: ordersData, error: ordersError } = await supabase
                     .from('orders')
                     .select('conversation_id, customer_id, order_number, order_status, created_at')
                     .or(`conversation_id.in.(${conversationIds.map(id => `"${id}"`).join(',')}),customer_id.in.(${customerIds.map(id => `"${id}"`).join(',')})`)
                     .order('created_at', { ascending: false });
 
-                if (!ordersError && ordersData) {
-                    const processed = data.map(conv => {
-                        // Get orders for this conversation (Match by UUID OR PSID)
-                        const convOrders = ordersData.filter(o =>
-                            o.conversation_id === conv.id ||
-                            (o.customer_id && o.customer_id === conv.customer_id)
-                        );
-                        return {
-                            ...conv,
-                            orders: convOrders
-                        };
-                    });
-                    setConversations(processed);
+                const processed = data.map(conv => {
+                    const convOrders = (!ordersError && ordersData) ? ordersData.filter(o =>
+                        o.conversation_id === conv.id ||
+                        (o.customer_id && o.customer_id === conv.customer_id)
+                    ) : [];
 
-                    // Extract unique platforms and page names for filtering
-                    const platforms = Array.from(new Set(data.map(c => c.platform))).filter(Boolean);
-                    const pages = Array.from(new Set(data.map(c => c.page_name))).filter(Boolean);
-                    setAvailablePlatforms(platforms);
-                    setAvailablePageNames(pages);
-                } else {
-                    setConversations(data);
-                    const platforms = Array.from(new Set(data.map(c => c.platform))).filter(Boolean);
-                    const pages = Array.from(new Set(data.map(c => c.page_name))).filter(Boolean);
-                    setAvailablePlatforms(platforms);
-                    setAvailablePageNames(pages);
-                }
+                    const resolvedPageName = conv.page_name || pagesMap[conv.page_id] || (conv.platform === 'facebook_marketplace' ? 'Marketplace Profile' : 'Facebook Page');
+
+                    return {
+                        ...conv,
+                        page_name: resolvedPageName,
+                        orders: convOrders
+                    };
+                });
+
+                setConversations(processed);
+
+                const platforms = Array.from(new Set(processed.map(c => c.platform))).filter(Boolean);
+                const allPagesSet = new Set<string>();
+                Object.values(pagesMap).forEach(name => { if (name) allPagesSet.add(name); });
+                processed.forEach(c => { if (c.page_name) allPagesSet.add(c.page_name); });
+                allPagesSet.add('Facebook Marketplace');
+
+                setAvailablePlatforms(platforms);
+                setAvailablePageNames(Array.from(allPagesSet).sort());
             } else {
                 setConversations([]);
             }
@@ -247,6 +321,9 @@ export default function MessagesScreen({ navigation }: any) {
         setPlatformFilter(null);
         fetchConversations(true);
     }, []);
+
+    const messagesCount = conversations.filter(c => c.platform !== 'facebook_marketplace').length;
+    const marketplaceCount = conversations.filter(c => c.platform === 'facebook_marketplace').length;
 
     const filteredConversations = conversations.filter(conv => {
         if (activeTab === 'Messages') {
@@ -341,13 +418,17 @@ export default function MessagesScreen({ navigation }: any) {
                             style={[styles.tab, activeTab === 'Messages' && styles.activeTab]}
                             onPress={() => setActiveTab('Messages')}
                         >
-                            <Text style={[styles.tabText, activeTab === 'Messages' && styles.activeTabText]}>Messages</Text>
+                            <Text style={[styles.tabText, activeTab === 'Messages' && styles.activeTabText]}>
+                                Messages {messagesCount > 0 ? `(${messagesCount})` : ''}
+                            </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.tab, activeTab === 'Marketplace' && styles.activeTab]}
                             onPress={() => setActiveTab('Marketplace')}
                         >
-                            <Text style={[styles.tabText, activeTab === 'Marketplace' && styles.activeTabText]}>Marketplace</Text>
+                            <Text style={[styles.tabText, activeTab === 'Marketplace' && styles.activeTabText]}>
+                                Marketplace {marketplaceCount > 0 ? `(${marketplaceCount})` : ''}
+                            </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.tab, activeTab === 'Comments' && styles.activeTab]}
@@ -385,7 +466,7 @@ export default function MessagesScreen({ navigation }: any) {
                             onPress={() => setActiveSelector('platform')}
                         >
                             <Text style={[styles.dropdownButtonText, platformFilter && styles.activeDropdownButtonText]} numberOfLines={1}>
-                                {platformFilter || 'Platform / Page'}
+                                {platformFilter || 'Pages & Accounts'}
                             </Text>
                             <ChevronDown size={16} color={platformFilter ? Colors.secondary : Colors.textSecondary} />
                         </TouchableOpacity>
@@ -405,7 +486,7 @@ export default function MessagesScreen({ navigation }: any) {
             <FilterModal
                 visible={activeSelector === 'platform'}
                 onClose={() => setActiveSelector(null)}
-                title="Filter Platform"
+                title="Filter Pages & Accounts"
                 options={availablePageNames}
                 selectedValue={platformFilter}
                 onSelect={setPlatformFilter}
@@ -653,7 +734,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 6,
         paddingVertical: 2,
         borderRadius: 4,
-        marginLeft: 8,
+        marginRight: 6,
         borderWidth: 0.5,
         borderColor: 'rgba(0,0,0,0.05)',
     },
@@ -671,6 +752,28 @@ const styles = StyleSheet.create({
         flex: 1,
         marginRight: Spacing.s,
     },
+    badgesRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 2,
+        marginBottom: 3,
+        flexWrap: 'wrap',
+    },
+    pageBadge: {
+        backgroundColor: '#EFF6FF',
+        borderWidth: 1,
+        borderColor: '#DBEAFE',
+        borderRadius: 4,
+        paddingHorizontal: 6,
+        paddingVertical: 1.5,
+        marginRight: 6,
+    },
+    pageBadgeText: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: '#2563EB',
+        letterSpacing: 0.2,
+    },
     pageName: {
         fontSize: 11,
         color: Colors.primary,
@@ -679,6 +782,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 6,
         paddingVertical: 2,
         borderRadius: 4,
+        textTransform: 'lowercase',
     },
     emptyContainer: {
         flex: 1,

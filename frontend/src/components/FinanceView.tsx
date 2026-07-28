@@ -103,7 +103,7 @@ export default function FinanceView({ orders }: FinanceViewProps) {
         try {
             const results: Record<string, Settlement[]> = {};
             const token = localStorage.getItem('token');
-            
+
             // Also fetch pending summaries for self delivery dashboard metrics
             const pendingRes = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/settlements/pending-summary`, { headers: { 'Authorization': `Bearer ${token}` } });
             setAllPendingSummaries(pendingRes.data || []);
@@ -183,9 +183,9 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                 .filter(o => pendingStatuses.includes(o.order_status?.toLowerCase()))
                 .reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
 
-            // 2. Delivery Charges (Sum only for delivered orders)
+            // 2. Delivery Charges (Sum for delivered & returned delivered orders)
             const deliveryCharges = logOrders
-                .filter(o => o.order_status?.toLowerCase() === 'delivered')
+                .filter(o => o.order_status?.toLowerCase() === 'delivered' || (o.order_status && (o.order_status.toLowerCase() === 'return delivered' || o.order_status.toLowerCase() === 'returned delivered' || o.order_status.toLowerCase() === 'returned')))
                 .reduce((sum, o) => sum + Number(o.courier_delivery_fee || o.delivery_charge || 0), 0);
 
             // 3. Last COD Amount (Sum all on latest date)
@@ -199,7 +199,7 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                     .reduce((sum, s) => sum + Number(s.amount || 0), 0);
             }
 
-            // 4. Pending COD logic
+            // 4. Pending COD logic (Matches Detail View exactly)
             let pendingCod = 0;
             if (log.id === 'self') {
                 pendingCod = allPendingSummaries.reduce((sum, r) => sum + Number(r.net_pending_settlement || 0), 0);
@@ -207,7 +207,8 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                 const deliveredOrdersAmt = logOrders
                     .filter(o => o.order_status?.toLowerCase() === 'delivered')
                     .reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
-                pendingCod = (deliveredOrdersAmt - deliveryCharges) - lastCodAmount;
+                const totalSettledCod = settlements.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+                pendingCod = Math.max(0, deliveredOrdersAmt - deliveryCharges - totalSettledCod);
             }
 
             stats[log.id] = {
@@ -219,7 +220,7 @@ export default function FinanceView({ orders }: FinanceViewProps) {
         });
 
         return stats;
-    }, [orders, allSettlements, LOGISTICS, allPendingSummaries]);
+    }, [orders, allSettlements, allPendingSummaries]);
 
     // Find logistic with highest pending value
     const highestPendingLogistic = useMemo(() => {
@@ -377,8 +378,8 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-6">
                                 <h2 className="text-section-title text-slate-800 dark:text-white flex items-center gap-2">
-                                <TrendingUp className="text-emerald-500" size={20} /> Ads & Profit Management
-                            </h2>
+                                    <TrendingUp className="text-emerald-500" size={20} /> Ads & Profit Management
+                                </h2>
                                 <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-900/50 p-1 rounded-xl">
                                     <button
                                         onClick={() => setAdsMainTab('ads')}
@@ -450,7 +451,7 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                             <h2 className="text-section-title text-slate-800 dark:text-white flex items-center gap-2 font-[600]">
                                 <DollarSign className="text-indigo-500" size={20} /> Profit Analysis
                             </h2>
-                            <button 
+                            <button
                                 onClick={fetchDailyProfitAnalysis}
                                 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
                             >
@@ -517,14 +518,14 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                                     {new Date(viewingDailyBreakdown.date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
                                 </p>
                             </div>
-                            <button 
+                            <button
                                 onClick={() => setViewingDailyBreakdown(null)}
                                 className="p-3 bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 rounded-2xl transition-all shadow-sm border border-gray-100 dark:border-slate-700"
                             >
                                 <X size={20} />
                             </button>
                         </div>
-                        
+
                         <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar">
                             <div className="space-y-4">
                                 {Object.values(viewingDailyBreakdown.campaignBreakdown).map((camp: any, idx: number) => (
@@ -596,6 +597,8 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
     });
     const [inventoryProducts, setInventoryProducts] = useState<any[]>([]);
     const [completedSettlements, setCompletedSettlements] = useState<any[]>([]);
+    const [editingEstChargeOrderId, setEditingEstChargeOrderId] = useState<string | null>(null);
+    const [tempEstChargeVal, setTempEstChargeVal] = useState<string>('');
 
 
     const fetchSelfDeliveryData = useCallback(async () => {
@@ -635,7 +638,7 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
         if (!confirm('Mark this order as Returned Delivered (Received in Warehouse)?')) return;
         try {
             const token = localStorage.getItem('token');
-            await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/orders/${orderId}/delivery-status`, 
+            await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/orders/${orderId}/delivery-status`,
                 { status: 'Returned Delivered' },
                 { headers: { 'Authorization': `Bearer ${token}` } }
             );
@@ -650,7 +653,7 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
         if (!settlementForm.riderId || !settlementForm.amount || !settlementForm.date) return;
         try {
             const token = localStorage.getItem('token');
-            await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/settlements`, 
+            await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/settlements`,
                 {
                     riderId: settlementForm.riderId,
                     amount: parseFloat(settlementForm.amount),
@@ -670,7 +673,7 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
         if (!stockForm.riderId || !stockForm.productName || !stockForm.quantity) return;
         try {
             const token = localStorage.getItem('token');
-            await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/rider-inventory/assign`, 
+            await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/rider-inventory/assign`,
                 {
                     rider_id: stockForm.riderId,
                     product_name: stockForm.productName,
@@ -691,7 +694,7 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
         if (!confirm(`Are you sure you want to ${approve ? 'approve' : 'decline'} this stock return?`)) return;
         try {
             const token = localStorage.getItem('token');
-            await axios.put(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/rider-inventory/${stockId}/status`, 
+            await axios.put(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/rider-inventory/${stockId}/status`,
                 { status: newStatus },
                 { headers: { 'Authorization': `Bearer ${token}` } }
             );
@@ -727,6 +730,35 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
 
     const totalPages = Math.ceil(filteredOrders.length / pageSize);
 
+    const footerTotals = useMemo(() => {
+        let totalAmount = 0;
+        let totalEstCharge = 0;
+        let totalBalance = 0;
+
+        filteredOrders.forEach(o => {
+            const amt = Number(o.total_amount || 0);
+            const est = Number((o as any).courier_delivery_fee || (o as any).delivery_charge || 0);
+            const status = o.order_status?.toLowerCase();
+            const isDelivered = status === 'delivered';
+            const isReturned = (s?: string) => {
+                if (!s) return false;
+                const lower = s.toLowerCase();
+                return lower === 'return delivered' || lower === 'returned delivered' || lower === 'returned';
+            };
+
+            totalAmount += amt;
+            totalEstCharge += est;
+
+            if (isDelivered) {
+                totalBalance += (amt - est);
+            } else if (isReturned(o.order_status)) {
+                totalBalance += (-est);
+            }
+        });
+
+        return { totalAmount, totalEstCharge, totalBalance };
+    }, [filteredOrders]);
+
     const fetchChangelogs = useCallback(async () => {
         setIsLoadingLogs(true);
         try {
@@ -747,12 +779,18 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
         }
     }, [activeTab, fetchChangelogs]);
 
+    const isReturnDeliveredStatus = (s?: string) => {
+        if (!s) return false;
+        const lower = s.toLowerCase();
+        return lower === 'return delivered' || lower === 'returned delivered' || lower === 'returned';
+    };
+
     const calculations = useMemo(() => {
         const orderValue = logisticOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
         const deliveredOrders = logisticOrders.filter(o => o.order_status?.toLowerCase() === 'delivered');
         const deliveredValueTotalAmt = deliveredOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
         const returnDeliveredValue = logisticOrders
-            .filter(o => o.order_status?.toLowerCase() === 'return delivered')
+            .filter(o => isReturnDeliveredStatus(o.order_status))
             .reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
 
         const pendingStatuses = ['shipped', 'arrived at branch', 'delivery process', 'delivery failed', 'hold', 'return process'];
@@ -763,15 +801,22 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
             .filter(o => pendingStatuses.includes(o.order_status?.toLowerCase()))
             .length;
 
-        const totalDeliveryCharges = logisticOrders
+        const deliveredDeliveryCharges = logisticOrders
             .filter(o => o.order_status?.toLowerCase() === 'delivered')
             .reduce((sum, o) => sum + Number(o.courier_delivery_fee || o.delivery_charge || 0), 0);
 
-        const deliveredValue = deliveredValueTotalAmt - totalDeliveryCharges;
+        const returnedDeliveryCharges = logisticOrders
+            .filter(o => isReturnDeliveredStatus(o.order_status))
+            .reduce((sum, o) => sum + Number(o.courier_delivery_fee || o.delivery_charge || 0), 0);
+
+        const totalDeliveryCharges = deliveredDeliveryCharges + returnedDeliveryCharges;
+
+        const deliveredValue = deliveredValueTotalAmt - deliveredDeliveryCharges;
 
         let lastCodDate = 'N/A';
         let lastCodAmount = 0;
         let pendingCod = deliveredValue;
+        const totalSettledCod = settlements.reduce((sum, s) => sum + Number(s.amount || 0), 0);
 
         if (settlements.length > 0) {
             const sorted = [...settlements].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -785,7 +830,7 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
         if (logistic.id === 'self') {
             pendingCod = pendingSummaries.reduce((sum, r) => sum + Number(r.net_pending_settlement || 0), 0);
         } else {
-            pendingCod = deliveredValue - lastCodAmount;
+            pendingCod = Math.max(0, deliveredValueTotalAmt - totalDeliveryCharges - totalSettledCod);
         }
 
         const packedOrders = orders.filter(o =>
@@ -795,7 +840,7 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
         const packedValue = packedOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
 
         const nonDeliveredEstCharge = logisticOrders
-            .filter(o => o.order_status?.toLowerCase() !== 'delivered' && o.order_status?.toLowerCase() !== 'return delivered')
+            .filter(o => o.order_status?.toLowerCase() !== 'delivered' && !isReturnDeliveredStatus(o.order_status))
             .reduce((sum, o) => sum + Number(o.courier_delivery_fee || o.delivery_charge || 0), 0);
 
         // Today's Stats
@@ -821,7 +866,7 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                         todayDeliveredOrders++;
                         todayDeliveredAmount += Number(order.total_amount || 0);
                         todayDeliveryCharge += Number(order.courier_delivery_fee || order.delivery_charge || 0);
-                    } else if (status === 'return delivered') {
+                    } else if (status === 'return delivered' || status === 'returned delivered' || status === 'returned') {
                         todayRtvOrders++;
                     }
                 }
@@ -835,6 +880,7 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
             pendingValue,
             lastCodDate,
             lastCodAmount,
+            totalSettledCod,
             pendingCod,
             totalDeliveryCharges,
             packedValue,
@@ -850,33 +896,86 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
     }, [logisticOrders, settlements, orders, logistic, pendingSummaries, completedSettlements]);
 
     const handleSaveCod = async () => {
-        if (!newCod.amount || !newCod.date) return;
+        const numAmt = parseFloat(newCod.amount);
+        if (isNaN(numAmt) || numAmt <= 0 || !newCod.date) {
+            alert('Please enter a valid settlement amount and date');
+            return;
+        }
         try {
-            await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/logistics/cod-settlements`, {
+            const token = localStorage.getItem('token');
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
+            await axios.post(`${apiUrl}/api/logistics/cod-settlements`, {
                 logisticId: logistic.id,
-                ...newCod
+                amount: numAmt,
+                date: newCod.date,
+                remarks: newCod.remarks || ''
+            }, {
+                headers: { 'Authorization': `Bearer ${token}` }
             });
             setIsAddCodOpen(false);
             setNewCod({ amount: '', date: new Date().toISOString().split('T')[0], remarks: '' });
             onSettlementAdded();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to save settlement:', error);
+            alert(`Failed to save settlement: ${error.response?.data?.message || error.message}`);
         }
     };
 
     const handleUpdateCod = async () => {
         if (!editingSettlement) return;
+        const numAmt = parseFloat(editingSettlement.amount?.toString() || '0');
+        if (isNaN(numAmt) || numAmt <= 0 || !editingSettlement.date) {
+            alert('Please enter a valid settlement amount and date');
+            return;
+        }
         try {
-            await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/api/logistics/cod-settlements/${editingSettlement.id}`, {
-                amount: Number(editingSettlement.amount),
+            const token = localStorage.getItem('token');
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
+            await axios.put(`${apiUrl}/api/logistics/cod-settlements/${editingSettlement.id}`, {
+                amount: numAmt,
                 date: editingSettlement.date,
-                remarks: editingSettlement.remarks
+                remarks: editingSettlement.remarks || ''
+            }, {
+                headers: { 'Authorization': `Bearer ${token}` }
             });
             setIsEditSettlementOpen(false);
             setEditingSettlement(null);
             onSettlementAdded();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to update settlement:', error);
+            alert(`Failed to update settlement: ${error.response?.data?.message || error.message}`);
+        }
+    };
+
+    const handleUpdateReturnFee = async (orderId: string, returnFee: number) => {
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/orders/${orderId}`, {
+                return_delivery_charge: returnFee
+            }, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            onSettlementAdded();
+        } catch (error) {
+            console.error('Failed to update return charge:', error);
+            alert('Failed to update return charge');
+        }
+    };
+
+    const handleUpdateEstCharge = async (orderId: string, estCharge: number) => {
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/orders/${orderId}`, {
+                courier_delivery_fee: estCharge,
+                delivery_charge: estCharge
+            }, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            setEditingEstChargeOrderId(null);
+            onSettlementAdded();
+        } catch (error) {
+            console.error('Failed to update delivery charge:', error);
+            alert('Failed to update delivery charge');
         }
     };
 
@@ -928,13 +1027,14 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                                     <>
                                         <MetricLine label="Last Cod Date" value={calculations.lastCodDate} textSize="text-base" />
                                         <MetricLine label="Last Cod Amount" value={`Rs. ${calculations.lastCodAmount.toLocaleString()}`} valueColor="text-indigo-600" textSize="text-base" />
+                                        <MetricLine label="Total COD Settlement" value={`Rs. ${calculations.totalSettledCod.toLocaleString()}`} valueColor="text-emerald-600" textSize="text-base" />
                                     </>
                                 )}
                                 <MetricLine label="Pending Cod" value={`Rs. ${calculations.pendingCod.toLocaleString()}`} valueColor="text-orange-600" textSize="text-base" />
                                 <MetricLine
                                     label="Total Delivery Charges"
                                     value={`Rs. ${calculations.totalDeliveryCharges.toLocaleString()}`}
-                                    subValue={calculations.nonDeliveredEstCharge > 0 ? `(Other: Rs. ${calculations.nonDeliveredEstCharge.toLocaleString()})` : undefined}
+                                    subValue={calculations.nonDeliveredEstCharge > 0 ? `(Pending In-Transit Fee: Rs. ${calculations.nonDeliveredEstCharge.toLocaleString()})` : undefined}
                                     valueColor="text-red-600"
                                     textSize="text-base"
                                 />
@@ -1039,7 +1139,7 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                                                         </td>
                                                         <td className="px-4 py-4 text-center">
                                                             {['Return Process', 'Delivery Failed', 'Hold', 'Returning to Seller'].includes(order.order_status) && (
-                                                                <button 
+                                                                <button
                                                                     onClick={() => handleApproveReturn(order.id)}
                                                                     className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-black uppercase hover:bg-indigo-700 transition-colors shadow-sm"
                                                                 >
@@ -1074,27 +1174,120 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100 dark:divide-slate-700/50">
-                                            {paginatedOrders.map((order, idx) => (
-                                                <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-slate-900/40 transition-colors">
-                                                    <td className="px-6 py-4 text-xs font-bold text-slate-400">{(currentPage - 1) * pageSize + idx + 1}</td>
-                                                    <td className="px-6 py-4 text-xs text-slate-500 font-medium">{new Date(order.created_at).toLocaleDateString()}</td>
-                                                    <td className="px-6 py-4 text-xs font-black text-indigo-600 dark:text-indigo-400">{order.order_number}</td>
-                                                    <td className="px-6 py-4 text-xs text-slate-700 dark:text-slate-300 font-bold">
-                                                        {(order as any).delivery_branch || (order as any).city_name || 'N/A'}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-xs text-slate-700 dark:text-slate-300 font-bold max-w-[120px] truncate">{order.customer_name}</td>
-                                                    <td className="px-6 py-4 text-xs text-slate-500 font-medium tracking-tighter">{order.phone_number}</td>
-                                                    <td className="px-6 py-4 text-sm font-black text-slate-900 dark:text-white">Rs. {order.total_amount?.toLocaleString()}</td>
-                                                    <td className="px-6 py-4 text-xs font-bold text-red-500">Rs. {(order.courier_delivery_fee || order.delivery_charge || 0).toLocaleString()}</td>
-                                                    <td className="px-6 py-4 text-xs font-bold text-emerald-600">Rs. {((order.total_amount || 0) - (order.courier_delivery_fee || order.delivery_charge || 0)).toLocaleString()}</td>
-                                                    <td className="px-6 py-4">
-                                                        <span className={`text-[10px] px-2.5 py-1 rounded-full font-black uppercase tracking-tight ${getStatusStyle(order.order_status)}`}>
-                                                            {order.order_status}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {paginatedOrders.map((order, idx) => {
+                                                const isReturned = isReturnDeliveredStatus(order.order_status);
+                                                const estCharge = (order as any).courier_delivery_fee || (order as any).delivery_charge || 0;
+
+                                                return (
+                                                    <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-slate-900/40 transition-colors">
+                                                        <td className="px-6 py-4 text-xs font-bold text-slate-400">{(currentPage - 1) * pageSize + idx + 1}</td>
+                                                        <td className="px-6 py-4 text-xs text-slate-500 font-medium">{new Date(order.created_at).toLocaleDateString()}</td>
+                                                        <td className="px-6 py-4 text-xs font-black">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-indigo-600 dark:text-indigo-400">{order.order_number}</span>
+                                                                {((order as any).courier_provider === 'local' || (order as any).logistic_name) && (order as any).logistic_name && (
+                                                                    <span className="text-[10px] text-slate-400 font-semibold italic">{(order as any).logistic_name}</span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-xs text-slate-700 dark:text-slate-300 font-bold">
+                                                            {(order as any).delivery_branch || (order as any).city_name || 'N/A'}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-xs text-slate-700 dark:text-slate-300 font-bold max-w-[120px] truncate">{order.customer_name}</td>
+                                                        <td className="px-6 py-4 text-xs text-slate-500 font-medium tracking-tighter">{order.phone_number}</td>
+                                                        <td className="px-6 py-4 text-sm font-black text-slate-900 dark:text-white">Rs. {order.total_amount?.toLocaleString()}</td>
+                                                        <td className="px-6 py-4 text-xs font-bold text-red-500">
+                                                            {isReturned ? (
+                                                                editingEstChargeOrderId === order.id ? (
+                                                                    <div className="flex items-center gap-1">
+                                                                        <span className="text-[10px] text-slate-400">Rs.</span>
+                                                                        <input
+                                                                            type="number"
+                                                                            value={tempEstChargeVal}
+                                                                            onChange={(e) => setTempEstChargeVal(e.target.value)}
+                                                                            onKeyDown={(e) => {
+                                                                                if (e.key === 'Enter') {
+                                                                                    handleUpdateEstCharge(order.id, parseFloat(tempEstChargeVal) || 0);
+                                                                                } else if (e.key === 'Escape') {
+                                                                                    setEditingEstChargeOrderId(null);
+                                                                                }
+                                                                            }}
+                                                                            autoFocus
+                                                                            className="w-16 px-1.5 py-1 text-xs border border-indigo-500 dark:bg-slate-900 rounded outline-none text-red-600 font-bold"
+                                                                        />
+                                                                        <button
+                                                                            onClick={() => handleUpdateEstCharge(order.id, parseFloat(tempEstChargeVal) || 0)}
+                                                                            className="p-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded shadow-sm"
+                                                                            title="Save (Enter)"
+                                                                        >
+                                                                            <Save size={12} />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => setEditingEstChargeOrderId(null)}
+                                                                            className="p-1 bg-gray-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded hover:bg-gray-300"
+                                                                            title="Cancel (Esc)"
+                                                                        >
+                                                                            <X size={12} />
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span>Rs. {estCharge.toLocaleString()}</span>
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setEditingEstChargeOrderId(order.id);
+                                                                                setTempEstChargeVal(estCharge.toString());
+                                                                            }}
+                                                                            className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded transition-all"
+                                                                            title="Edit Returned Delivery Charge"
+                                                                        >
+                                                                            <Edit size={13} />
+                                                                        </button>
+                                                                    </div>
+                                                                )
+                                                            ) : (
+                                                                <span>Rs. {estCharge.toLocaleString()}</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-xs font-bold">
+                                                            {(() => {
+                                                                const status = order.order_status?.toLowerCase();
+                                                                const amt = Number(order.total_amount || 0);
+                                                                if (status === 'delivered') {
+                                                                    return <span className="text-emerald-600 font-bold">Rs. {(amt - estCharge).toLocaleString()}</span>;
+                                                                } else if (isReturned) {
+                                                                    return <span className="text-rose-600 font-bold">- Rs. {estCharge.toLocaleString()}</span>;
+                                                                } else {
+                                                                    return <span className="text-slate-400 font-medium">-</span>;
+                                                                }
+                                                            })()}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className={`text-[10px] px-2.5 py-1 rounded-full font-black uppercase tracking-tight ${getStatusStyle(order.order_status)}`}>
+                                                                {order.order_status}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
+                                        <tfoot className="bg-gray-100/80 dark:bg-slate-800/80 font-black border-t-2 border-gray-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white">
+                                            <tr>
+                                                <td colSpan={6} className="px-6 py-4 text-right uppercase tracking-wider text-slate-500 font-bold">
+                                                    Total ({filteredOrders.length} Orders):
+                                                </td>
+                                                <td className="px-6 py-4 text-sm font-black text-slate-900 dark:text-white">
+                                                    Rs. {footerTotals.totalAmount.toLocaleString()}
+                                                </td>
+                                                <td className="px-6 py-4 font-bold text-red-600">
+                                                    Rs. {footerTotals.totalEstCharge.toLocaleString()}
+                                                </td>
+                                                <td className={`px-6 py-4 font-black ${footerTotals.totalBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                    {footerTotals.totalBalance >= 0 ? '' : '- '}Rs. {Math.abs(footerTotals.totalBalance).toLocaleString()}
+                                                </td>
+                                                <td className="px-6 py-4"></td>
+                                            </tr>
+                                        </tfoot>
                                     </table>
                                 )
                             ) : activeTab === 'cod' ? (
@@ -1102,8 +1295,8 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                                     <div className="p-6 space-y-8 max-h-[600px] overflow-y-auto custom-scrollbar">
                                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                                             {pendingSummaries.map((rider) => {
-                                                const riderPendingOrders = adminOrders.filter(o => 
-                                                    o.assigned_rider_id === rider.rider_id && 
+                                                const riderPendingOrders = adminOrders.filter(o =>
+                                                    o.assigned_rider_id === rider.rider_id &&
                                                     !['Delivered', 'delivered', 'Returned Delivered'].includes(o.order_status)
                                                 );
                                                 const assignedStock = riderStock.filter(s => s.rider_id === rider.rider_id && (s.status === 'assigned' || s.status === 'return_pending'));
@@ -1125,7 +1318,7 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex gap-2">
-                                                                    <button 
+                                                                    <button
                                                                         onClick={() => {
                                                                             setSettlementForm({ riderId: rider.rider_id, amount: rider.net_pending_settlement.toString(), date: new Date().toISOString().split('T')[0] });
                                                                             setIsSettlementModalOpen(true);
@@ -1135,7 +1328,7 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                                                                     >
                                                                         <Wallet size={20} />
                                                                     </button>
-                                                                    <button 
+                                                                    <button
                                                                         onClick={() => {
                                                                             setStockForm({ ...stockForm, riderId: rider.rider_id });
                                                                             setIsStockModalOpen(true);
@@ -1403,9 +1596,9 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                         <form onSubmit={handleAddSettlement} className="p-8 space-y-6">
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Select Rider</label>
-                                <select 
+                                <select
                                     value={settlementForm.riderId}
-                                    onChange={(e) => setSettlementForm({...settlementForm, riderId: e.target.value})}
+                                    onChange={(e) => setSettlementForm({ ...settlementForm, riderId: e.target.value })}
                                     className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                     required
                                 >
@@ -1417,10 +1610,10 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                             </div>
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Settlement Amount (Rs.)</label>
-                                <input 
-                                    type="number" 
+                                <input
+                                    type="number"
                                     value={settlementForm.amount}
-                                    onChange={(e) => setSettlementForm({...settlementForm, amount: e.target.value})}
+                                    onChange={(e) => setSettlementForm({ ...settlementForm, amount: e.target.value })}
                                     className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                     placeholder="Enter amount"
                                     required
@@ -1428,15 +1621,15 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                             </div>
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Settlement Date</label>
-                                <input 
-                                    type="date" 
+                                <input
+                                    type="date"
                                     value={settlementForm.date}
-                                    onChange={(e) => setSettlementForm({...settlementForm, date: e.target.value})}
+                                    onChange={(e) => setSettlementForm({ ...settlementForm, date: e.target.value })}
                                     className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                     required
                                 />
                             </div>
-                            <button 
+                            <button
                                 type="submit"
                                 className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest shadow-xl shadow-indigo-500/20 hover:bg-indigo-700 transition-all active:scale-[0.98]"
                             >
@@ -1459,9 +1652,9 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                         <form onSubmit={handleAssignStock} className="p-8 space-y-6">
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Rider</label>
-                                <select 
+                                <select
                                     value={stockForm.riderId}
-                                    onChange={(e) => setStockForm({...stockForm, riderId: e.target.value})}
+                                    onChange={(e) => setStockForm({ ...stockForm, riderId: e.target.value })}
                                     className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                     required
                                 >
@@ -1473,9 +1666,9 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                             </div>
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Product</label>
-                                <select 
+                                <select
                                     value={stockForm.productName}
-                                    onChange={(e) => setStockForm({...stockForm, productName: e.target.value})}
+                                    onChange={(e) => setStockForm({ ...stockForm, productName: e.target.value })}
                                     className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                     required
                                 >
@@ -1488,26 +1681,26 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Quantity</label>
-                                    <input 
-                                        type="number" 
+                                    <input
+                                        type="number"
                                         value={stockForm.quantity}
-                                        onChange={(e) => setStockForm({...stockForm, quantity: e.target.value})}
+                                        onChange={(e) => setStockForm({ ...stockForm, quantity: e.target.value })}
                                         className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                         required
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Price/Unit</label>
-                                    <input 
-                                        type="number" 
+                                    <input
+                                        type="number"
                                         value={stockForm.amount}
-                                        onChange={(e) => setStockForm({...stockForm, amount: e.target.value})}
+                                        onChange={(e) => setStockForm({ ...stockForm, amount: e.target.value })}
                                         className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                         required
                                     />
                                 </div>
                             </div>
-                            <button 
+                            <button
                                 type="submit"
                                 className="w-full py-4 bg-emerald-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest shadow-xl shadow-emerald-500/20 hover:bg-emerald-700 transition-all active:scale-[0.98]"
                             >

@@ -49,7 +49,7 @@ let OrdersController = class OrdersController {
         return this.ordersService.updateEcommerceOrder(orderNumber, orderData);
     }
     async getOrders(req, limit, offset, customerId) {
-        const limitNum = limit ? parseInt(limit) : 1000;
+        const limitNum = limit ? parseInt(limit) : 10000;
         const offsetNum = offset ? parseInt(offset) : 0;
         if (customerId) {
             return this.ordersService.getOrdersByCustomer(customerId, req.user);
