@@ -867,37 +867,34 @@ export default function OrderModal({
     // Price Calculation
     useEffect(() => {
         const canCalculate = currentMode !== 'view' &&
-            (orderStatus === 'Confirmed Order' || orderStatus === 'Ready to Ship') &&
             courierProvider === 'pathao' &&
-            selectedCity?.id &&
-            selectedZone?.id;
-
-        console.log('Price calculation check:', {
-            canCalculate,
-            city: selectedCity?.id,
-            zone: selectedZone?.id,
-            weight,
-            status: orderStatus
-        });
+            selectedCity?.id;
 
         if (canCalculate) {
             calculateDeliveryCost();
         }
-        // In view mode, we trust the saved cost, unless edited
-    }, [selectedCity?.id, selectedZone?.id, weight, courierProvider, orderStatus, currentMode]);
+    }, [selectedCity?.id, selectedZone?.id, weight, courierProvider, currentMode]);
 
     const calculateDeliveryCost = async () => {
+        if (!selectedCity?.id) return;
         try {
-            console.log('Triggering calculatePrice for:', { city: selectedCity?.id, zone: selectedZone?.id, weight });
-            const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/price-plan`, {
-                recipient_city: selectedCity?.id,
-                recipient_zone: selectedZone?.id,
-                item_weight: weight
-            });
+            const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+            console.log('Triggering calculatePrice for Pathao:', { city: selectedCity?.id, zone: selectedZone?.id, weight });
+            const res = await axios.post(
+                `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/logistics/price-plan`,
+                {
+                    recipient_city: selectedCity.id,
+                    recipient_zone: selectedZone?.id || selectedCity.id,
+                    item_weight: weight || 0.5
+                },
+                { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+            );
             console.log('Price API response:', res.data);
-            if (res.data && typeof res.data.final_price !== 'undefined') {
-                const cost = parseFloat(res.data.final_price);
-                setTotalDeliveryCost(cost);
+            if (res.data) {
+                const cost = parseFloat(res.data.final_price ?? res.data.price ?? 0);
+                if (!isNaN(cost) && cost > 0) {
+                    setTotalDeliveryCost(cost);
+                }
             }
         } catch (error: any) {
             console.error('Failed to calculate price', error.response?.data || error.message);

@@ -20,7 +20,7 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
     const isRestricted = user?.role === 'user' && order?.courier_provider === 'local' && order?.order_status === 'Shipped';
 
     // Logistics State
-    const [courierProvider, setCourierProvider] = useState('pathao');
+    const [courierProvider, setCourierProvider] = useState('');
     const [cities, setCities] = useState<any[]>([]);
     const [zones, setZones] = useState<any[]>([]);
     const [areas, setAreas] = useState<any[]>([]);
@@ -85,7 +85,7 @@ export default function EditOrderModal({ isOpen, onClose, order, user, onSaveSuc
                 ...order
             });
             // Initialize Logistics
-            const provider = order.courier_provider || (order.logistic_name ? 'local' : '') || 'pathao';
+            const provider = order.courier_provider || (order.logistic_name ? 'local' : '') || '';
             setCourierProvider(provider);
 
             // Fetch dependent logistics data if needed

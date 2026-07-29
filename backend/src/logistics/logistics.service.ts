@@ -67,43 +67,18 @@ export class LogisticsService implements OnModuleInit {
         try {
             const token = await this.getAccessToken();
             const creds = await this.getCredentials();
-            this.logger.log(`Fetching cities from ${creds.base_url}/aladdin/api/v1/city-list`);
+            this.logger.log(`Fetching Pathao cities from ${creds.base_url}/aladdin/api/v1/city-list`);
 
-            // Try POST first as curl --data '' suggests POST
-            const response = await axios.post(`${creds.base_url}/aladdin/api/v1/city-list`, {}, {
+            const response = await axios.get(`${creds.base_url}/aladdin/api/v1/city-list`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
-            this.logger.log(`Pathao city-list response (POST): ${JSON.stringify(response.data)}`);
-
-            if (response.data?.error) {
-                throw new Error(response.data.message || 'Unauthorized');
-            }
-
             const cities = response.data?.data?.data || response.data?.data || [];
-            this.logger.log(`Fetched ${cities.length} cities`);
+            this.logger.log(`Fetched ${cities.length} Pathao cities`);
             return cities;
-        } catch (error) {
-            this.logger.warn('Failed to fetch cities via POST, trying GET...', error.message);
-
-            // Fallback to GET if POST fails (just in case)
-            try {
-                const token = await this.getAccessToken();
-                const creds = await this.getCredentials();
-                const response = await axios.get(`${creds.base_url}/aladdin/api/v1/city-list`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                this.logger.log(`Pathao city-list response (GET): ${JSON.stringify(response.data)}`);
-
-                if (response.data?.error) {
-                    throw new Error(response.data.message || 'Unauthorized');
-                }
-
-                return response.data?.data?.data || response.data?.data || [];
-            } catch (getError) {
-                this.logger.error('Failed to fetch cities via both POST and GET', getError.response?.data || getError.message);
-                throw getError;
-            }
+        } catch (error: any) {
+            this.logger.error('Failed to fetch Pathao cities', error.response?.data || error.message);
+            throw error;
         }
     }
 
@@ -115,8 +90,7 @@ export class LogisticsService implements OnModuleInit {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             return response.data?.data?.data || [];
-        } catch (error) {
-            // Only log error if it's not a rate limit (retry utility will handle it)
+        } catch (error: any) {
             if (error.response?.status !== 429) {
                 this.logger.error(`Failed to fetch zones for city ${cityId}: ${error.message}`);
             }
@@ -132,8 +106,7 @@ export class LogisticsService implements OnModuleInit {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             return response.data?.data?.data || [];
-        } catch (error) {
-            // Only log error if it's not a rate limit (retry utility will handle it)
+        } catch (error: any) {
             if (error.response?.status !== 429) {
                 this.logger.error(`Failed to fetch areas for zone ${zoneId}: ${error.message}`);
             }
@@ -146,15 +119,14 @@ export class LogisticsService implements OnModuleInit {
         while (retries < maxRetries) {
             try {
                 return await fn();
-            } catch (error) {
-                // Check if error is 429 Too Many Requests
+            } catch (error: any) {
                 const isRateLimited = error.response?.status === 429 ||
                     error.message?.includes('429') ||
                     (error.response?.data && JSON.stringify(error.response.data).includes('429'));
 
                 if (isRateLimited && retries < maxRetries - 1) {
                     const delay = initialDelay * Math.pow(2, retries);
-                    this.logger.warn(`Pathao API Rate Limited (429). Retrying in ${delay / 1000}s... (Attempt ${retries + 1}/${maxRetries})`);
+                    this.logger.warn(`Pathao API Rate Limited (429). Retrying in ${delay / 1000}s...`);
                     await new Promise(resolve => setTimeout(resolve, delay));
                     retries++;
                     continue;
@@ -166,123 +138,78 @@ export class LogisticsService implements OnModuleInit {
     }
 
     async getAllAreas() {
-        if (this.areaCache && (Date.now() - this.areaCache.timestamp) < this.CACHE_TTL) {
+        if (this.areaCache && (Date.now() - this.areaCache.timestamp) < this.CACHE_TTL && this.areaCache.data.length > 0) {
             return this.areaCache.data;
         }
 
         if (this.isFetchingAreas) {
-            this.logger.log('Pathao areas are currently being fetched. Returning partial cache...');
             return this.areaCache?.data || [];
         }
 
         this.isFetchingAreas = true;
         try {
-            this.logger.log('Fetching Pathao areas in background (this may take a few minutes)...');
+            this.logger.log('Fetching Pathao cities & locations...');
             const cities = await this.getCities();
 
-            // Initialize cache if empty to hold incremental data
-            if (!this.areaCache) {
-                this.areaCache = { data: [], timestamp: Date.now() };
-            }
+            const allItems: any[] = [];
 
-            // Fetch zones and areas sequentially with a conservative delay to avoid 429 Too Many Requests
+            // Add all 286 cities immediately as searchable top-level items!
+            cities.forEach((city: any) => {
+                allItems.push({
+                    city_id: city.city_id,
+                    city_name: city.city_name,
+                    zone_id: city.city_id,
+                    zone_name: city.city_name,
+                    area_id: city.city_id,
+                    area_name: city.city_name,
+                    display_name: city.city_name
+                });
+            });
+
+            this.areaCache = { data: allItems, timestamp: Date.now() };
+            this.logger.log(`Instantly seeded ${allItems.length} Pathao cities into cache.`);
+
+            // Background load of sub-zones and areas
             for (const city of cities) {
                 try {
-                    // Use retryWithBackoff for zones
-                    const zones = await this.retryWithBackoff(() => this.getZones(city.city_id));
-                    const newCityAreas: any[] = [];
-
-                    if (zones.length === 0) {
-                        // If city has no zones, treat city itself as an area
-                        newCityAreas.push({
-                            city_id: city.city_id,
-                            city_name: city.city_name,
-                            zone_id: null,
-                            zone_name: null,
-                            area_id: null,
-                            area_name: null,
-                            display_name: city.city_name
-                        });
-                    } else {
+                    const zones = await this.getZones(city.city_id).catch(() => []);
+                    if (zones && zones.length > 0) {
                         for (const zone of zones) {
-                            try {
-                                // Use retryWithBackoff for areas
-                                const areas = await this.retryWithBackoff(() => this.getAreas(zone.zone_id));
-                                if (areas.length === 0) {
-                                    // If zone has no areas, treat zone itself as an area
-                                    newCityAreas.push({
+                            const areas = await this.getAreas(zone.zone_id).catch(() => []);
+                            if (areas && areas.length > 0) {
+                                areas.forEach((area: any) => {
+                                    allItems.push({
                                         city_id: city.city_id,
                                         city_name: city.city_name,
                                         zone_id: zone.zone_id,
                                         zone_name: zone.zone_name,
-                                        area_id: zone.zone_id, // Fallback area_id to zone_id
-                                        area_name: zone.zone_name, // Fallback area_name to zone_name
-                                        display_name: `${zone.zone_name} (${city.city_name})`
+                                        area_id: area.area_id,
+                                        area_name: area.area_name,
+                                        display_name: `${area.area_name} (${city.city_name})`
                                     });
-                                } else {
-                                    for (const area of areas) {
-                                        newCityAreas.push({
-                                            city_id: city.city_id,
-                                            city_name: city.city_name,
-                                            zone_id: zone.zone_id,
-                                            zone_name: zone.zone_name,
-                                            area_id: area.area_id,
-                                            area_name: area.area_name,
-                                            display_name: `${area.area_name} (${city.city_name})`
-                                        });
-                                    }
-                                }
-                                // Conservative delay after each zone fetch (Pathao is very strict)
-                                await new Promise(resolve => setTimeout(resolve, 3000));
-                            } catch (e) {
-                                this.logger.warn(`Failed to fetch areas for zone ${zone.zone_id} in ${city.city_name} after retries: ${e.message}`);
-                                // Fallback: Add the zone itself if area fetch fails
-                                newCityAreas.push({
+                                });
+                            } else {
+                                allItems.push({
                                     city_id: city.city_id,
                                     city_name: city.city_name,
                                     zone_id: zone.zone_id,
                                     zone_name: zone.zone_name,
-                                    area_id: zone.zone_id, // Fallback
-                                    area_name: zone.zone_name, // Fallback
+                                    area_id: zone.zone_id,
+                                    area_name: zone.zone_name,
                                     display_name: `${zone.zone_name} (${city.city_name})`
                                 });
                             }
                         }
                     }
-
-                    // Incrementally update the cache after each city is fully fetched
-                    if (newCityAreas.length > 0) {
-                        this.areaCache.data = [...this.areaCache.data, ...newCityAreas];
-                        this.areaCache.timestamp = Date.now();
-
-                        // Log progress every 10 cities to reduce noise
-                        const cityIndex = cities.indexOf(city);
-                        if (cityIndex % 10 === 0 || cityIndex === cities.length - 1) {
-                            this.logger.log(`Logistics Cache: ${this.areaCache.data.length} areas loaded (${cityIndex + 1}/${cities.length} cities)...`);
-                        }
-                    }
-
-                    // Delay after each city to let API breathe
-                    await new Promise(resolve => setTimeout(resolve, 5000));
-                } catch (e) {
-                    this.logger.warn(`Failed to fetch zones for city ${city.city_id} (${city.city_name}) after retries: ${e.message}`);
-                    // Fallback: Add the city itself if zone fetch fails
-                    const partialCityAreas = [{
-                        city_id: city.city_id,
-                        city_name: city.city_name,
-                        zone_id: city.city_id, // Pathao sometimes uses city_id as a zone
-                        zone_name: city.city_name,
-                        area_id: city.city_id,
-                        area_name: city.city_name,
-                        display_name: city.city_name
-                    }];
-                    this.areaCache.data = [...this.areaCache.data, ...partialCityAreas];
-                    this.areaCache.timestamp = Date.now();
-                }
+                } catch (e) { }
             }
 
-            this.logger.log(`Completed fetching Pathao areas. Final total: ${this.areaCache.data.length}`);
-            return this.areaCache.data;
+            this.areaCache = { data: allItems, timestamp: Date.now() };
+            this.logger.log(`Completed Pathao locations load. Total items: ${allItems.length}`);
+            return allItems;
+        } catch (err: any) {
+            this.logger.error('Error loading Pathao areas:', err.message);
+            return this.areaCache?.data || [];
         } finally {
             this.isFetchingAreas = false;
         }
@@ -292,42 +219,42 @@ export class LogisticsService implements OnModuleInit {
         const token = await this.getAccessToken();
         const creds = await this.getCredentials();
 
-        // Use store_id from settings or default to something if needed. 
-        // Docs say store_id is provided by merchant. 
-        // We might need to fetch available stores first to get the correct store_id.
-        // For now, let's try to get stores if we don't have ID, or assume 0/1 if user didn't save it?
-        // Actually the `createOrder` logic I wrote earlier had `store_id: 0`. 
-        // We should probably fetch stores to find a valid store_id.
-        // Let's add a quick helper to get the first store ID.
-
-        let storeId = 0;
-        try {
-            // Fetch stores to get valid store_id
-            const storesRes = await axios.get(`${creds.base_url}/aladdin/api/v1/stores`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (storesRes.data?.data?.data?.length > 0) {
-                storeId = storesRes.data.data.data[0].store_id;
+        let storeId = payload.store_id;
+        if (!storeId) {
+            try {
+                const storesRes = await axios.get(`${creds.base_url}/aladdin/api/v1/stores`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const stores = storesRes.data?.data?.data || storesRes.data?.data || [];
+                if (stores.length > 0) {
+                    storeId = stores[0].store_id;
+                }
+            } catch (e: any) {
+                this.logger.warn('Failed to fetch stores for store_id', e.message);
             }
-        } catch (e) {
-            // Ignore error, fallback to 0 or whatever was passed
-            this.logger.warn('Failed to fetch stores for store_id', e.message);
         }
 
         try {
-            this.logger.log(`Calculating price with store_id: ${storeId}, payload: ${JSON.stringify(payload)}`);
-            const response = await axios.post(`${creds.base_url}/aladdin/api/v1/merchant/price-plan`, {
-                ...payload,
-                store_id: storeId,
-                item_type: 2, // Parcel
-                delivery_type: 48 // Normal
-            }, {
+            const cityId = payload.recipient_city || payload.city_id;
+            const zoneId = payload.recipient_zone || payload.zone_id || cityId;
+
+            const reqBody = {
+                store_id: Number(storeId) || 291302,
+                item_type: Number(payload.item_type) || 2, // Parcel
+                delivery_type: Number(payload.delivery_type) || 48, // Normal
+                item_weight: parseFloat(payload.item_weight) || 0.5,
+                recipient_city: Number(cityId),
+                recipient_zone: Number(zoneId)
+            };
+
+            this.logger.log(`Calculating Pathao price: ${JSON.stringify(reqBody)}`);
+            const response = await axios.post(`${creds.base_url}/aladdin/api/v1/merchant/price-plan`, reqBody, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            this.logger.log(`Price calculation response: ${JSON.stringify(response.data)}`);
-            return response.data.data;
-        } catch (error) {
-            this.logger.error('Failed to calculate price', error.response?.data || error.message);
+            this.logger.log(`Pathao price calculation result: ${JSON.stringify(response.data)}`);
+            return response.data?.data || response.data;
+        } catch (error: any) {
+            this.logger.error('Failed to calculate Pathao price', error.response?.data || error.message);
             throw error;
         }
     }

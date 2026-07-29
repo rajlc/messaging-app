@@ -176,7 +176,6 @@ export class OrdersService {
             order_status: 'Confirmed Order',
             delivery_charge: orderData.shipping_fee || 0,
             courier_delivery_fee: orderData.courier_delivery_fee || 0,
-            return_delivery_charge: orderData.return_delivery_charge || 0,
             total_amount: orderData.total_amount,
             items: resolvedItems,
             remarks: '', // explicitly empty
@@ -302,7 +301,6 @@ export class OrdersService {
                 area_id: orderData.area_id,
                 weight: orderData.weight,
                 courier_delivery_fee: orderData.courier_delivery_fee,
-                return_delivery_charge: orderData.return_delivery_charge || 0,
                 // Local Logistics
                 logistic_name: orderData.logistic_name,
                 delivery_branch: orderData.delivery_branch,
@@ -662,7 +660,6 @@ export class OrdersService {
             area_id: orderData.area_id,
             weight: orderData.weight,
             courier_delivery_fee: orderData.courier_delivery_fee,
-            return_delivery_charge: orderData.return_delivery_charge !== undefined ? orderData.return_delivery_charge : undefined,
             logistic_name: orderData.logistic_name,
             delivery_branch: orderData.delivery_branch,
             // Pick & Drop

@@ -57,7 +57,7 @@ export default function OrderDetailsPage() {
 
     const fetchCourierInfo = async (orderData: any) => {
         try {
-            const provider = orderData.courier_provider || 'pathao';
+            const provider = orderData.courier_provider || '';
             const endpoint = provider === 'pathao' ? 'pathao-info' : (provider === 'ncm' ? 'ncm-info' : null);
 
             if (!endpoint) return;
