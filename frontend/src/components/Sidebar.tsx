@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
     MessageCircle, MessageSquare, User, ShoppingBag,
-    Settings, LogOut, BarChart3, Truck, Home, Store
+    Settings, LogOut, BarChart3, Truck, Home, Store, Boxes
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -31,6 +31,11 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
         if (view === 'settings') {
             params.delete('section');
             params.delete('sub');
+        }
+
+        // Reset inventory/sales view to main hub when clicking sidebar link
+        if (view === 'inventory' || view === 'sales') {
+            params.delete('subView');
         }
 
         router.push(`/?${params.toString()}`);
@@ -110,6 +115,19 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
                 {(user?.role === 'admin' || user?.role === 'editor') && (
                     <NavButton label="Settings" icon={<Settings size={18} />}       active={activeView === 'settings'} onClick={() => navigateTo('settings')} />
                 )}
+            </div>
+
+            {/* INV Merge Section Header */}
+            <div style={{ padding: '18px 18px 6px', fontSize: '10px', fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}
+                className="text-slate-400 dark:text-slate-600"
+            >
+                INV Merge
+            </div>
+
+            {/* INV Merge Nav Group (Modular Placeholder for future migrated features) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 10px' }}>
+                <NavButton label="Inventory" icon={<Boxes size={18} />} active={activeView === 'inventory'} onClick={() => navigateTo('inventory')} />
+                <NavButton label="Sales & Orders" icon={<ShoppingBag size={18} />} active={activeView === 'sales'} onClick={() => navigateTo('sales')} />
             </div>
 
             {/* Spacer */}

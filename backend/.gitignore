@@ -1,1 +1,20 @@
+# Dependencies
 node_modules
+
+# Environment files (NEVER commit these — they contain secrets)
+.env
+.env.local
+.env.production
+.env.*
+
+# Build output
+dist
+build
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store

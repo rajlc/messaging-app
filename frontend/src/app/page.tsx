@@ -23,6 +23,8 @@ import InventoryReportView from '@/components/InventoryReportView';
 import FinanceView from '@/components/FinanceView';
 import DeliveryView from '@/components/DeliveryView';
 import HomeView from '@/components/HomeView';
+import InventoryView from '@/components/inv-merge/InventoryView';
+import SalesView from '@/components/sales/SalesView';
 import { useAuth } from '@/context/AuthContext';
 
 type PostComment = {
@@ -321,7 +323,7 @@ function UnifiedInboxContent() {
   const customerName = activeConversation?.customerName || 'Unknown Customer';
 
   // Derived state from URL
-  const activeView = (searchParams.get('view') as 'home' | 'messages' | 'orders' | 'settings' | 'profile' | 'report' | 'daily-report' | 'inventory-report' | 'finance' | 'delivery') || 'home';
+  const activeView = (searchParams.get('view') as 'home' | 'messages' | 'orders' | 'settings' | 'profile' | 'report' | 'daily-report' | 'inventory-report' | 'finance' | 'delivery' | 'inventory' | 'sales') || 'home';
 
   // Sync conversationType with URL 'type' parameter
   useEffect(() => {
@@ -333,7 +335,7 @@ function UnifiedInboxContent() {
     }
   }, [searchParams]);
 
-  const setActiveView = (view: 'home' | 'messages' | 'orders' | 'settings' | 'profile' | 'report' | 'daily-report' | 'inventory-report' | 'finance' | 'delivery', type?: string) => {
+  const setActiveView = (view: 'home' | 'messages' | 'orders' | 'settings' | 'profile' | 'report' | 'daily-report' | 'inventory-report' | 'finance' | 'delivery' | 'inventory', type?: string) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set('view', view);
     if (type) {
@@ -1939,6 +1941,8 @@ function UnifiedInboxContent() {
       case 'orders': return <OrdersView />;
       case 'settings': return <SettingsView />;
       case 'delivery': return <DeliveryView />;
+      case 'inventory': return <InventoryView />;
+      case 'sales': return <SalesView />;
       default: return renderMessagesView();
     }
   };
