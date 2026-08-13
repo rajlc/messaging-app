@@ -25,6 +25,7 @@ import DeliveryView from '@/components/DeliveryView';
 import HomeView from '@/components/HomeView';
 import InventoryView from '@/components/inv-merge/InventoryView';
 import SalesView from '@/components/sales/SalesView';
+import CommentsView from '@/components/CommentsView';
 import { useAuth } from '@/context/AuthContext';
 
 type PostComment = {
@@ -2038,6 +2039,10 @@ function UnifiedInboxContent() {
   );
 
   const renderMainContent = () => {
+    if (activeView === 'messages' && conversationType === 'comments') {
+      return <CommentsView />;
+    }
+
     switch (activeView) {
       case 'home': return (
         <HomeView

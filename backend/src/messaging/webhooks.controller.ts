@@ -362,18 +362,30 @@ export class WebhooksController {
                             if (value.item === 'comment' && value.verb === 'add') {
                                 const commentId = value.comment_id;
                                 const postId = value.post_id;
+                                const parentId = value.parent_id;
                                 const senderId = value.from?.id;
                                 const senderName = value.from?.name;
                                 const commentText = value.message;
                                 const pageId = entry.id;
 
-                                console.log(`[FACEBOOK] New comment from ${senderName} (${senderId}) on post ${postId}: ${commentText}`);
+                                console.log(`[FACEBOOK] Comment event from ${senderName} (${senderId}) on post ${postId}: ${commentText}`);
 
-                                 // Save comment to database (async)
-                                 (async () => {
-                                     try {
-                                         // Fetch user profile from Facebook
-                                         const userProfile = await this.facebookService.getUserProfile(senderId, pageId);
+                                // Check if comment was posted by the Facebook Page itself
+                                if (senderId === pageId) {
+                                    console.log(`[FACEBOOK] Comment posted by Page itself. Marking parent customer comment as replied.`);
+                                    if (parentId) {
+                                        this.commentsService.markAsRepliedByCommentId(parentId).catch(err => {
+                                            console.error('Error marking parent comment as replied:', err);
+                                        });
+                                    }
+                                    return;
+                                }
+
+                                // Save customer comment to database (async)
+                                (async () => {
+                                    try {
+                                        // Fetch user profile from Facebook
+                                        const userProfile = await this.facebookService.getUserProfile(senderId, pageId);
 
                                         const comment = await this.commentsService.createComment({
                                             comment_id: commentId,
@@ -386,7 +398,7 @@ export class WebhooksController {
                                             customer_profile_pic: userProfile?.profile_pic
                                         });
 
-                                        console.log('✅ Comment saved to database');
+                                        console.log('✅ Customer comment saved to database');
 
                                         // Emit WebSocket event for real-time update
                                         this.messagingGateway.server.emit('new-comment', {

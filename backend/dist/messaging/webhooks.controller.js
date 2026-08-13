@@ -308,11 +308,21 @@ let WebhooksController = class WebhooksController {
                             if (value.item === 'comment' && value.verb === 'add') {
                                 const commentId = value.comment_id;
                                 const postId = value.post_id;
+                                const parentId = value.parent_id;
                                 const senderId = value.from?.id;
                                 const senderName = value.from?.name;
                                 const commentText = value.message;
                                 const pageId = entry.id;
-                                console.log(`[FACEBOOK] New comment from ${senderName} (${senderId}) on post ${postId}: ${commentText}`);
+                                console.log(`[FACEBOOK] Comment event from ${senderName} (${senderId}) on post ${postId}: ${commentText}`);
+                                if (senderId === pageId) {
+                                    console.log(`[FACEBOOK] Comment posted by Page itself. Marking parent customer comment as replied.`);
+                                    if (parentId) {
+                                        this.commentsService.markAsRepliedByCommentId(parentId).catch(err => {
+                                            console.error('Error marking parent comment as replied:', err);
+                                        });
+                                    }
+                                    return;
+                                }
                                 (async () => {
                                     try {
                                         const userProfile = await this.facebookService.getUserProfile(senderId, pageId);
@@ -326,7 +336,7 @@ let WebhooksController = class WebhooksController {
                                             page_id: pageId,
                                             customer_profile_pic: userProfile?.profile_pic
                                         });
-                                        console.log('✅ Comment saved to database');
+                                        console.log('✅ Customer comment saved to database');
                                         this.messagingGateway.server.emit('new-comment', {
                                             comment,
                                             customerId: senderId

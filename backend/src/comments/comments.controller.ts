@@ -3,6 +3,7 @@ import { CommentsService } from './comments.service';
 import { FacebookGraphService } from '../facebook/facebook-graph.service';
 import { ConfigService } from '@nestjs/config';
 import { AuthGuard } from '@nestjs/passport';
+import { supabaseService } from '../supabase/supabase.service';
 
 @UseGuards(AuthGuard('jwt'))
 @Controller('api/comments')
@@ -42,10 +43,16 @@ export class CommentsController {
             throw new HttpException('Comment not found', HttpStatus.NOT_FOUND);
         }
 
-        // Get access token from backend config
-        const accessToken = this.configService.get<string>('META_PAGE_ACCESS_TOKEN');
+        // Get access token for page from DB, falling back to env var
+        let accessToken = this.configService.get<string>('META_PAGE_ACCESS_TOKEN');
+        if (comment.page_id) {
+            const page = await supabaseService.getPageByFacebookId(comment.page_id);
+            if (page?.access_token && page.access_token !== 'none') {
+                accessToken = page.access_token;
+            }
+        }
         if (!accessToken) {
-            throw new HttpException('Page access token not configured', HttpStatus.INTERNAL_SERVER_ERROR);
+            throw new HttpException('Page access token not found for this page', HttpStatus.BAD_REQUEST);
         }
 
         // Reply to comment on Facebook
@@ -71,10 +78,15 @@ export class CommentsController {
             throw new HttpException('Comment not found', HttpStatus.NOT_FOUND);
         }
 
-        // Get access token from backend config
-        const accessToken = this.configService.get<string>('META_PAGE_ACCESS_TOKEN');
+        let accessToken = this.configService.get<string>('META_PAGE_ACCESS_TOKEN');
+        if (comment.page_id) {
+            const page = await supabaseService.getPageByFacebookId(comment.page_id);
+            if (page?.access_token && page.access_token !== 'none') {
+                accessToken = page.access_token;
+            }
+        }
         if (!accessToken) {
-            throw new HttpException('Page access token not configured', HttpStatus.INTERNAL_SERVER_ERROR);
+            throw new HttpException('Page access token not found for this page', HttpStatus.BAD_REQUEST);
         }
 
         // Get page ID from comment

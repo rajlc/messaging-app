@@ -32,6 +32,7 @@ export declare class CommentsService {
     getCommentsByCustomer(customerId: string): Promise<PostComment[]>;
     createComment(dto: CreateCommentDto): Promise<PostComment>;
     markAsReplied(id: string): Promise<void>;
+    markAsRepliedByCommentId(commentId: string): Promise<void>;
     markAsHidden(id: string): Promise<void>;
     deleteComment(id: string): Promise<void>;
 }

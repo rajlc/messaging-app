@@ -21,7 +21,7 @@ let CommentsService = CommentsService_1 = class CommentsService {
             this.logger.error(`Failed to fetch comments: ${error.message}`);
             throw error;
         }
-        return data || [];
+        return (data || []).filter(c => !c.page_id || c.customer_id !== c.page_id);
     }
     async getCommentById(id) {
         const { data, error } = await supabase_service_1.supabaseService.getSupabaseClient()
@@ -82,6 +82,18 @@ let CommentsService = CommentsService_1 = class CommentsService {
         if (error) {
             this.logger.error(`Failed to mark comment ${id} as replied: ${error.message}`);
             throw error;
+        }
+    }
+    async markAsRepliedByCommentId(commentId) {
+        const { error } = await supabase_service_1.supabaseService.getSupabaseClient()
+            .from('post_comments')
+            .update({
+            is_replied: true,
+            updated_at: new Date().toISOString()
+        })
+            .eq('comment_id', commentId);
+        if (error) {
+            this.logger.error(`Failed to mark comment_id ${commentId} as replied: ${error.message}`);
         }
     }
     async markAsHidden(id) {

@@ -45,7 +45,8 @@ export class CommentsService {
             throw error;
         }
 
-        return data || [];
+        // Filter out any comments posted by the Page itself
+        return (data || []).filter(c => !c.page_id || c.customer_id !== c.page_id);
     }
 
     async getCommentById(id: string): Promise<PostComment | null> {
@@ -117,6 +118,20 @@ export class CommentsService {
         if (error) {
             this.logger.error(`Failed to mark comment ${id} as replied: ${error.message}`);
             throw error;
+        }
+    }
+
+    async markAsRepliedByCommentId(commentId: string): Promise<void> {
+        const { error } = await supabaseService.getSupabaseClient()
+            .from('post_comments')
+            .update({
+                is_replied: true,
+                updated_at: new Date().toISOString()
+            })
+            .eq('comment_id', commentId);
+
+        if (error) {
+            this.logger.error(`Failed to mark comment_id ${commentId} as replied: ${error.message}`);
         }
     }
 

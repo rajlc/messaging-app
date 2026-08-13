@@ -18,6 +18,7 @@ const comments_service_1 = require("./comments.service");
 const facebook_graph_service_1 = require("../facebook/facebook-graph.service");
 const config_1 = require("@nestjs/config");
 const passport_1 = require("@nestjs/passport");
+const supabase_service_1 = require("../supabase/supabase.service");
 let CommentsController = class CommentsController {
     commentsService;
     facebookGraphService;
@@ -45,9 +46,15 @@ let CommentsController = class CommentsController {
         if (!comment) {
             throw new common_1.HttpException('Comment not found', common_1.HttpStatus.NOT_FOUND);
         }
-        const accessToken = this.configService.get('META_PAGE_ACCESS_TOKEN');
+        let accessToken = this.configService.get('META_PAGE_ACCESS_TOKEN');
+        if (comment.page_id) {
+            const page = await supabase_service_1.supabaseService.getPageByFacebookId(comment.page_id);
+            if (page?.access_token && page.access_token !== 'none') {
+                accessToken = page.access_token;
+            }
+        }
         if (!accessToken) {
-            throw new common_1.HttpException('Page access token not configured', common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+            throw new common_1.HttpException('Page access token not found for this page', common_1.HttpStatus.BAD_REQUEST);
         }
         await this.facebookGraphService.replyToComment(comment.comment_id, body.message, accessToken);
         await this.commentsService.markAsReplied(id);
@@ -58,9 +65,15 @@ let CommentsController = class CommentsController {
         if (!comment) {
             throw new common_1.HttpException('Comment not found', common_1.HttpStatus.NOT_FOUND);
         }
-        const accessToken = this.configService.get('META_PAGE_ACCESS_TOKEN');
+        let accessToken = this.configService.get('META_PAGE_ACCESS_TOKEN');
+        if (comment.page_id) {
+            const page = await supabase_service_1.supabaseService.getPageByFacebookId(comment.page_id);
+            if (page?.access_token && page.access_token !== 'none') {
+                accessToken = page.access_token;
+            }
+        }
         if (!accessToken) {
-            throw new common_1.HttpException('Page access token not configured', common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+            throw new common_1.HttpException('Page access token not found for this page', common_1.HttpStatus.BAD_REQUEST);
         }
         const pageId = comment.page_id;
         if (!pageId) {
