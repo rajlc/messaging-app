@@ -191,6 +191,18 @@ let SettingsService = class SettingsService {
             throw error;
         return data;
     }
+    async getPostConfigsByPageId(pageId) {
+        return supabase_service_1.supabaseService.getPostConfigsByPageId(pageId);
+    }
+    async createPostConfig(data) {
+        return supabase_service_1.supabaseService.createPostConfig(data);
+    }
+    async updatePostConfig(id, data) {
+        return supabase_service_1.supabaseService.updatePostConfig(id, data);
+    }
+    async deletePostConfig(id) {
+        return supabase_service_1.supabaseService.deletePostConfig(id);
+    }
 };
 exports.SettingsService = SettingsService;
 exports.SettingsService = SettingsService = __decorate([

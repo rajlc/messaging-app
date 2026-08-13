@@ -116,4 +116,42 @@ export class SettingsController {
             return { success: false, error: e.message };
         }
     }
+
+    // ─── Page Post Configs (Per-post AI instructions) ────────────────────────────
+
+    @Get('post-configs/:pageId')
+    async getPostConfigs(@Param('pageId') pageId: string) {
+        return this.settingsService.getPostConfigsByPageId(pageId);
+    }
+
+    @Post('post-configs')
+    async createPostConfig(@Body() body: { pageId: string; postId: string; label?: string; aiInstructions: string }) {
+        try {
+            const result = await this.settingsService.createPostConfig(body);
+            return { success: true, data: result };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    @Post('post-configs/:id/update')
+    async updatePostConfig(@Param('id') id: string, @Body() body: { label?: string; postId?: string; aiInstructions?: string; isActive?: boolean }) {
+        try {
+            const result = await this.settingsService.updatePostConfig(id, body);
+            return { success: true, data: result };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    @Delete('post-configs/:id')
+    async deletePostConfig(@Param('id') id: string) {
+        try {
+            await this.settingsService.deletePostConfig(id);
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
 }
+

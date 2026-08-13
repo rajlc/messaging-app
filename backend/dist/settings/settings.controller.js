@@ -104,6 +104,36 @@ let SettingsController = class SettingsController {
             return { success: false, error: e.message };
         }
     }
+    async getPostConfigs(pageId) {
+        return this.settingsService.getPostConfigsByPageId(pageId);
+    }
+    async createPostConfig(body) {
+        try {
+            const result = await this.settingsService.createPostConfig(body);
+            return { success: true, data: result };
+        }
+        catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+    async updatePostConfig(id, body) {
+        try {
+            const result = await this.settingsService.updatePostConfig(id, body);
+            return { success: true, data: result };
+        }
+        catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+    async deletePostConfig(id) {
+        try {
+            await this.settingsService.deletePostConfig(id);
+            return { success: true };
+        }
+        catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
 };
 exports.SettingsController = SettingsController;
 __decorate([
@@ -185,6 +215,35 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], SettingsController.prototype, "uploadMarketplaceProducts", null);
+__decorate([
+    (0, common_1.Get)('post-configs/:pageId'),
+    __param(0, (0, common_1.Param)('pageId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], SettingsController.prototype, "getPostConfigs", null);
+__decorate([
+    (0, common_1.Post)('post-configs'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], SettingsController.prototype, "createPostConfig", null);
+__decorate([
+    (0, common_1.Post)('post-configs/:id/update'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], SettingsController.prototype, "updatePostConfig", null);
+__decorate([
+    (0, common_1.Delete)('post-configs/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], SettingsController.prototype, "deletePostConfig", null);
 exports.SettingsController = SettingsController = __decorate([
     (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
     (0, common_1.Controller)('api/settings'),

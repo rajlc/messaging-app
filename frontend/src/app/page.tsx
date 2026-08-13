@@ -85,6 +85,8 @@ type Conversation = {
   customerProfilePic?: string;
   productName?: string;
   productPrice?: string;
+  referralSource?: string;    // 'POST', 'ADS', 'PAGE', 'SHORTLINK', etc.
+  referralPostId?: string;    // Facebook Post ID or Ad ID
 };
 
 // Define PageInfo type based on its usage
@@ -489,7 +491,9 @@ function UnifiedInboxContent() {
             hasPhoneNumber: !!conv.has_phone_number,
             customerProfilePic: conv.customer_profile_pic,
             productName: conv.product_name,
-            productPrice: conv.product_price
+            productPrice: conv.product_price,
+            referralSource: conv.referral_source,
+            referralPostId: conv.referral_post_id,
           };
         });
 
@@ -616,7 +620,9 @@ function UnifiedInboxContent() {
             unreadCount: shouldIncrementUnread ? c.unreadCount + 1 : 0,
             hasPhoneNumber: c.hasPhoneNumber || (senderRole === 'customer' && hasPhoneNumber(message.text)),
             productName: c.productName || message.productName,
-            productPrice: c.productPrice || message.productPrice
+            productPrice: c.productPrice || message.productPrice,
+            referralSource: c.referralSource || message.referralSource,
+            referralPostId: c.referralPostId || message.referralPostId,
           };
           return newConvs.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
         } else {
@@ -634,7 +640,9 @@ function UnifiedInboxContent() {
               customerProfilePic: message.customerProfilePic,
               hasPhoneNumber: (senderRole === 'customer' && hasPhoneNumber(message.text)) || hasPhoneNumber(conversationId),
               productName: message.productName,
-              productPrice: message.productPrice
+              productPrice: message.productPrice,
+              referralSource: message.referralSource,
+              referralPostId: message.referralPostId,
             },
             ...prev
           ];
@@ -1502,8 +1510,33 @@ function UnifiedInboxContent() {
           <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-4">
             {displayMessages.map((msg, index) => {
               const hasPhone = msg.sender === 'customer' && hasPhoneNumber(msg.text);
+              // Show the referral banner ONCE above the very first customer message,
+              // but only if the conversation was started via a post or ad click.
+              const isFirstCustomerMessage = msg.sender === 'customer' &&
+                index === displayMessages.findIndex(m => m.sender === 'customer');
+              const showReferralBanner = isFirstCustomerMessage &&
+                (activeConversation?.referralSource === 'POST' || activeConversation?.referralSource === 'ADS');
               return (
-                <div key={msg.id || index} className={`flex group ${msg.sender === 'agent' ? 'justify-end' : 'justify-start'} gap-2`}>
+                <>
+                  {showReferralBanner && (
+                    <div key={`ref-banner-${msg.id}`} className="flex items-center gap-3 py-1">
+                      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-blue-300 dark:via-blue-700 to-transparent" />
+                      <span className={`flex items-center gap-1.5 text-[11px] font-bold px-3 py-1 rounded-full border shadow-sm whitespace-nowrap ${
+                        activeConversation?.referralSource === 'ADS'
+                          ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800/50'
+                          : 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800/50'
+                      }`}>
+                        {activeConversation?.referralSource === 'ADS' ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        )}
+                        {activeConversation?.referralSource === 'ADS' ? 'First message via Facebook Ad' : 'First message via Facebook Post'}
+                      </span>
+                      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-blue-300 dark:via-blue-700 to-transparent" />
+                    </div>
+                  )}
+                  <div key={msg.id || index} className={`flex group ${msg.sender === 'agent' ? 'justify-end' : 'justify-start'} gap-2`}>
                 {msg.sender !== 'agent' && (
                   <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 self-start mt-1 shadow-sm">
                     {activeConversation?.customerProfilePic ? (
@@ -1585,8 +1618,11 @@ function UnifiedInboxContent() {
                   </button>
                 )}
               </div>
+              </>
             );
           })}
+
+
             <div ref={messagesEndRef} />
             {displayMessages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 opacity-60">
@@ -1658,6 +1694,59 @@ function UnifiedInboxContent() {
                   <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5">Customer Details</span>
                 </div>
               </div>
+
+              {/* Referral Source Card — only shown when customer messaged via a Post or Ad click */}
+              {activeConversation && (activeConversation.referralSource === 'POST' || activeConversation.referralSource === 'ADS') && (
+                <div className="rounded-2xl overflow-hidden border border-blue-200 dark:border-blue-800/50">
+                  {/* Coloured header stripe */}
+                  <div className={`px-4 py-2.5 flex items-center gap-2 ${
+                    activeConversation.referralSource === 'ADS'
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-500'
+                      : 'bg-gradient-to-r from-blue-600 to-indigo-600'
+                  }`}>
+                    <span className="text-white text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                      {activeConversation.referralSource === 'ADS' ? (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                          Via Facebook Ad
+                        </>
+                      ) : (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                          Via Facebook Post
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  {/* Body */}
+                  <div className="bg-blue-50 dark:bg-blue-950/20 px-4 py-3">
+                    <p className="text-[11px] text-blue-700 dark:text-blue-300 font-medium leading-relaxed">
+                      {activeConversation.referralSource === 'ADS'
+                        ? 'Customer clicked \u201cSend Message\u201d on one of your boosted ads.'
+                        : 'Customer clicked \u201cSend Message\u201d on one of your Facebook posts.'}
+                    </p>
+                    {activeConversation.referralPostId && (
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold text-blue-500 dark:text-blue-400 uppercase tracking-wider flex-shrink-0">
+                          {activeConversation.referralSource === 'ADS' ? 'Ad ID' : 'Post ID'}
+                        </span>
+                        <code className="text-[10px] font-mono bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800/50 truncate max-w-[160px]">
+                          {activeConversation.referralPostId}
+                        </code>
+                        <a
+                          href={`https://www.facebook.com/${activeConversation.referralPostId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 underline underline-offset-2 transition-colors font-semibold flex-shrink-0"
+                          title="Open post in Facebook"
+                        >
+                          View Post ↗
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {conversationType === 'marketplace' && activeConversation && (activeConversation.productName || activeConversation.productPrice) && (
                 <div className="bg-indigo-50/50 dark:bg-slate-800/40 border border-indigo-100/50 dark:border-slate-700/50 rounded-2xl p-4 mb-4">

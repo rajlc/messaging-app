@@ -12,6 +12,8 @@ export declare class SupabaseService {
         customerProfilePic?: string;
         productName?: string;
         productPrice?: string;
+        referralSource?: string;
+        referralPostId?: string;
     }): Promise<any>;
     saveMessage(data: {
         conversationId: string;
@@ -50,5 +52,37 @@ export declare class SupabaseService {
     extractCustomerNameFromMessage(text: string): string | null;
     autoFixCustomerNames(): Promise<void>;
     autoFixPhoneNumbers(): Promise<void>;
+    getOrdersByCustomerId(customerId: string): Promise<{
+        id: any;
+        order_number: any;
+        order_status: any;
+        total_amount: any;
+        delivery_charge: any;
+        created_at: any;
+        customer_name: any;
+        phone_number: any;
+        address: any;
+        items: {
+            product_name: any;
+            qty: any;
+            amount: any;
+            total_amount: any;
+        }[];
+    }[]>;
+    getPostConfigByPostId(postId: string): Promise<any>;
+    getPostConfigsByPageId(pageId: string): Promise<any[]>;
+    createPostConfig(data: {
+        pageId: string;
+        postId: string;
+        label?: string;
+        aiInstructions: string;
+    }): Promise<any>;
+    updatePostConfig(id: string, data: {
+        label?: string;
+        postId?: string;
+        aiInstructions?: string;
+        isActive?: boolean;
+    }): Promise<any>;
+    deletePostConfig(id: string): Promise<boolean>;
 }
 export declare const supabaseService: SupabaseService;

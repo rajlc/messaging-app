@@ -63,4 +63,40 @@ export declare class SettingsController {
         error: any;
         count?: undefined;
     }>;
+    getPostConfigs(pageId: string): Promise<any[]>;
+    createPostConfig(body: {
+        pageId: string;
+        postId: string;
+        label?: string;
+        aiInstructions: string;
+    }): Promise<{
+        success: boolean;
+        data: any;
+        error?: undefined;
+    } | {
+        success: boolean;
+        error: any;
+        data?: undefined;
+    }>;
+    updatePostConfig(id: string, body: {
+        label?: string;
+        postId?: string;
+        aiInstructions?: string;
+        isActive?: boolean;
+    }): Promise<{
+        success: boolean;
+        data: any;
+        error?: undefined;
+    } | {
+        success: boolean;
+        error: any;
+        data?: undefined;
+    }>;
+    deletePostConfig(id: string): Promise<{
+        success: boolean;
+        error?: undefined;
+    } | {
+        success: boolean;
+        error: any;
+    }>;
 }

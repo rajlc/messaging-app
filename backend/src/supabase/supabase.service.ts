@@ -41,6 +41,8 @@ export class SupabaseService {
         customerProfilePic?: string;
         productName?: string;
         productPrice?: string;
+        referralSource?: string;  // e.g. 'POST', 'ADS', 'PAGE', 'SHORTLINK'
+        referralPostId?: string;  // Facebook Post ID or Ad ID
     }) {
         // Check if conversation exists by customer_id (since customer_id is a unique key)
         const { data: existing, error: fetchError } = await this.getClient()
@@ -82,6 +84,14 @@ export class SupabaseService {
                 updates.has_phone_number = true;
             }
 
+            // Referral: only record the FIRST time (first-message-wins — don't overwrite with direct messages later)
+            if (data.referralSource && !existing.referral_source) {
+                updates.referral_source = data.referralSource;
+            }
+            if (data.referralPostId && !existing.referral_post_id) {
+                updates.referral_post_id = data.referralPostId;
+            }
+
             if (Object.keys(updates).length > 0) {
                 const { error: updateError } = await this.getClient()
                     .from('conversations')
@@ -118,6 +128,8 @@ export class SupabaseService {
 
         if (data.productName) insertData.product_name = data.productName;
         if (data.productPrice) insertData.product_price = data.productPrice;
+        if (data.referralSource) insertData.referral_source = data.referralSource;
+        if (data.referralPostId) insertData.referral_post_id = data.referralPostId;
 
         const { data: newConversation, error: createError } = await this.getClient()
             .from('conversations')
@@ -720,6 +732,118 @@ export class SupabaseService {
             console.error('[Supabase] Error running autoFixPhoneNumbers:', err.message);
         }
     }
+
+    // ─── AI Context: Order Lookup ─────────────────────────────────────────────────
+
+    /**
+     * Get the most recent order and its items for a customer (for AI order context)
+     */
+    async getOrdersByCustomerId(customerId: string) {
+        const { data, error } = await this.getClient()
+            .from('orders')
+            .select('id, order_number, order_status, total_amount, delivery_charge, created_at, customer_name, phone_number, address, items:order_items(product_name, qty, amount, total_amount)')
+            .eq('customer_id', customerId)
+            .order('created_at', { ascending: false })
+            .limit(3);
+
+        if (error) {
+            console.error('[Supabase] Error fetching orders for AI context:', error.message);
+            return [];
+        }
+        return data || [];
+    }
+
+    // ─── AI Context: Post/Ad Config Lookup ───────────────────────────────────────
+
+    /**
+     * Get AI instructions for a specific post/ad ID
+     */
+    async getPostConfigByPostId(postId: string) {
+        if (!postId) return null;
+        const { data, error } = await this.getClient()
+            .from('page_post_configs')
+            .select('*')
+            .eq('post_id', postId)
+            .eq('is_active', true)
+            .single();
+
+        if (error && error.code !== 'PGRST116') {
+            console.error('[Supabase] Error fetching post config:', error.message);
+        }
+        return data || null;
+    }
+
+    /**
+     * Get all post/ad configs for a page (for settings UI)
+     */
+    async getPostConfigsByPageId(pageId: string) {
+        const { data, error } = await this.getClient()
+            .from('page_post_configs')
+            .select('*')
+            .eq('page_id', pageId)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('[Supabase] Error fetching post configs:', error.message);
+            return [];
+        }
+        return data || [];
+    }
+
+    /**
+     * Create a new post/ad config
+     */
+    async createPostConfig(data: { pageId: string; postId: string; label?: string; aiInstructions: string }) {
+        const { data: created, error } = await this.getClient()
+            .from('page_post_configs')
+            .insert({
+                page_id: data.pageId,
+                post_id: data.postId,
+                label: data.label,
+                ai_instructions: data.aiInstructions,
+                is_active: true
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+        return created;
+    }
+
+    /**
+     * Update an existing post/ad config
+     */
+    async updatePostConfig(id: string, data: { label?: string; postId?: string; aiInstructions?: string; isActive?: boolean }) {
+        const updates: any = { updated_at: new Date().toISOString() };
+        if (data.label !== undefined) updates.label = data.label;
+        if (data.postId !== undefined) updates.post_id = data.postId;
+        if (data.aiInstructions !== undefined) updates.ai_instructions = data.aiInstructions;
+        if (data.isActive !== undefined) updates.is_active = data.isActive;
+
+        const { data: updated, error } = await this.getClient()
+            .from('page_post_configs')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return updated;
+    }
+
+    /**
+     * Delete a post/ad config
+     */
+    async deletePostConfig(id: string) {
+        const { error } = await this.getClient()
+            .from('page_post_configs')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+        return true;
+    }
 }
 
 export const supabaseService = new SupabaseService();
+

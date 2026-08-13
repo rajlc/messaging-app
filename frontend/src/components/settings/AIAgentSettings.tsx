@@ -30,11 +30,23 @@ export default function AIAgentSettings() {
 
     // Edit Modal State
     const [editingPage, setEditingPage] = useState<Page | null>(null);
+    const [editTab, setEditTab] = useState<'page' | 'posts'>('page');
     const [editPrompt, setEditPrompt] = useState('');
     const [editAiEnabled, setEditAiEnabled] = useState(false);
     const [editCutoffMessages, setEditCutoffMessages] = useState<string[]>([]);
     const [cutoffInput, setCutoffInput] = useState('');
     const [isSavingPage, setIsSavingPage] = useState(false);
+
+    // Post/Ad Instructions State (Inside Edit Modal)
+    type PostConfig = { id: string; page_id: string; post_id: string; label?: string; ai_instructions: string; is_active: boolean };
+    const [postConfigs, setPostConfigs] = useState<PostConfig[]>([]);
+    const [isLoadingPostConfigs, setIsLoadingPostConfigs] = useState(false);
+    const [showPostForm, setShowPostForm] = useState(false);
+    const [editingPostConfigId, setEditingPostConfigId] = useState<string | null>(null);
+    const [postFormPostId, setPostFormPostId] = useState('');
+    const [postFormLabel, setPostFormLabel] = useState('');
+    const [postFormInstructions, setPostFormInstructions] = useState('');
+    const [isSavingPostConfig, setIsSavingPostConfig] = useState(false);
 
     // Catalog State
     const [catalogProducts, setCatalogProducts] = useState<{ id: string; product_name: string; price: number }[]>([]);
@@ -223,15 +235,127 @@ export default function AIAgentSettings() {
         }
     };
 
+    const fetchPostConfigs = async (pageId: string) => {
+        setIsLoadingPostConfigs(true);
+        try {
+            const res = await fetch(`${API_URL}/api/settings/post-configs/${pageId}`, {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            const data = await res.json();
+            setPostConfigs(Array.isArray(data) ? data : []);
+        } catch (err) {
+            console.error('Failed to fetch post configs:', err);
+            setPostConfigs([]);
+        } finally {
+            setIsLoadingPostConfigs(false);
+        }
+    };
+
     const openEditModal = (page: Page) => {
         setEditingPage(page);
+        setEditTab('page');
         setEditPrompt(page.custom_prompt || '');
         setEditAiEnabled(page.is_ai_enabled || false);
         setEditCutoffMessages(page.cutoff_messages ? page.cutoff_messages.split(',').filter(m => m.trim()).map(m => m.trim()) : []);
+        setShowPostForm(false);
+        setEditingPostConfigId(null);
+        fetchPostConfigs(page.page_id);
     };
 
     const closeEditModal = () => {
         setEditingPage(null);
+        setShowPostForm(false);
+        setEditingPostConfigId(null);
+    };
+
+    const handleOpenAddPostForm = () => {
+        setEditingPostConfigId(null);
+        setPostFormPostId('');
+        setPostFormLabel('');
+        setPostFormInstructions('');
+        setShowPostForm(true);
+    };
+
+    const handleOpenEditPostForm = (config: PostConfig) => {
+        setEditingPostConfigId(config.id);
+        setPostFormPostId(config.post_id);
+        setPostFormLabel(config.label || '');
+        setPostFormInstructions(config.ai_instructions || '');
+        setShowPostForm(true);
+    };
+
+    const handleSavePostConfig = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingPage || !postFormPostId.trim() || !postFormInstructions.trim()) return;
+
+        setIsSavingPostConfig(true);
+        try {
+            if (editingPostConfigId) {
+                // Update existing
+                const res = await fetch(`${API_URL}/api/settings/post-configs/${editingPostConfigId}/update`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({
+                        postId: postFormPostId.trim(),
+                        label: postFormLabel.trim(),
+                        aiInstructions: postFormInstructions.trim()
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    fetchPostConfigs(editingPage.page_id);
+                    setShowPostForm(false);
+                } else {
+                    alert(data.error || 'Failed to update post config');
+                }
+            } else {
+                // Create new
+                const res = await fetch(`${API_URL}/api/settings/post-configs`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({
+                        pageId: editingPage.page_id,
+                        postId: postFormPostId.trim(),
+                        label: postFormLabel.trim(),
+                        aiInstructions: postFormInstructions.trim()
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    fetchPostConfigs(editingPage.page_id);
+                    setShowPostForm(false);
+                } else {
+                    alert(data.error || 'Failed to create post config');
+                }
+            }
+        } catch (err) {
+            console.error('Error saving post config:', err);
+            alert('Error saving post instructions');
+        } finally {
+            setIsSavingPostConfig(false);
+        }
+    };
+
+    const handleDeletePostConfig = async (id: string) => {
+        if (!confirm('Are you sure you want to delete instructions for this post?')) return;
+        try {
+            const res = await fetch(`${API_URL}/api/settings/post-configs/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            const data = await res.json();
+            if (data.success && editingPage) {
+                fetchPostConfigs(editingPage.page_id);
+            }
+        } catch (err) {
+            console.error('Failed to delete post config:', err);
+        }
     };
 
     const handleSavePageConfig = async (e: React.FormEvent) => {
@@ -600,123 +724,290 @@ export default function AIAgentSettings() {
             {/* Edit Modal */}
             {editingPage && (
                 <div className="fixed inset-0 bg-slate-900/40 dark:bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-all">
-                    <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] max-w-2xl w-full border border-gray-100 dark:border-slate-700 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
-                        <div className="p-8 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center">
-                            <div>
-                                <h3 className="text-xl font-black text-slate-900 dark:text-white">Configure AI Personality</h3>
-                                <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest">{editingPage.page_name}</p>
+                    <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] max-w-2xl w-full border border-gray-100 dark:border-slate-700 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 max-h-[90vh] flex flex-col">
+                        
+                        {/* Modal Header & Tabs */}
+                        <div className="p-8 border-b border-gray-100 dark:border-slate-700 flex flex-col gap-4 flex-shrink-0">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-900 dark:text-white">Configure AI Settings</h3>
+                                    <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest">{editingPage.page_name}</p>
+                                </div>
+                                <button onClick={closeEditModal} className="p-2 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors bg-slate-100 dark:bg-slate-900 rounded-xl">
+                                    <X size={20} />
+                                </button>
                             </div>
-                            <button onClick={closeEditModal} className="p-2 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors bg-slate-100 dark:bg-slate-900 rounded-xl">
-                                <X size={20} />
-                            </button>
+
+                            {/* Tab Switcher */}
+                            <div className="flex bg-slate-100 dark:bg-slate-900 p-1.5 rounded-2xl gap-1">
+                                <button
+                                    onClick={() => setEditTab('page')}
+                                    className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                                        editTab === 'page'
+                                            ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                            : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                                    }`}
+                                >
+                                    <Zap size={14} /> Page Instructions
+                                </button>
+                                <button
+                                    onClick={() => setEditTab('posts')}
+                                    className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                                        editTab === 'posts'
+                                            ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                            : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                                    }`}
+                                >
+                                    <FileText size={14} /> Post & Ad Instructions ({postConfigs.length})
+                                </button>
+                            </div>
                         </div>
 
-                        <form onSubmit={handleSavePageConfig} className="p-8 space-y-8">
-                            {/* Toggle */}
-                            <div className="flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-900 rounded-[1.5rem] border border-slate-100 dark:border-slate-700">
-                                <div>
-                                    <h4 className="font-bold text-slate-900 dark:text-white">Enable AI Responses</h4>
-                                    <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Allow AI to autonomously reply on this page</p>
-                                </div>
-                                <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        className="sr-only peer"
-                                        checked={editAiEnabled}
-                                        onChange={(e) => setEditAiEnabled(e.target.checked)}
-                                    />
-                                    <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                                </label>
-                            </div>
-
-                            {/* Prompt Editor */}
-                            <div className="space-y-3">
-                                <label className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
-                                    <Zap size={14} className="text-yellow-500" />
-                                    Custom System Instructions
-                                </label>
-                                <textarea
-                                    value={editPrompt}
-                                    onChange={(e) => setEditPrompt(e.target.value)}
-                                    rows={8}
-                                    placeholder="Define your bot's personality here..."
-                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none leading-relaxed text-sm font-medium transition-all"
-                                />
-                                <p className="text-[10px] text-slate-500 font-medium">
-                                    Describe your store's tone, rules, and personality. This effectively becomes the bot's core operating manual.
-                                </p>
-                            </div>
-
-                            {/* Cut-off Messages */}
-                            <div className="space-y-3">
-                                <label className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
-                                    <X size={14} className="text-red-500" />
-                                    AI Cut-off Messages
-                                </label>
-
-                                <div className="flex flex-wrap gap-2 mb-2">
-                                    {editCutoffMessages.map((msg, index) => (
-                                        <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full border border-indigo-100 dark:border-indigo-500/20 text-xs font-bold animate-in fade-in zoom-in duration-200">
-                                            {msg}
-                                            <button
-                                                type="button"
-                                                onClick={() => setEditCutoffMessages(editCutoffMessages.filter((_, i) => i !== index))}
-                                                className="hover:text-red-500 transition-colors"
-                                            >
-                                                <X size={14} />
-                                            </button>
+                        {/* Modal Body */}
+                        <div className="p-8 overflow-y-auto flex-1 custom-scrollbar">
+                            {editTab === 'page' ? (
+                                <form onSubmit={handleSavePageConfig} className="space-y-8">
+                                    {/* Toggle */}
+                                    <div className="flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-900 rounded-[1.5rem] border border-slate-100 dark:border-slate-700">
+                                        <div>
+                                            <h4 className="font-bold text-slate-900 dark:text-white">Enable AI Responses</h4>
+                                            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Allow AI to autonomously reply on this page</p>
                                         </div>
-                                    ))}
-                                </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                className="sr-only peer"
+                                                checked={editAiEnabled}
+                                                onChange={(e) => setEditAiEnabled(e.target.checked)}
+                                            />
+                                            <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                        </label>
+                                    </div>
 
-                                <div className="relative">
-                                    <input
-                                        type="text"
-                                        value={cutoffInput}
-                                        onChange={(e) => setCutoffInput(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                if (cutoffInput.trim()) {
-                                                    if (!editCutoffMessages.includes(cutoffInput.trim())) {
-                                                        setEditCutoffMessages([...editCutoffMessages, cutoffInput.trim()]);
+                                    {/* Prompt Editor */}
+                                    <div className="space-y-3">
+                                        <label className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
+                                            <Zap size={14} className="text-yellow-500" />
+                                            Custom Page System Instructions
+                                        </label>
+                                        <textarea
+                                            value={editPrompt}
+                                            onChange={(e) => setEditPrompt(e.target.value)}
+                                            rows={8}
+                                            placeholder="Define your bot's personality here..."
+                                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none leading-relaxed text-sm font-medium transition-all"
+                                        />
+                                        <p className="text-[10px] text-slate-500 font-medium">
+                                            Describe your store's tone, rules, and personality. This acts as the default prompt for all general messages.
+                                        </p>
+                                    </div>
+
+                                    {/* Cut-off Messages */}
+                                    <div className="space-y-3">
+                                        <label className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
+                                            <X size={14} className="text-red-500" />
+                                            AI Cut-off Messages
+                                        </label>
+
+                                        <div className="flex flex-wrap gap-2 mb-2">
+                                            {editCutoffMessages.map((msg, index) => (
+                                                <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full border border-indigo-100 dark:border-indigo-500/20 text-xs font-bold animate-in fade-in zoom-in duration-200">
+                                                    {msg}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditCutoffMessages(editCutoffMessages.filter((_, i) => i !== index))}
+                                                        className="hover:text-red-500 transition-colors"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                value={cutoffInput}
+                                                onChange={(e) => setCutoffInput(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        if (cutoffInput.trim()) {
+                                                            if (!editCutoffMessages.includes(cutoffInput.trim())) {
+                                                                setEditCutoffMessages([...editCutoffMessages, cutoffInput.trim()]);
+                                                            }
+                                                            setCutoffInput('');
+                                                        }
                                                     }
-                                                    setCutoffInput('');
-                                                }
-                                            }
-                                        }}
-                                        placeholder="Type message and press Enter..."
-                                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm font-medium transition-all"
-                                    />
-                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black bg-slate-200 dark:bg-slate-800 text-slate-500 px-2 py-1 rounded-lg uppercase tracking-tighter">Enter</div>
+                                                }}
+                                                placeholder="Type message and press Enter..."
+                                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm font-medium transition-all"
+                                            />
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black bg-slate-200 dark:bg-slate-800 text-slate-500 px-2 py-1 rounded-lg uppercase tracking-tighter">Enter</div>
+                                        </div>
+
+                                        <p className="text-[10px] text-slate-500 font-medium">
+                                            Type a message and press **Enter** to add it. If a customer sends any of these messages exactly, the AI will not reply.
+                                        </p>
+                                    </div>
+
+                                    <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 dark:border-slate-700">
+                                        <button
+                                            type="button"
+                                            onClick={closeEditModal}
+                                            className="px-6 py-2.5 text-slate-500 hover:text-slate-900 dark:hover:text-white font-bold text-sm transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={isSavingPage}
+                                            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
+                                        >
+                                            {isSavingPage ? <RefreshCw className="animate-spin" size={18} /> : <Check size={18} />}
+                                            Save Page Instructions
+                                        </button>
+                                    </div>
+                                </form>
+                            ) : (
+                                <div className="space-y-6">
+                                    {/* Post/Ad Instructions Tab Content */}
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <h4 className="font-bold text-slate-900 dark:text-white text-base">Per-Post & Ad Instructions</h4>
+                                            <p className="text-xs text-slate-500 font-medium">When customers click "Send Message" on a post, the AI uses these specific instructions as highest priority.</p>
+                                        </div>
+                                        {!showPostForm && (
+                                            <button
+                                                onClick={handleOpenAddPostForm}
+                                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-indigo-500/20"
+                                            >
+                                                + Add Post Instruction
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Add / Edit Form */}
+                                    {showPostForm ? (
+                                        <form onSubmit={handleSavePostConfig} className="bg-slate-50 dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
+                                            <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3">
+                                                <h5 className="font-bold text-sm text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                                                    {editingPostConfigId ? 'Edit Post Instruction' : 'Add New Post Instruction'}
+                                                </h5>
+                                                <button type="button" onClick={() => setShowPostForm(false)} className="text-slate-400 hover:text-slate-600">
+                                                    <X size={16} />
+                                                </button>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Post Label (Friendly Title)</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="e.g. Summer Jacket Sale Post"
+                                                    value={postFormLabel}
+                                                    onChange={(e) => setPostFormLabel(e.target.value)}
+                                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm outline-none font-medium"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">Facebook Post ID or Ad ID *</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="e.g. 104508142519049_123456789"
+                                                    value={postFormPostId}
+                                                    onChange={(e) => setPostFormPostId(e.target.value)}
+                                                    required
+                                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm outline-none font-mono"
+                                                />
+                                                <p className="text-[10px] text-slate-400 mt-1">Copy the Post ID from Facebook post URL or ad details.</p>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">AI Prompt / Instructions for this Post *</label>
+                                                <textarea
+                                                    rows={6}
+                                                    placeholder="Write specific product details, price, features, or instructions for customers coming from this post..."
+                                                    value={postFormInstructions}
+                                                    onChange={(e) => setPostFormInstructions(e.target.value)}
+                                                    required
+                                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-sm outline-none leading-relaxed font-medium"
+                                                />
+                                            </div>
+
+                                            <div className="flex justify-end gap-2 pt-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowPostForm(false)}
+                                                    className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    type="submit"
+                                                    disabled={isSavingPostConfig}
+                                                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
+                                                >
+                                                    {isSavingPostConfig ? <RefreshCw className="animate-spin" size={14} /> : <Check size={14} />}
+                                                    {editingPostConfigId ? 'Update Instruction' : 'Save Instruction'}
+                                                </button>
+                                            </div>
+                                        </form>
+                                    ) : null}
+
+                                    {/* List of existing post instructions */}
+                                    {isLoadingPostConfigs ? (
+                                        <div className="flex items-center justify-center p-8 text-slate-400 text-xs gap-2">
+                                            <RefreshCw className="animate-spin text-indigo-500" size={18} /> Loading post instructions...
+                                        </div>
+                                    ) : postConfigs.length === 0 ? (
+                                        <div className="text-center p-8 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 text-slate-400 text-xs">
+                                            No post-specific instructions created yet. Click <strong>"+ Add Post Instruction"</strong> to set custom prompts for specific Facebook posts or ads.
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {postConfigs.map(config => (
+                                                <div key={config.id} className="bg-slate-50 dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 flex justify-between items-start gap-4 hover:border-indigo-300 transition-all">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <h5 className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                                                                {config.label || 'Post Instruction'}
+                                                            </h5>
+                                                            <span className="text-[10px] font-mono bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800/40">
+                                                                ID: {config.post_id}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-xs text-slate-600 dark:text-slate-300 italic line-clamp-2 leading-relaxed mt-2">
+                                                            "{config.ai_instructions}"
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                        <button
+                                                            onClick={() => handleOpenEditPostForm(config)}
+                                                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-lg transition-colors"
+                                                            title="Edit"
+                                                        >
+                                                            <Edit2 size={14} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeletePostConfig(config.id)}
+                                                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
+                                                            title="Delete"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
-
-                                <p className="text-[10px] text-slate-500 font-medium">
-                                    Type a message and press **Enter** to add it. If a customer sends any of these messages exactly, the AI will not reply.
-                                </p>
-                            </div>
-
-                            <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 dark:border-slate-700">
-                                <button
-                                    type="button"
-                                    onClick={closeEditModal}
-                                    className="px-6 py-2.5 text-slate-500 hover:text-slate-900 dark:hover:text-white font-bold text-sm transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isSavingPage}
-                                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
-                                >
-                                    {isSavingPage ? <RefreshCw className="animate-spin" size={18} /> : <Check size={18} />}
-                                    Save Instructions
-                                </button>
-                            </div>
-                        </form>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
         </div>
     );
 }
+

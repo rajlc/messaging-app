@@ -183,4 +183,23 @@ export class SettingsService {
         if (error) throw error;
         return data;
     }
+
+    // ─── Page Post Configs (Per-post AI instructions) ────────────────────────────
+
+    async getPostConfigsByPageId(pageId: string) {
+        return supabaseService.getPostConfigsByPageId(pageId);
+    }
+
+    async createPostConfig(data: { pageId: string; postId: string; label?: string; aiInstructions: string }) {
+        return supabaseService.createPostConfig(data);
+    }
+
+    async updatePostConfig(id: string, data: { label?: string; postId?: string; aiInstructions?: string; isActive?: boolean }) {
+        return supabaseService.updatePostConfig(id, data);
+    }
+
+    async deletePostConfig(id: string) {
+        return supabaseService.deletePostConfig(id);
+    }
 }
+

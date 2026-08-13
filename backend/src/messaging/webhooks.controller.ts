@@ -7,6 +7,7 @@ import { CommentsService } from '../comments/comments.service';
 import { FacebookService } from './facebook.service';
 import { SettingsService } from '../settings/settings.service';
 import { AutoReplyService } from '../auto-reply/auto-reply.service';
+import { aiContextService } from './ai-context.service';
 import { JwtService } from '@nestjs/jwt';
 import axios from 'axios';
 
@@ -83,8 +84,19 @@ export class WebhooksController {
                         const isFromPage = messagingEvent.sender.id === pageId;
                         const isEcho = messagingEvent.message?.is_echo;
                         const customerId = isFromPage ? messagingEvent.recipient.id : messagingEvent.sender.id;
+
+                        // Extract referral data (entry point: which post/ad the user clicked)
+                        // Only meaningful for the customer's first message — not for echoes from the page
+                        const referral = (!isFromPage)
+                            ? (messagingEvent.referral || messagingEvent.message?.referral)
+                            : null;
+                        const referralSource = referral?.source as string | undefined;   // 'POST', 'ADS', 'PAGE', etc.
+                        const referralPostId = referral?.post_id as string | undefined;  // Facebook Post ID
+                        const referralAdId = referral?.ad_id as string | undefined;      // Facebook Ad ID
+                        // Use post_id if present, otherwise ad_id as the identifier
+                        const referralEntryId = referralPostId || referralAdId;
                         
-                        console.log(`[FACEBOOK WEBHOOK] Page ID: ${pageId} | Customer: ${customerId} | Echo: ${!!isEcho}`);
+                        console.log(`[FACEBOOK WEBHOOK] Page ID: ${pageId} | Customer: ${customerId} | Echo: ${!!isEcho} | ReferralSource: ${referralSource || 'direct'} | PostID: ${referralEntryId || 'none'}`);
 
                         // Process messaging events
                         if (messagingEvent.message) {
@@ -132,7 +144,9 @@ export class WebhooksController {
                                         customerName: customerName,
                                         platform: 'facebook',
                                         pageId: pageId,
-                                        customerProfilePic: userProfile?.profile_pic
+                                        customerProfilePic: userProfile?.profile_pic,
+                                        referralSource: referralSource,
+                                        referralPostId: referralEntryId,
                                     });
 
                                     // Save message to database
@@ -190,7 +204,9 @@ export class WebhooksController {
                                                     recipientId: pageId,
                                                     conversationId: conversation.id,
                                                     customerName: customerName,
-                                                    customerProfilePic: userProfile?.profile_pic
+                                                    customerProfilePic: userProfile?.profile_pic,
+                                                    referralSource: referralSource,
+                                                    referralPostId: referralEntryId,
                                                 });
                                                 return;
                                             }
@@ -226,7 +242,15 @@ export class WebhooksController {
 
                                                     console.log('[AI] processing...');
                                                     const history = await supabaseService.getLastMessages(conversation.id, 5);
-                                                    const systemPrompt = page.custom_prompt || "You are a helpful assistant.";
+                                                    
+                                                    // Build 3-Layer System Prompt (Page + Post/Ad + Order context)
+                                                    const systemPrompt = await aiContextService.buildSystemPrompt({
+                                                        pagePrompt: page.custom_prompt,
+                                                        customerId: customerId,
+                                                        referralPostId: referralEntryId,
+                                                        customerMessage: text
+                                                    });
+
                                                     const messages = [
                                                         { role: 'system', content: systemPrompt },
                                                         ...history.map(msg => ({ role: msg.sender === 'customer' ? 'user' : 'assistant', content: msg.text })),
@@ -280,7 +304,9 @@ export class WebhooksController {
                                         recipientId: isEcho ? customerId : pageId,
                                         conversationId: conversation.id,
                                         customerName: customerName,
-                                        customerProfilePic: userProfile?.profile_pic
+                                        customerProfilePic: userProfile?.profile_pic,
+                                        referralSource: referralSource,
+                                        referralPostId: referralEntryId,
                                     });
                                 } catch (error) {
                                     console.error('❌ Error saving message to Supabase:', error);

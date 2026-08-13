@@ -8,4 +8,18 @@ export declare class SettingsService {
     deleteMarketplaceProduct(id: string): Promise<boolean>;
     clearMarketplaceProducts(): Promise<boolean>;
     importMarketplaceProducts(buffer: Buffer): Promise<any[]>;
+    getPostConfigsByPageId(pageId: string): Promise<any[]>;
+    createPostConfig(data: {
+        pageId: string;
+        postId: string;
+        label?: string;
+        aiInstructions: string;
+    }): Promise<any>;
+    updatePostConfig(id: string, data: {
+        label?: string;
+        postId?: string;
+        aiInstructions?: string;
+        isActive?: boolean;
+    }): Promise<any>;
+    deletePostConfig(id: string): Promise<boolean>;
 }

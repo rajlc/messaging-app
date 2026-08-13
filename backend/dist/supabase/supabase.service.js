@@ -63,6 +63,12 @@ class SupabaseService {
             if (data.customerName && this.hasPhoneNumber(data.customerName)) {
                 updates.has_phone_number = true;
             }
+            if (data.referralSource && !existing.referral_source) {
+                updates.referral_source = data.referralSource;
+            }
+            if (data.referralPostId && !existing.referral_post_id) {
+                updates.referral_post_id = data.referralPostId;
+            }
             if (Object.keys(updates).length > 0) {
                 const { error: updateError } = await this.getClient()
                     .from('conversations')
@@ -96,6 +102,10 @@ class SupabaseService {
             insertData.product_name = data.productName;
         if (data.productPrice)
             insertData.product_price = data.productPrice;
+        if (data.referralSource)
+            insertData.referral_source = data.referralSource;
+        if (data.referralPostId)
+            insertData.referral_post_id = data.referralPostId;
         const { data: newConversation, error: createError } = await this.getClient()
             .from('conversations')
             .insert(insertData)
@@ -536,6 +546,90 @@ class SupabaseService {
         catch (err) {
             console.error('[Supabase] Error running autoFixPhoneNumbers:', err.message);
         }
+    }
+    async getOrdersByCustomerId(customerId) {
+        const { data, error } = await this.getClient()
+            .from('orders')
+            .select('id, order_number, order_status, total_amount, delivery_charge, created_at, customer_name, phone_number, address, items:order_items(product_name, qty, amount, total_amount)')
+            .eq('customer_id', customerId)
+            .order('created_at', { ascending: false })
+            .limit(3);
+        if (error) {
+            console.error('[Supabase] Error fetching orders for AI context:', error.message);
+            return [];
+        }
+        return data || [];
+    }
+    async getPostConfigByPostId(postId) {
+        if (!postId)
+            return null;
+        const { data, error } = await this.getClient()
+            .from('page_post_configs')
+            .select('*')
+            .eq('post_id', postId)
+            .eq('is_active', true)
+            .single();
+        if (error && error.code !== 'PGRST116') {
+            console.error('[Supabase] Error fetching post config:', error.message);
+        }
+        return data || null;
+    }
+    async getPostConfigsByPageId(pageId) {
+        const { data, error } = await this.getClient()
+            .from('page_post_configs')
+            .select('*')
+            .eq('page_id', pageId)
+            .order('created_at', { ascending: false });
+        if (error) {
+            console.error('[Supabase] Error fetching post configs:', error.message);
+            return [];
+        }
+        return data || [];
+    }
+    async createPostConfig(data) {
+        const { data: created, error } = await this.getClient()
+            .from('page_post_configs')
+            .insert({
+            page_id: data.pageId,
+            post_id: data.postId,
+            label: data.label,
+            ai_instructions: data.aiInstructions,
+            is_active: true
+        })
+            .select()
+            .single();
+        if (error)
+            throw error;
+        return created;
+    }
+    async updatePostConfig(id, data) {
+        const updates = { updated_at: new Date().toISOString() };
+        if (data.label !== undefined)
+            updates.label = data.label;
+        if (data.postId !== undefined)
+            updates.post_id = data.postId;
+        if (data.aiInstructions !== undefined)
+            updates.ai_instructions = data.aiInstructions;
+        if (data.isActive !== undefined)
+            updates.is_active = data.isActive;
+        const { data: updated, error } = await this.getClient()
+            .from('page_post_configs')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single();
+        if (error)
+            throw error;
+        return updated;
+    }
+    async deletePostConfig(id) {
+        const { error } = await this.getClient()
+            .from('page_post_configs')
+            .delete()
+            .eq('id', id);
+        if (error)
+            throw error;
+        return true;
     }
 }
 exports.SupabaseService = SupabaseService;
