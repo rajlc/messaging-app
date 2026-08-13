@@ -92,10 +92,21 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
 
             {/* Top Nav Group */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 10px' }}>
-                <NavButton label="Home"        icon={<Home size={18} />}          active={activeView === 'home'}                                          onClick={() => navigateTo('home')} />
+                <NavButton label="Home" icon={<Home size={18} />} active={activeView === 'home'} onClick={() => navigateTo('home')} />
+            </div>
+
+            {/* Section Label */}
+            <div style={{ padding: '18px 18px 6px', fontSize: '10px', fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}
+                className="text-slate-400 dark:text-slate-600"
+            >
+                Facebook & Marketplace
+            </div>
+
+            {/* Facebook & Marketplace Nav Group */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 10px' }}>
                 <NavButton label="Messages"    icon={<MessageCircle size={18} />} active={activeView === 'messages' && activeType === 'messages'}         onClick={() => navigateTo('messages', 'messages')} />
-                <NavButton label="Marketplace" icon={<Store size={18} />}         active={activeView === 'messages' && activeType === 'marketplace'}      onClick={() => navigateTo('messages', 'marketplace')} />
                 <NavButton label="Comments"    icon={<MessageSquare size={18} />} active={activeView === 'messages' && activeType === 'comments'}         onClick={() => navigateTo('messages', 'comments')} />
+                <NavButton label="Marketplace" icon={<Store size={18} />}         active={activeView === 'messages' && activeType === 'marketplace'}      onClick={() => navigateTo('messages', 'marketplace')} />
             </div>
 
             {/* Section Label */}
@@ -108,7 +119,6 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
             {/* Operations Nav Group */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 10px' }}>
                 <NavButton label="Orders"   icon={<ShoppingBag size={18} />}   active={activeView === 'orders'}   onClick={() => navigateTo('orders')} />
-                <NavButton label="Delivery" icon={<Truck size={18} />}          active={activeView === 'delivery'} onClick={() => navigateTo('delivery')} />
                 {(user?.role === 'admin' || user?.role === 'editor') && (
                     <NavButton label="Finance"  icon={<BarChart3 size={18} />}      active={activeView === 'finance'}  onClick={() => navigateTo('finance')} />
                 )}

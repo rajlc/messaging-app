@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import OrderModal from './OrderModal';
 import RiderAssignmentModal from './RiderAssignmentModal';
+import DeliveryView from './DeliveryView';
 
 const getStatusBadgeStyle = (status: string) => {
     switch (status) {
@@ -60,7 +61,7 @@ export default function OrdersView() {
 
     // -- Logic from help.md --
     // -- Logic from help.md --
-    const [activeTab, setActiveTab] = useState<'todayOrder' | 'orderList' | 'orderSummary'>(() => {
+    const [activeTab, setActiveTab] = useState<'todayOrder' | 'orderList' | 'orderSummary' | 'selfDelivery'>(() => {
         if (typeof window !== 'undefined') {
             return (localStorage.getItem('ordersActiveTab') as any) || 'todayOrder';
         }
@@ -102,6 +103,7 @@ export default function OrdersView() {
 
     const [orders, setOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
     const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
 
     // Print States
@@ -999,11 +1001,35 @@ export default function OrdersView() {
                                 >
                                     Order Summary
                                 </button>
+                                <button
+                                    onClick={() => setActiveTab('selfDelivery')}
+                                    className={`px-4 py-1.5 rounded-md text-[16px] font-medium transition-all ${activeTab === 'selfDelivery'
+                                        ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-sm dark:shadow-lg'
+                                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                        }`}
+                                >
+                                    Self Delivery List
+                                </button>
                             </div>
                         </div>
 
-                        {/* Right Side Actions (Create Order) */}
+                        {/* Right Side Actions (Sync Data & Create Order) */}
                         <div className="flex items-center gap-3">
+                            {/* Sync Button */}
+                            <button
+                                onClick={async () => {
+                                    setIsSyncing(true);
+                                    await fetchOrders();
+                                    setTimeout(() => setIsSyncing(false), 500);
+                                }}
+                                disabled={isSyncing || loading}
+                                className="px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-2 shadow-sm font-medium text-[15px]"
+                                title="Sync Orders & Self Delivery Data"
+                            >
+                                <RefreshCw size={16} className={isSyncing || loading ? "animate-spin text-indigo-600 dark:text-indigo-400" : "text-slate-500"} />
+                                <span>Sync</span>
+                            </button>
+
                             {/* Sales Report Dropdown */}
                             <div className="relative">
                                 <button
@@ -1050,16 +1076,24 @@ export default function OrdersView() {
                                 )}
                             </div>
 
-                            <button
-                                onClick={() => setIsCreateModalOpen(true)}
-                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[17px] font-medium transition-colors flex items-center gap-2 shadow-sm"
-                            >
-                                <Plus size={18} />
-                                Create Order
-                            </button>
+                            {activeTab !== 'selfDelivery' && (
+                                <button
+                                    onClick={() => setIsCreateModalOpen(true)}
+                                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[17px] font-medium transition-colors flex items-center gap-2 shadow-sm"
+                                >
+                                    <Plus size={18} />
+                                    Create Order
+                                </button>
+                            )}
                         </div>
                     </div>
 
+                    {activeTab === 'selfDelivery' ? (
+                        <div className="flex-1 overflow-auto">
+                            <DeliveryView />
+                        </div>
+                    ) : (
+                        <>
                     {/* Filter Bar */}
                     <div className="p-4 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/30 flex flex-col gap-3">
                         {/* Sub Tabs / Filters Row */}
@@ -2151,6 +2185,8 @@ export default function OrdersView() {
                             </div>
                         )}
                     </div>
+                    </>
+                    )}
                 </div>
 
                 {/* Modals */}

@@ -1459,18 +1459,10 @@ export default function DeliveryView() {
     };
 
     return (
-        <div className="font-sans p-6 h-full flex flex-col bg-gray-50 dark:bg-slate-900 overflow-hidden">
-            {/* Main Header */}
-            <div className="mb-6 flex flex-col gap-4">
-                <div className="flex justify-between items-center">
-                    <div>
-                        <h1 className="text-page-title text-slate-900 dark:text-white flex items-center gap-2">
-                            <Truck className="text-blue-500" />
-                            Logistics Hub
-                        </h1>
-                        <p className="text-normal text-slate-500 dark:text-slate-400">Delivery tracking and settlements</p>
-                    </div>
-                    
+        <div className="font-sans p-4 h-full flex flex-col bg-gray-50 dark:bg-slate-900 overflow-hidden">
+            {/* Navigation Tabs & Controls Bar */}
+            <div className="mb-3 flex flex-col gap-3">
+                <div className="flex justify-end items-center">
                     <div className="flex items-center gap-3">
                         <div className="relative">
                             <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
