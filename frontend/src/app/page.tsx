@@ -591,11 +591,13 @@ function UnifiedInboxContent() {
       if (isMatch) {
         setMessages(prev => {
           const existingIndex = prev.findIndex(m =>
-            (m.id === message.id) || (m.tempId && m.tempId === message.tempId)
+            (m.id && message.id && m.id === message.id) ||
+            (m.tempId && message.tempId && m.tempId === message.tempId) ||
+            (m.text === message.text && m.sender === senderRole && Math.abs(new Date(m.timestamp).getTime() - newMessage.timestamp.getTime()) < 3000)
           );
           if (existingIndex >= 0) {
             const updated = [...prev];
-            updated[existingIndex] = newMessage;
+            updated[existingIndex] = { ...updated[existingIndex], ...newMessage };
             return updated;
           }
           return [...prev, newMessage];

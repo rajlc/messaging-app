@@ -136,20 +136,27 @@ let WebhooksController = class WebhooksController {
                                         imageUrl: imageUrl,
                                         fileType: fileType
                                     });
+                                    if (savedMessage?.isDuplicate) {
+                                        console.log(`[FACEBOOK WEBHOOK] Skipping duplicate webhook processing for messageId: ${messageId}`);
+                                        return;
+                                    }
                                     if (!isFromPage) {
                                         try {
                                             const matchingRule = await this.autoReplyService.findMatchingRule(pageId, text);
                                             if (matchingRule) {
                                                 console.log(`[AutoReply] Match found for "${text}": "${matchingRule.reply_text}"`);
-                                                await this.facebookService.sendMessage(customerId, matchingRule.reply_text, pageId);
-                                                await supabase_service_1.supabaseService.saveMessage({
+                                                const fbRes = await this.facebookService.sendMessage(customerId, matchingRule.reply_text, pageId);
+                                                const sentMsgId = fbRes?.message_id;
+                                                const savedArMsg = await supabase_service_1.supabaseService.saveMessage({
                                                     conversationId: conversation.id,
                                                     text: matchingRule.reply_text,
                                                     sender: 'agent',
                                                     platform: 'facebook',
                                                     pageId: pageId,
+                                                    messageId: sentMsgId
                                                 });
                                                 this.messagingGateway.broadcastIncomingMessage('facebook', {
+                                                    id: savedArMsg?.id || sentMsgId || Date.now().toString(),
                                                     text: matchingRule.reply_text,
                                                     senderId: pageId,
                                                     recipientId: customerId,
@@ -160,19 +167,7 @@ let WebhooksController = class WebhooksController {
                                                     customerName: customerName,
                                                     customerProfilePic: userProfile?.profile_pic
                                                 });
-                                                console.log('[AutoReply] Reply sent and broadcasted. Skipping AI agent.');
-                                                this.messagingGateway.broadcastIncomingMessage('facebook', {
-                                                    ...savedMessage,
-                                                    isOwnMessage: false,
-                                                    senderId: customerId,
-                                                    recipientId: pageId,
-                                                    conversationId: conversation.id,
-                                                    customerName: customerName,
-                                                    customerProfilePic: userProfile?.profile_pic,
-                                                    referralSource: referralSource,
-                                                    referralPostId: referralEntryId,
-                                                });
-                                                return;
+                                                console.log('[AutoReply] Reply sent via Facebook.');
                                             }
                                         }
                                         catch (arError) {
@@ -187,15 +182,6 @@ let WebhooksController = class WebhooksController {
                                                         const cutoffList = page.cutoff_messages.split(',').map(m => m.trim().toLowerCase());
                                                         if (cutoffList.includes(text.trim().toLowerCase())) {
                                                             console.log(`[AI] Cut-off message detected: "${text}". Skipping AI reply.`);
-                                                            this.messagingGateway.broadcastIncomingMessage('facebook', {
-                                                                ...savedMessage,
-                                                                isOwnMessage: false,
-                                                                senderId: customerId,
-                                                                recipientId: pageId,
-                                                                conversationId: conversation.id,
-                                                                customerName: customerName,
-                                                                customerProfilePic: userProfile?.profile_pic
-                                                            });
                                                             return;
                                                         }
                                                     }
@@ -237,10 +223,27 @@ let WebhooksController = class WebhooksController {
                                                         }
                                                     }
                                                     if (replyText) {
-                                                        await this.facebookService.sendMessage(customerId, replyText, pageId);
-                                                        await supabase_service_1.supabaseService.saveMessage({ conversationId: conversation.id, text: replyText, sender: 'agent', platform: 'facebook', pageId: pageId });
+                                                        const fbRes = await this.facebookService.sendMessage(customerId, replyText, pageId);
+                                                        const sentMsgId = fbRes?.message_id;
+                                                        const savedAiMsg = await supabase_service_1.supabaseService.saveMessage({
+                                                            conversationId: conversation.id,
+                                                            text: replyText,
+                                                            sender: 'agent',
+                                                            platform: 'facebook',
+                                                            pageId: pageId,
+                                                            messageId: sentMsgId
+                                                        });
                                                         this.messagingGateway.broadcastIncomingMessage('facebook', {
-                                                            text: replyText, senderId: pageId, recipientId: customerId, pageId: pageId, conversationId: conversation.id, timestamp: Date.now(), isOwnMessage: true, customerName: customerName, customerProfilePic: userProfile?.profile_pic
+                                                            id: savedAiMsg?.id || sentMsgId || Date.now().toString(),
+                                                            text: replyText,
+                                                            senderId: pageId,
+                                                            recipientId: customerId,
+                                                            pageId: pageId,
+                                                            conversationId: conversation.id,
+                                                            timestamp: Date.now(),
+                                                            isOwnMessage: true,
+                                                            customerName: customerName,
+                                                            customerProfilePic: userProfile?.profile_pic
                                                         });
                                                     }
                                                 }

@@ -161,6 +161,12 @@ export class WebhooksController {
                                         fileType: fileType
                                     });
 
+                                    // If message was already recorded (e.g. echo of AI reply), skip duplicate processing & broadcast
+                                    if (savedMessage?.isDuplicate) {
+                                        console.log(`[FACEBOOK WEBHOOK] Skipping duplicate webhook processing for messageId: ${messageId}`);
+                                        return;
+                                    }
+
                                     // If this is a regular message from a customer, handle AutoReply and AI
                                     if (!isFromPage) {
                                         // --- AUTO-REPLY LOGIC ---
@@ -170,19 +176,22 @@ export class WebhooksController {
                                                 console.log(`[AutoReply] Match found for "${text}": "${matchingRule.reply_text}"`);
                                                 
                                                 // 1. Send to Facebook
-                                                await this.facebookService.sendMessage(customerId, matchingRule.reply_text, pageId);
+                                                const fbRes = await this.facebookService.sendMessage(customerId, matchingRule.reply_text, pageId);
+                                                const sentMsgId = fbRes?.message_id;
 
                                                 // 2. Save Agent Reply to DB
-                                                await supabaseService.saveMessage({
+                                                const savedArMsg = await supabaseService.saveMessage({
                                                     conversationId: conversation.id,
                                                     text: matchingRule.reply_text,
                                                     sender: 'agent',
                                                     platform: 'facebook',
                                                     pageId: pageId,
+                                                    messageId: sentMsgId
                                                 });
 
-                                                // 3. Broadcast to frontend
+                                                // Broadcast AutoReply to frontend immediately
                                                 this.messagingGateway.broadcastIncomingMessage('facebook', {
+                                                    id: savedArMsg?.id || sentMsgId || Date.now().toString(),
                                                     text: matchingRule.reply_text,
                                                     senderId: pageId,
                                                     recipientId: customerId,
@@ -194,21 +203,7 @@ export class WebhooksController {
                                                     customerProfilePic: userProfile?.profile_pic
                                                 });
 
-                                                console.log('[AutoReply] Reply sent and broadcasted. Skipping AI agent.');
-
-                                                // Broadcast original message to frontend before returning
-                                                this.messagingGateway.broadcastIncomingMessage('facebook', {
-                                                    ...savedMessage,
-                                                    isOwnMessage: false,
-                                                    senderId: customerId,
-                                                    recipientId: pageId,
-                                                    conversationId: conversation.id,
-                                                    customerName: customerName,
-                                                    customerProfilePic: userProfile?.profile_pic,
-                                                    referralSource: referralSource,
-                                                    referralPostId: referralEntryId,
-                                                });
-                                                return;
+                                                console.log('[AutoReply] Reply sent via Facebook.');
                                             }
                                         } catch (arError) {
                                             console.error('[AutoReply] Error finding/sending reply:', arError);
@@ -225,17 +220,6 @@ export class WebhooksController {
                                                         const cutoffList = page.cutoff_messages.split(',').map(m => m.trim().toLowerCase());
                                                         if (cutoffList.includes(text.trim().toLowerCase())) {
                                                             console.log(`[AI] Cut-off message detected: "${text}". Skipping AI reply.`);
-                                                            
-                                                            // Broadcast original message before returning
-                                                            this.messagingGateway.broadcastIncomingMessage('facebook', {
-                                                                ...savedMessage,
-                                                                isOwnMessage: false,
-                                                                senderId: customerId,
-                                                                recipientId: pageId,
-                                                                conversationId: conversation.id,
-                                                                customerName: customerName,
-                                                                customerProfilePic: userProfile?.profile_pic
-                                                            });
                                                             return;
                                                         }
                                                     }
@@ -283,10 +267,30 @@ export class WebhooksController {
                                                     }
 
                                                     if (replyText) {
-                                                        await this.facebookService.sendMessage(customerId, replyText, pageId);
-                                                        await supabaseService.saveMessage({ conversationId: conversation.id, text: replyText, sender: 'agent', platform: 'facebook', pageId: pageId });
+                                                        const fbRes = await this.facebookService.sendMessage(customerId, replyText, pageId);
+                                                        const sentMsgId = fbRes?.message_id;
+
+                                                        const savedAiMsg = await supabaseService.saveMessage({
+                                                            conversationId: conversation.id,
+                                                            text: replyText,
+                                                            sender: 'agent',
+                                                            platform: 'facebook',
+                                                            pageId: pageId,
+                                                            messageId: sentMsgId
+                                                        });
+
+                                                        // Broadcast AI reply to frontend immediately
                                                         this.messagingGateway.broadcastIncomingMessage('facebook', {
-                                                            text: replyText, senderId: pageId, recipientId: customerId, pageId: pageId, conversationId: conversation.id, timestamp: Date.now(), isOwnMessage: true, customerName: customerName, customerProfilePic: userProfile?.profile_pic
+                                                            id: savedAiMsg?.id || sentMsgId || Date.now().toString(),
+                                                            text: replyText,
+                                                            senderId: pageId,
+                                                            recipientId: customerId,
+                                                            pageId: pageId,
+                                                            conversationId: conversation.id,
+                                                            timestamp: Date.now(),
+                                                            isOwnMessage: true,
+                                                            customerName: customerName,
+                                                            customerProfilePic: userProfile?.profile_pic
                                                         });
                                                     }
                                                 }
@@ -296,7 +300,7 @@ export class WebhooksController {
                                         }
                                     }
 
-                                    // Broadcast the original message (or echo) to frontend
+                                    // Broadcast the original customer message or agent echo to frontend (EXACTLY ONCE)
                                     this.messagingGateway.broadcastIncomingMessage('facebook', {
                                         ...savedMessage,
                                         isOwnMessage: isEcho, // If it's an echo, it's our own message (agent)

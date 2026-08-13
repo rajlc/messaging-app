@@ -177,17 +177,43 @@ export class SupabaseService {
         replyToSender?: string;
         metadata?: any;
     }) {
-        // Deduplication: Check if message with same messageId already exists
+        // Deduplication 1: Check if message with same messageId already exists
         if (data.messageId) {
-            const { data: existing } = await this.getClient()
+            const { data: existingRows } = await this.getClient()
                 .from('messages')
                 .select('*')
                 .eq('message_id', data.messageId)
-                .single();
+                .limit(1);
 
-            if (existing) {
+            if (existingRows && existingRows.length > 0) {
                 console.log(`[Supabase] Message with ID ${data.messageId} already exists. Skipping insert.`);
-                return existing;
+                return { ...existingRows[0], isDuplicate: true };
+            }
+        }
+
+        // Deduplication 2: For incoming echo agent messages, check if we saved a matching agent message in the last 15 seconds
+        if (data.sender === 'agent' && data.text) {
+            const fifteenSecAgo = new Date(Date.now() - 15000).toISOString();
+            const { data: recentMatches } = await this.getClient()
+                .from('messages')
+                .select('*')
+                .eq('conversation_id', data.conversationId)
+                .eq('sender', 'agent')
+                .eq('text', data.text)
+                .gte('created_at', fifteenSecAgo)
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            if (recentMatches && recentMatches.length > 0) {
+                const recentMatch = recentMatches[0];
+                console.log(`[Supabase] Echo matched recent AI/agent message (${recentMatch.id}). Updating message_id and skipping duplicate insert.`);
+                if (data.messageId && !recentMatch.message_id) {
+                    await this.getClient()
+                        .from('messages')
+                        .update({ message_id: data.messageId })
+                        .eq('id', recentMatch.id);
+                }
+                return { ...recentMatch, isDuplicate: true };
             }
         }
 
