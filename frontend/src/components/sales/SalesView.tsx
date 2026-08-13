@@ -57,7 +57,7 @@ export default function SalesView() {
         router.push(`/?${params.toString()}`);
     };
 
-    if (subView === 'daraz' || subView === 'daraz-entry') {
+    if (subView === 'daraz' || subView?.startsWith('daraz-')) {
         return <DarazSalesHub />;
     }
 

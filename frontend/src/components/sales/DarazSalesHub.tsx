@@ -11,6 +11,7 @@ import {
     ArrowLeft
 } from 'lucide-react';
 import { DarazOrderEntryView } from '@/components/sales/DarazOrderEntryView';
+import { DarazOrderSummaryView } from '@/components/sales/DarazOrderSummaryView';
 
 interface DarazModule {
     id: string;
@@ -80,6 +81,10 @@ export function DarazSalesHub() {
 
     if (subView === 'daraz-entry') {
         return <DarazOrderEntryView />;
+    }
+
+    if (subView === 'daraz-summary') {
+        return <DarazOrderSummaryView />;
     }
 
     const selectedModule = DARAZ_MODULES.find((m) => m.id === subView);
