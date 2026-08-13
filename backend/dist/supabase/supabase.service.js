@@ -635,17 +635,29 @@ class SupabaseService {
         }
     }
     async getOrdersByCustomerId(customerId) {
-        const { data, error } = await this.getClient()
-            .from('orders')
-            .select('id, order_number, order_status, total_amount, delivery_charge, created_at, customer_name, phone_number, address, items:order_items(product_name, qty, amount, total_amount)')
-            .eq('customer_id', customerId)
-            .order('created_at', { ascending: false })
-            .limit(3);
-        if (error) {
-            console.error('[Supabase] Error fetching orders for AI context:', error.message);
+        try {
+            const { data: orders, error: ordersErr } = await this.getClient()
+                .from('orders')
+                .select('*')
+                .eq('customer_id', customerId)
+                .order('created_at', { ascending: false })
+                .limit(5);
+            if (ordersErr || !orders || orders.length === 0)
+                return [];
+            const orderIds = orders.map(o => o.id);
+            const { data: items } = await this.getClient()
+                .from('order_items')
+                .select('*')
+                .in('order_id', orderIds);
+            return orders.map(order => ({
+                ...order,
+                items: (items || []).filter(item => item.order_id === order.id)
+            }));
+        }
+        catch (err) {
+            console.error('[Supabase] Error fetching orders for AI context:', err.message);
             return [];
         }
-        return data || [];
     }
     async getPostConfigByPostId(postId) {
         if (!postId)

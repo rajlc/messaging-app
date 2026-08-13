@@ -210,12 +210,23 @@ let WebhooksController = class WebhooksController {
                                                         const openaiModel = await this.settingsService.getSetting('openai_model') || 'gpt-4o-mini';
                                                         if (apiKey) {
                                                             console.log(`[AI] Calling OpenAI with model: ${openaiModel}`);
-                                                            const aiResponse = await axios_1.default.post('https://api.openai.com/v1/chat/completions', {
-                                                                model: openaiModel,
-                                                                messages: messages,
-                                                                max_tokens: 300
-                                                            }, { headers: { 'Authorization': `Bearer ${apiKey}` } });
-                                                            replyText = aiResponse.data.choices[0]?.message?.content;
+                                                            try {
+                                                                const aiResponse = await axios_1.default.post('https://api.openai.com/v1/chat/completions', {
+                                                                    model: openaiModel,
+                                                                    messages: messages,
+                                                                    max_tokens: 300
+                                                                }, { headers: { 'Authorization': `Bearer ${apiKey}` } });
+                                                                replyText = aiResponse.data.choices[0]?.message?.content;
+                                                            }
+                                                            catch (openaiErr) {
+                                                                console.warn(`[AI] OpenAI model "${openaiModel}" failed (${openaiErr.response?.status || openaiErr.message}). Falling back to gpt-4o-mini...`);
+                                                                const fallbackResponse = await axios_1.default.post('https://api.openai.com/v1/chat/completions', {
+                                                                    model: 'gpt-4o-mini',
+                                                                    messages: messages,
+                                                                    max_tokens: 300
+                                                                }, { headers: { 'Authorization': `Bearer ${apiKey}` } });
+                                                                replyText = fallbackResponse.data.choices[0]?.message?.content;
+                                                            }
                                                         }
                                                     }
                                                     else if (aiProvider === 'gemini') {

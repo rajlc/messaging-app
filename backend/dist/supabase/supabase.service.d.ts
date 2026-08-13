@@ -76,23 +76,7 @@ export declare class SupabaseService {
     extractCustomerNameFromMessage(text: string): string | null;
     autoFixCustomerNames(): Promise<void>;
     autoFixPhoneNumbers(): Promise<void>;
-    getOrdersByCustomerId(customerId: string): Promise<{
-        id: any;
-        order_number: any;
-        order_status: any;
-        total_amount: any;
-        delivery_charge: any;
-        created_at: any;
-        customer_name: any;
-        phone_number: any;
-        address: any;
-        items: {
-            product_name: any;
-            qty: any;
-            amount: any;
-            total_amount: any;
-        }[];
-    }[]>;
+    getOrdersByCustomerId(customerId: string): Promise<any[]>;
     getPostConfigByPostId(postId: string): Promise<any>;
     getPostConfigsByPageId(pageId: string): Promise<any[]>;
     createPostConfig(data: {
