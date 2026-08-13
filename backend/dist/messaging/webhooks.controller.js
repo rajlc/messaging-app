@@ -178,6 +178,11 @@ let WebhooksController = class WebhooksController {
                                             if (isGlobalEnabled === 'true') {
                                                 const page = await supabase_service_1.supabaseService.getPageByFacebookId(pageId);
                                                 if (page && page.is_ai_enabled) {
+                                                    const cutoffCheck = await supabase_service_1.supabaseService.checkAndUpdateAiCutoff(conversation.id, pageId);
+                                                    if (cutoffCheck.isCutoff) {
+                                                        console.log(`[AI RateLimit] AI is currently cut off for customer ${customerId} (conversation ${conversation.id}) until ${cutoffCheck.cutoffUntil}. Skipping AI reply.`);
+                                                        return;
+                                                    }
                                                     if (page.cutoff_messages) {
                                                         const cutoffList = page.cutoff_messages.split(',').map(m => m.trim().toLowerCase());
                                                         if (cutoffList.includes(text.trim().toLowerCase())) {
@@ -202,9 +207,11 @@ let WebhooksController = class WebhooksController {
                                                     let replyText = '';
                                                     if (aiProvider === 'openai') {
                                                         const apiKey = await this.settingsService.getSetting('openai_api_key');
+                                                        const openaiModel = await this.settingsService.getSetting('openai_model') || 'gpt-4o-mini';
                                                         if (apiKey) {
+                                                            console.log(`[AI] Calling OpenAI with model: ${openaiModel}`);
                                                             const aiResponse = await axios_1.default.post('https://api.openai.com/v1/chat/completions', {
-                                                                model: 'gpt-4o-mini',
+                                                                model: openaiModel,
                                                                 messages: messages,
                                                                 max_tokens: 300
                                                             }, { headers: { 'Authorization': `Bearer ${apiKey}` } });
@@ -233,6 +240,7 @@ let WebhooksController = class WebhooksController {
                                                             pageId: pageId,
                                                             messageId: sentMsgId
                                                         });
+                                                        const limitResult = await supabase_service_1.supabaseService.incrementAiReplyCount(conversation.id, pageId);
                                                         this.messagingGateway.broadcastIncomingMessage('facebook', {
                                                             id: savedAiMsg?.id || sentMsgId || Date.now().toString(),
                                                             text: replyText,
@@ -243,7 +251,9 @@ let WebhooksController = class WebhooksController {
                                                             timestamp: Date.now(),
                                                             isOwnMessage: true,
                                                             customerName: customerName,
-                                                            customerProfilePic: userProfile?.profile_pic
+                                                            customerProfilePic: userProfile?.profile_pic,
+                                                            aiCutoffUntil: limitResult.cutoffUntil,
+                                                            aiReplyCount: limitResult.newCount
                                                         });
                                                     }
                                                 }

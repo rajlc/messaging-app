@@ -215,6 +215,13 @@ export class WebhooksController {
                                             if (isGlobalEnabled === 'true') {
                                                 const page = await supabaseService.getPageByFacebookId(pageId);
                                                 if (page && page.is_ai_enabled) {
+                                                    // --- PER-CUSTOMER RATE-LIMIT & CUT-OFF CHECK ---
+                                                    const cutoffCheck = await supabaseService.checkAndUpdateAiCutoff(conversation.id, pageId);
+                                                    if (cutoffCheck.isCutoff) {
+                                                        console.log(`[AI RateLimit] AI is currently cut off for customer ${customerId} (conversation ${conversation.id}) until ${cutoffCheck.cutoffUntil}. Skipping AI reply.`);
+                                                        return;
+                                                    }
+
                                                     // --- CUT-OFF MESSAGES CHECK ---
                                                     if (page.cutoff_messages) {
                                                         const cutoffList = page.cutoff_messages.split(',').map(m => m.trim().toLowerCase());
@@ -246,9 +253,11 @@ export class WebhooksController {
 
                                                     if (aiProvider === 'openai') {
                                                         const apiKey = await this.settingsService.getSetting('openai_api_key');
+                                                        const openaiModel = await this.settingsService.getSetting('openai_model') || 'gpt-4o-mini';
                                                         if (apiKey) {
+                                                            console.log(`[AI] Calling OpenAI with model: ${openaiModel}`);
                                                             const aiResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
-                                                                model: 'gpt-4o-mini',
+                                                                model: openaiModel,
                                                                 messages: messages,
                                                                 max_tokens: 300
                                                             }, { headers: { 'Authorization': `Bearer ${apiKey}` } });
@@ -279,6 +288,9 @@ export class WebhooksController {
                                                             messageId: sentMsgId
                                                         });
 
+                                                        // Increment AI reply count & check if limit reached
+                                                        const limitResult = await supabaseService.incrementAiReplyCount(conversation.id, pageId);
+
                                                         // Broadcast AI reply to frontend immediately
                                                         this.messagingGateway.broadcastIncomingMessage('facebook', {
                                                             id: savedAiMsg?.id || sentMsgId || Date.now().toString(),
@@ -290,7 +302,9 @@ export class WebhooksController {
                                                             timestamp: Date.now(),
                                                             isOwnMessage: true,
                                                             customerName: customerName,
-                                                            customerProfilePic: userProfile?.profile_pic
+                                                            customerProfilePic: userProfile?.profile_pic,
+                                                            aiCutoffUntil: limitResult.cutoffUntil,
+                                                            aiReplyCount: limitResult.newCount
                                                         });
                                                     }
                                                 }

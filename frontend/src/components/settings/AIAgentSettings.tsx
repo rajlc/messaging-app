@@ -12,6 +12,8 @@ type Page = {
     is_ai_enabled: boolean;
     custom_prompt: string;
     cutoff_messages?: string;
+    ai_max_message_count?: number;
+    ai_cutoff_time_minutes?: number;
 };
 
 export default function AIAgentSettings() {
@@ -21,6 +23,7 @@ export default function AIAgentSettings() {
     const [apiKey, setApiKey] = useState('');
     const [geminiApiKey, setGeminiApiKey] = useState('');
     const [aiProvider, setAiProvider] = useState('openai'); // 'openai' | 'gemini'
+    const [openaiModel, setOpenaiModel] = useState('gpt-4o-mini');
     const [isGlobalLoading, setIsGlobalLoading] = useState(false);
     const [globalMessage, setGlobalMessage] = useState('');
 
@@ -35,6 +38,8 @@ export default function AIAgentSettings() {
     const [editAiEnabled, setEditAiEnabled] = useState(false);
     const [editCutoffMessages, setEditCutoffMessages] = useState<string[]>([]);
     const [cutoffInput, setCutoffInput] = useState('');
+    const [editMaxMessageCount, setEditMaxMessageCount] = useState(5);
+    const [editCutoffTimeMinutes, setEditCutoffTimeMinutes] = useState(60);
     const [isSavingPage, setIsSavingPage] = useState(false);
 
     // Post/Ad Instructions State (Inside Edit Modal)
@@ -180,6 +185,7 @@ export default function AIAgentSettings() {
             setApiKey(data.openai_api_key || '');
             setGeminiApiKey(data.gemini_api_key || '');
             setAiProvider(data.ai_provider || 'openai');
+            setOpenaiModel(data.openai_model || 'gpt-4o-mini');
         } catch (err) {
             console.error('Failed to fetch settings:', err);
         }
@@ -217,7 +223,8 @@ export default function AIAgentSettings() {
                     is_ai_marketplace_enabled: String(isMarketplaceEnabled),
                     openai_api_key: apiKey,
                     gemini_api_key: geminiApiKey,
-                    ai_provider: aiProvider
+                    ai_provider: aiProvider,
+                    openai_model: openaiModel
                 })
             });
 
@@ -257,6 +264,8 @@ export default function AIAgentSettings() {
         setEditPrompt(page.custom_prompt || '');
         setEditAiEnabled(page.is_ai_enabled || false);
         setEditCutoffMessages(page.cutoff_messages ? page.cutoff_messages.split(',').filter(m => m.trim()).map(m => m.trim()) : []);
+        setEditMaxMessageCount(typeof page.ai_max_message_count === 'number' ? page.ai_max_message_count : 5);
+        setEditCutoffTimeMinutes(typeof page.ai_cutoff_time_minutes === 'number' ? page.ai_cutoff_time_minutes : 60);
         setShowPostForm(false);
         setEditingPostConfigId(null);
         fetchPostConfigs(page.page_id);
@@ -373,7 +382,9 @@ export default function AIAgentSettings() {
                 body: JSON.stringify({
                     is_ai_enabled: editAiEnabled,
                     custom_prompt: editPrompt,
-                    cutoff_messages: editCutoffMessages.join(',')
+                    cutoff_messages: editCutoffMessages.join(','),
+                    ai_max_message_count: editMaxMessageCount,
+                    ai_cutoff_time_minutes: editCutoffTimeMinutes
                 })
             });
 
@@ -381,7 +392,14 @@ export default function AIAgentSettings() {
                 // Update local state
                 setPages(pages.map(p =>
                     p.id === editingPage.id
-                        ? { ...p, is_ai_enabled: editAiEnabled, custom_prompt: editPrompt, cutoff_messages: editCutoffMessages.join(',') }
+                        ? {
+                            ...p,
+                            is_ai_enabled: editAiEnabled,
+                            custom_prompt: editPrompt,
+                            cutoff_messages: editCutoffMessages.join(','),
+                            ai_max_message_count: editMaxMessageCount,
+                            ai_cutoff_time_minutes: editCutoffTimeMinutes
+                        }
                         : p
                 ));
                 closeEditModal();
@@ -474,6 +492,29 @@ export default function AIAgentSettings() {
                         </div>
                     </div>
 
+                    {/* OpenAI Model Selector (if OpenAI provider is active) */}
+                    {aiProvider === 'openai' && (
+                        <div>
+                            <label className="block text-xs font-black uppercase tracking-widest mb-2 text-slate-400">
+                                OpenAI Model
+                            </label>
+                            <select
+                                value={openaiModel}
+                                onChange={(e) => setOpenaiModel(e.target.value)}
+                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-medium text-sm"
+                            >
+                                <option value="gpt-4o-mini">gpt-4o-mini (Recommended — Ultra Fast & Low Cost)</option>
+                                <option value="gpt-5.6-luna">gpt-5.6-luna (GPT-5.6 Luna — High Reasoning & $0.20/1M Cost)</option>
+                                <option value="gpt-5.4-nano">gpt-5.4-nano (GPT-5.4 Nano — High Speed & $0.20/1M Cost)</option>
+                                <option value="gpt-4o">gpt-4o (GPT-4o — Complex Reasoning)</option>
+                                <option value="gpt-3.5-turbo">gpt-3.5-turbo (Standard Legacy)</option>
+                            </select>
+                            <p className="text-xs text-slate-500 mt-1">
+                                Currently active: <span className="font-bold text-indigo-500">{openaiModel}</span>
+                            </p>
+                        </div>
+                    )}
+
                     {/* API Key */}
                     <div>
                         <label className="block text-xs font-black uppercase tracking-widest mb-2 text-slate-400">
@@ -490,7 +531,7 @@ export default function AIAgentSettings() {
                             <Shield className="absolute left-4 top-3.5 text-slate-400" size={18} />
                         </div>
                         <p className="text-xs text-slate-500 mt-1">
-                            Your key is stored securely. Used for {aiProvider === 'openai' ? 'GPT-4o' : 'Gemini 1.5 Flash'} access.
+                            Your key is stored securely. Used for {aiProvider === 'openai' ? openaiModel : 'Gemini 1.5 Flash'} access.
                         </p>
                     </div>
 
@@ -800,6 +841,50 @@ export default function AIAgentSettings() {
                                         <p className="text-[10px] text-slate-500 font-medium">
                                             Describe your store's tone, rules, and personality. This acts as the default prompt for all general messages.
                                         </p>
+                                    </div>
+
+                                    {/* Per-Customer Rate Limit Configuration */}
+                                    <div className="p-5 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-4">
+                                        <h5 className="font-bold text-xs uppercase tracking-widest text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                                            <Shield size={16} />
+                                            Per-Customer AI Message Rate Limiting
+                                        </h5>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                                                    AI Message Cut-Off Count
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    min={1}
+                                                    max={100}
+                                                    value={editMaxMessageCount}
+                                                    onChange={(e) => setEditMaxMessageCount(parseInt(e.target.value) || 5)}
+                                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm font-bold"
+                                                />
+                                                <p className="text-[10px] text-slate-500 mt-1">
+                                                    Max AI replies per customer before pause (e.g. 5)
+                                                </p>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                                                    AI Cut-Off Time (Minutes)
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    min={1}
+                                                    max={1440}
+                                                    value={editCutoffTimeMinutes}
+                                                    onChange={(e) => setEditCutoffTimeMinutes(parseInt(e.target.value) || 60)}
+                                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm font-bold"
+                                                />
+                                                <p className="text-[10px] text-slate-500 mt-1">
+                                                    Pause duration for that customer (e.g. 60 min = 1 hr)
+                                                </p>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     {/* Cut-off Messages */}

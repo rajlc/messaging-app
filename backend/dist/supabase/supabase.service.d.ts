@@ -44,7 +44,31 @@ export declare class SupabaseService {
         is_ai_enabled?: boolean;
         custom_prompt?: string;
         cutoff_messages?: string;
+        ai_max_message_count?: number;
+        ai_cutoff_time_minutes?: number;
     }): Promise<any>;
+    checkAndUpdateAiCutoff(conversationId: string, pageId?: string): Promise<{
+        isCutoff: boolean;
+        cutoffUntil?: undefined;
+        replyCount?: undefined;
+    } | {
+        isCutoff: boolean;
+        cutoffUntil: any;
+        replyCount: any;
+    } | {
+        isCutoff: boolean;
+        replyCount: any;
+        cutoffUntil?: undefined;
+    }>;
+    incrementAiReplyCount(conversationId: string, pageId: string): Promise<{
+        reachedLimit: boolean;
+        newCount: any;
+        cutoffUntil: string;
+    } | {
+        reachedLimit: boolean;
+        newCount: any;
+        cutoffUntil: null;
+    }>;
     getPageByFacebookId(pageId: string): Promise<any>;
     markConversationAsRead(id: string): Promise<boolean>;
     uploadFile(file: Buffer, fileName: string, mimeType: string, bucket?: string): Promise<string>;

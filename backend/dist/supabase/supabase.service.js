@@ -391,6 +391,70 @@ class SupabaseService {
         }
         return page;
     }
+    async checkAndUpdateAiCutoff(conversationId, pageId) {
+        const { data: conv } = await this.getClient()
+            .from('conversations')
+            .select('id, ai_reply_count, ai_cutoff_until')
+            .eq('id', conversationId)
+            .single();
+        if (!conv)
+            return { isCutoff: false };
+        if (conv.ai_cutoff_until) {
+            const cutoffTime = new Date(conv.ai_cutoff_until).getTime();
+            const now = Date.now();
+            if (now < cutoffTime) {
+                return { isCutoff: true, cutoffUntil: conv.ai_cutoff_until, replyCount: conv.ai_reply_count };
+            }
+            else {
+                console.log(`[AI Cutoff] Timer expired for conversation ${conversationId}. Resetting AI count & clearing cut-off.`);
+                await this.getClient()
+                    .from('conversations')
+                    .update({ ai_reply_count: 0, ai_cutoff_until: null })
+                    .eq('id', conversationId);
+                return { isCutoff: false, replyCount: 0 };
+            }
+        }
+        return { isCutoff: false, replyCount: conv.ai_reply_count || 0 };
+    }
+    async incrementAiReplyCount(conversationId, pageId) {
+        let maxCount = 5;
+        let cutoffMinutes = 60;
+        if (pageId) {
+            const page = await this.getPageByFacebookId(pageId);
+            if (page) {
+                if (typeof page.ai_max_message_count === 'number')
+                    maxCount = page.ai_max_message_count;
+                if (typeof page.ai_cutoff_time_minutes === 'number')
+                    cutoffMinutes = page.ai_cutoff_time_minutes;
+            }
+        }
+        const { data: conv } = await this.getClient()
+            .from('conversations')
+            .select('ai_reply_count')
+            .eq('id', conversationId)
+            .single();
+        const currentCount = conv?.ai_reply_count || 0;
+        const newCount = currentCount + 1;
+        if (maxCount > 0 && newCount >= maxCount) {
+            const cutoffUntil = new Date(Date.now() + cutoffMinutes * 60000).toISOString();
+            console.log(`[AI Cutoff] Customer conversation ${conversationId} reached max AI reply limit (${newCount}/${maxCount}). Cutting off AI for ${cutoffMinutes} minutes until ${cutoffUntil}.`);
+            await this.getClient()
+                .from('conversations')
+                .update({
+                ai_reply_count: newCount,
+                ai_cutoff_until: cutoffUntil
+            })
+                .eq('id', conversationId);
+            return { reachedLimit: true, newCount, cutoffUntil };
+        }
+        else {
+            await this.getClient()
+                .from('conversations')
+                .update({ ai_reply_count: newCount })
+                .eq('id', conversationId);
+            return { reachedLimit: false, newCount, cutoffUntil: null };
+        }
+    }
     async getPageByFacebookId(pageId) {
         const { data, error } = await this.getClient()
             .from('pages')

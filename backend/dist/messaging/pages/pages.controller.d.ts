@@ -14,6 +14,8 @@ export declare class PagesController {
         is_ai_enabled?: boolean;
         custom_prompt?: string;
         cutoff_messages?: string;
+        ai_max_message_count?: number;
+        ai_cutoff_time_minutes?: number;
     }): Promise<any>;
     static onlineMarketplaceProfiles: Map<string, number>;
     static pendingMarketplaceSends: Map<string, {

@@ -65,7 +65,16 @@ export class PagesController {
     }
 
     @Patch(':id')
-    async updatePage(@Param('id') id: string, @Body() body: { is_ai_enabled?: boolean; custom_prompt?: string; cutoff_messages?: string }) {
+    async updatePage(
+        @Param('id') id: string,
+        @Body() body: {
+            is_ai_enabled?: boolean;
+            custom_prompt?: string;
+            cutoff_messages?: string;
+            ai_max_message_count?: number;
+            ai_cutoff_time_minutes?: number;
+        }
+    ) {
         return await supabaseService.updatePage(id, body);
     }
 

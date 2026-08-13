@@ -87,6 +87,8 @@ type Conversation = {
   productPrice?: string;
   referralSource?: string;    // 'POST', 'ADS', 'PAGE', 'SHORTLINK', etc.
   referralPostId?: string;    // Facebook Post ID or Ad ID
+  aiCutoffUntil?: string;
+  aiReplyCount?: number;
 };
 
 // Define PageInfo type based on its usage
@@ -494,6 +496,8 @@ function UnifiedInboxContent() {
             productPrice: conv.product_price,
             referralSource: conv.referral_source,
             referralPostId: conv.referral_post_id,
+            aiCutoffUntil: conv.ai_cutoff_until,
+            aiReplyCount: conv.ai_reply_count,
           };
         });
 
@@ -625,6 +629,8 @@ function UnifiedInboxContent() {
             productPrice: c.productPrice || message.productPrice,
             referralSource: c.referralSource || message.referralSource,
             referralPostId: c.referralPostId || message.referralPostId,
+            aiCutoffUntil: message.aiCutoffUntil !== undefined ? message.aiCutoffUntil : c.aiCutoffUntil,
+            aiReplyCount: message.aiReplyCount !== undefined ? message.aiReplyCount : c.aiReplyCount,
           };
           return newConvs.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
         } else {
@@ -1414,41 +1420,66 @@ function UnifiedInboxContent() {
                       </div>
 
                       {/* Line 2: Badges and Status */}
-                      <div className="flex items-center gap-2 flex-nowrap overflow-hidden">
-                        {(conv.pageName || connectedPages.find(p => p.page_id === conv.pageId)?.page_name) && (
-                          <span className={`text-[10px] px-2 py-0.5 font-bold rounded-md uppercase tracking-tighter border truncate max-w-[65%] flex-shrink-0 ${
-                            isSameCustomer 
-                              ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700/50' 
-                              : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800/30'
-                          }`}>
-                            {cleanPageName(conv.pageName || connectedPages.find(p => p.page_id === conv.pageId)?.page_name || '')}
-                          </span>
-                        )}
-                        {conv.hasOrders && conv.orderStatus && (
-                          <span className={`text-[11px] px-2 py-0.5 rounded-md font-extrabold shadow-sm flex items-center gap-1 flex-shrink-0 ${getStatusColor(conv.orderStatus)}`}>
-                            {conv.orderNumber ? `#${conv.orderNumber}` : getStatusShortcode(conv.orderStatus)}
-                          </span>
-                        )}
-                        {isSameCustomer && (
-                          <span className="text-[10px] px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 font-extrabold rounded-md uppercase tracking-tighter border border-indigo-200 dark:border-indigo-800/50 flex-shrink-0 animate-pulse">
-                            Same Buyer
-                          </span>
-                        )}
-                      </div>
+                      {(() => {
+                        const isAiCutoff = conv.aiCutoffUntil ? new Date(conv.aiCutoffUntil).getTime() > Date.now() : false;
+                        return (
+                          <div className="flex items-center gap-2 flex-nowrap overflow-hidden">
+                            {(conv.pageName || connectedPages.find(p => p.page_id === conv.pageId)?.page_name) && (
+                              <span className={`text-[10px] px-2 py-0.5 font-bold rounded-md uppercase tracking-tighter border truncate max-w-[65%] flex-shrink-0 ${
+                                isSameCustomer 
+                                  ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700/50' 
+                                  : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800/30'
+                              }`}>
+                                {cleanPageName(conv.pageName || connectedPages.find(p => p.page_id === conv.pageId)?.page_name || '')}
+                              </span>
+                            )}
+                            {conv.hasOrders && conv.orderStatus && (
+                              <span className={`text-[11px] px-2 py-0.5 rounded-md font-extrabold shadow-sm flex items-center gap-1 flex-shrink-0 ${getStatusColor(conv.orderStatus)}`}>
+                                {conv.orderNumber ? `#${conv.orderNumber}` : getStatusShortcode(conv.orderStatus)}
+                              </span>
+                            )}
+                            {isSameCustomer && (
+                              <span className="text-[10px] px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 font-extrabold rounded-md uppercase tracking-tighter border border-indigo-200 dark:border-indigo-800/50 flex-shrink-0 animate-pulse">
+                                Same Buyer
+                              </span>
+                            )}
+                            {isAiCutoff && (
+                              <span 
+                                className="text-[10px] px-2 py-0.5 bg-red-600 text-white font-black rounded-md uppercase tracking-tighter shadow-sm flex items-center gap-1 flex-shrink-0 animate-pulse"
+                                title="AI is currently cut off for this customer."
+                              >
+                                <span className="w-1.5 h-1.5 bg-white rounded-full" />
+                                AI CUT OFF
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
 
-                      {/* Line 3: Message Preview and Phone Dot */}
-                      <div className="flex justify-between items-center gap-2">
-                        <p className={`text-[13px] truncate flex-1 ${conv.unreadCount > 0
-                          ? 'text-slate-900 dark:text-slate-100 font-bold'
-                          : 'text-slate-500 dark:text-slate-400 font-medium'}`}>
-                          {conv.lastMessage}
-                        </p>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          {conv.unreadCount > 0 && (
-                            <span className="w-3 h-3 bg-blue-600 dark:bg-blue-500 rounded-full shadow-sm shadow-blue-500/50" />
-                          )}
-                        </div>
-                      </div>
+                      {/* Line 3: Message Preview and Phone / Cut-Off Red Dot */}
+                      {(() => {
+                        const isAiCutoff = conv.aiCutoffUntil ? new Date(conv.aiCutoffUntil).getTime() > Date.now() : false;
+                        return (
+                          <div className="flex justify-between items-center gap-2">
+                            <p className={`text-[13px] truncate flex-1 ${conv.unreadCount > 0
+                              ? 'text-slate-900 dark:text-slate-100 font-bold'
+                              : 'text-slate-500 dark:text-slate-400 font-medium'}`}>
+                              {conv.lastMessage}
+                            </p>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              {isAiCutoff && (
+                                <span 
+                                  className="w-3 h-3 bg-red-600 rounded-full shadow-sm shadow-red-500/80 animate-pulse border-2 border-white dark:border-slate-800" 
+                                  title="AI is currently cut off for this customer."
+                                />
+                              )}
+                              {conv.unreadCount > 0 && (
+                                <span className="w-3 h-3 bg-blue-600 dark:bg-blue-500 rounded-full shadow-sm shadow-blue-500/50" />
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
