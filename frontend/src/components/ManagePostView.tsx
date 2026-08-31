@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
     Rss, Plus, Trash2, Edit3, Send, Clock, CheckCircle2, XCircle,
     AlertCircle, Facebook, Instagram, ImagePlus,
@@ -329,8 +329,8 @@ function PlatformEditor({ platform, content, onChange, mediaType, baseCaption, b
 }
 
 /* ─── AccountSelector ─── */
-function AccountSelector({ pages, selected, onToggle }: {
-    pages: ConnectedPage[]; selected: TargetPage[]; onToggle: (p: ConnectedPage) => void;
+function AccountSelector({ pages, selected, alreadyPublishedIds, onToggle }: {
+    pages: ConnectedPage[]; selected: TargetPage[]; alreadyPublishedIds?: Set<string>; onToggle: (p: ConnectedPage) => void;
 }) {
     // Only display accounts that can be published to (facebook, instagram, tiktok)
     const publishable = pages.filter(p => ['facebook', 'instagram', 'tiktok'].includes((p.platform || '').toLowerCase()));
@@ -359,7 +359,34 @@ function AccountSelector({ pages, selected, onToggle }: {
                         </div>
                         <div className="space-y-1.5">
                             {grouped[platform].map(page => {
+                                const isAlreadyPub = alreadyPublishedIds?.has(page.id) || (page.page_id && alreadyPublishedIds?.has(page.page_id));
                                 const isSel = selected.some(s => s.pageId === page.id || s.pageId === page.page_id);
+
+                                if (isAlreadyPub) {
+                                    return (
+                                        <div key={page.id}
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/60 dark:bg-emerald-950/20 text-left cursor-default">
+                                            {page.profile_picture_url ? (
+                                                <img src={page.profile_picture_url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                                            ) : (
+                                                <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${meta.gradient} flex items-center justify-center text-white flex-shrink-0`}>
+                                                    <span className="text-xs font-bold">{page.page_name.charAt(0)}</span>
+                                                </div>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-1.5">
+                                                    <p className="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">{page.page_name}</p>
+                                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">Live</span>
+                                                </div>
+                                                {page.username && <p className="text-xs text-slate-400 truncate">@{page.username}</p>}
+                                            </div>
+                                            <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0 shadow-sm" title="Already published on this account">
+                                                <Check size={11} color="white" strokeWidth={3} />
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
                                 return (
                                     <button key={page.id} onClick={() => onToggle(page)}
                                         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all text-left ${isSel ? 'border-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 dark:border-indigo-700' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-600'}`}
@@ -746,24 +773,43 @@ function PostCard({
 }
 
 /* ─── ComposerPanel ─── */
-function ComposerPanel({ pages, editPost, onClose, onSaved }: {
-    pages: ConnectedPage[]; editPost: Post | null; onClose: () => void; onSaved: () => void;
+function ComposerPanel({ pages, editPost, isReusing, onClose, onSaved }: {
+    pages: ConnectedPage[]; editPost: Post | null; isReusing?: boolean; onClose: () => void; onSaved: () => void;
 }) {
-    const isEditing = !!editPost && !!editPost.id;
-    const isReused = !!editPost && !editPost.id;
+    const isEditing = !!editPost && !!editPost.id && !isReusing;
     const [caption, setCaption] = useState(editPost?.caption || '');
     const [hashtags, setHashtags] = useState(editPost?.hashtags?.join(' ') || '');
     const [mediaUrl, setMediaUrl] = useState(editPost?.media_url || '');
     const [mediaType, setMediaType] = useState<MediaType>(editPost?.media_type || 'none');
     const [scheduledAt, setScheduledAt] = useState(editPost?.scheduled_at ? editPost.scheduled_at.slice(0, 16) : '');
     const [enableSchedule, setEnableSchedule] = useState(!!editPost?.scheduled_at);
-    const [selectedTargets, setSelectedTargets] = useState<TargetPage[]>(
-        editPost?.targets?.map(t => ({
-            pageId: t.page_id || t.id,
-            platform: t.platform,
-            pageName: t.page_name
-        })) || []
-    );
+
+    // Track which page IDs are already successfully published for this post
+    const alreadyPublishedIds = useMemo(() => {
+        if (!isReusing || !editPost?.targets) return new Set<string>();
+        const ids = new Set<string>();
+        for (const t of editPost.targets) {
+            if (t.status === 'success' && t.page_id) ids.add(t.page_id);
+        }
+        return ids;
+    }, [isReusing, editPost]);
+
+    const [selectedTargets, setSelectedTargets] = useState<TargetPage[]>(() => {
+        if (!editPost?.targets) return [];
+        return editPost.targets
+            .filter(t => isReusing ? t.status !== 'success' : true)
+            .map(t => {
+                const matched = pages.find(p => p.id === t.page_id || p.page_id === t.page_id);
+                if (!matched) return null;
+                return {
+                    pageId: matched.id,
+                    platform: matched.platform,
+                    pageName: matched.page_name,
+                };
+            })
+            .filter((t): t is TargetPage => t !== null);
+    });
+    const [mediaLoadError, setMediaLoadError] = useState(false);
     const [platformContent, setPlatformContent] = useState<Record<Platform, PlatformContent>>({
         facebook:  { caption: caption, hashtags: hashtags },
         instagram: { caption: caption, hashtags: hashtags },
@@ -788,6 +834,10 @@ function ComposerPanel({ pages, editPost, onClose, onSaved }: {
     const save = async (action: 'draft' | 'publish') => {
         setError('');
         if (selectedTargets.length === 0) { setError('Select at least one account to post to.'); return; }
+        if (mediaUrl && mediaLoadError) {
+            setError('The selected media file is no longer available in storage (it was previously deleted). Please remove it and upload a new photo or video.');
+            return;
+        }
         const setter = action === 'draft' ? setSaving : setPublishing;
         setter(true);
         try {
@@ -797,6 +847,7 @@ function ComposerPanel({ pages, editPost, onClose, onSaved }: {
                 method,
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
                 body: JSON.stringify({
+                    sourcePostId: isReusing ? editPost?.id : undefined,
                     caption, hashtags: hashtags.split(/\s+/).filter(Boolean),
                     mediaUrl: mediaUrl || undefined, mediaType,
                     targets: selectedTargets.map(t => ({ pageId: t.pageId, platform: t.platform })),
@@ -833,10 +884,14 @@ function ComposerPanel({ pages, editPost, onClose, onSaved }: {
                     </button>
                     <div>
                         <h2 className="font-bold text-slate-800 dark:text-white text-base">
-                            {isEditing ? 'Edit Post' : isReused ? 'New Post (Reused)' : 'Create New Post'}
+                            {isReusing ? 'Reuse Post: Add Accounts' : isEditing ? 'Edit Post' : 'Create New Post'}
                         </h2>
                         <p className="text-xs text-slate-400 dark:text-slate-500">
-                            {selectedTargets.length === 0 ? 'Select accounts on the left' : `${selectedTargets.length} account${selectedTargets.length > 1 ? 's' : ''} selected`}
+                            {isReusing
+                                ? 'Select additional accounts to attach to this post'
+                                : selectedTargets.length === 0
+                                    ? 'Select accounts on the left'
+                                    : `${selectedTargets.length} account${selectedTargets.length > 1 ? 's' : ''} selected`}
                         </p>
                     </div>
                 </div>
@@ -870,7 +925,7 @@ function ComposerPanel({ pages, editPost, onClose, onSaved }: {
                         <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3 flex items-center gap-2">
                             <Target size={10} /> Publish To
                         </p>
-                        <AccountSelector pages={pages} selected={selectedTargets} onToggle={toggleTarget} />
+                        <AccountSelector pages={pages} selected={selectedTargets} alreadyPublishedIds={alreadyPublishedIds} onToggle={toggleTarget} />
                     </div>
 
                     <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
@@ -914,18 +969,33 @@ function ComposerPanel({ pages, editPost, onClose, onSaved }: {
                             <ImagePlus size={10} /> Media
                         </p>
                         {mediaUrl ? (
-                            <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 group">
-                                {mediaType === 'photo'
-                                    ? <img src={mediaUrl} alt="" className="w-full max-h-72 object-cover" />
-                                    : <video src={mediaUrl} controls className="w-full max-h-72" />
-                                }
-                                <button onClick={() => { setMediaUrl(''); setMediaType('none'); }}
-                                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-red-600">
-                                    <X size={12} />
-                                </button>
-                            </div>
+                            mediaLoadError ? (
+                                <div className="p-5 rounded-2xl border border-red-200 dark:border-red-900/40 bg-red-50 dark:bg-red-950/20 text-center space-y-2">
+                                    <p className="text-xs font-bold text-red-600 dark:text-red-400">
+                                        ⚠️ The original photo/video was removed from storage when the original post was deleted.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setMediaUrl(''); setMediaType('none'); setMediaLoadError(false); }}
+                                        className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                                    >
+                                        Remove & Upload New Media
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 group">
+                                    {mediaType === 'photo'
+                                        ? <img src={mediaUrl} alt="" onError={() => setMediaLoadError(true)} className="w-full max-h-72 object-cover" />
+                                        : <video src={mediaUrl} controls onError={() => setMediaLoadError(true)} className="w-full max-h-72" />
+                                    }
+                                    <button onClick={() => { setMediaUrl(''); setMediaType('none'); }}
+                                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-red-600">
+                                        <X size={12} />
+                                    </button>
+                                </div>
+                            )
                         ) : (
-                            <MediaUploader onUploaded={(url, type) => { setMediaUrl(url); setMediaType(type); }} currentMediaType={mediaType} />
+                            <MediaUploader onUploaded={(url, type) => { setMediaUrl(url); setMediaType(type); setMediaLoadError(false); }} currentMediaType={mediaType} />
                         )}
                     </div>
 
@@ -1056,12 +1126,12 @@ export default function ManagePostView() {
         return () => clearInterval(interval);
     }, [posts, fetchData]);
 
-    // Reuse a post: clone content with empty id so it acts as a fresh new post
+    const [isReusing, setIsReusing] = useState(false);
+
+    // Reuse a post: attach new accounts directly to the existing post without duplicating!
     const handleReuse = (post: Post) => {
-        setEditPost({
-            ...post,
-            id: '', // empty id signifies a brand new post
-        });
+        setEditPost(post);
+        setIsReusing(true);
         setViewPost(null);
         setView('compose');
     };
@@ -1069,9 +1139,9 @@ export default function ManagePostView() {
     if (view === 'compose') {
         return (
             <div className="flex-1 flex flex-col h-full overflow-hidden bg-white dark:bg-slate-900">
-                <ComposerPanel pages={pages} editPost={editPost}
-                    onClose={() => { setView('list'); setEditPost(null); }}
-                    onSaved={() => { setView('list'); setEditPost(null); fetchData(); }} />
+                <ComposerPanel pages={pages} editPost={editPost} isReusing={isReusing}
+                    onClose={() => { setView('list'); setEditPost(null); setIsReusing(false); }}
+                    onSaved={() => { setView('list'); setEditPost(null); setIsReusing(false); fetchData(); }} />
             </div>
         );
     }
@@ -1137,7 +1207,7 @@ export default function ManagePostView() {
                         className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all" title="Refresh">
                         <RefreshCw size={16} />
                     </button>
-                    <button onClick={() => { setEditPost(null); setView('compose'); }}
+                    <button onClick={() => { setEditPost(null); setIsReusing(false); setView('compose'); }}
                         className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/25 active:scale-[0.98] transition-all">
                         <Plus size={16} /> New Post
                     </button>

@@ -71,6 +71,82 @@ export class PublishingService {
                 ? 'scheduled'
                 : 'queued';
 
+        // 0. If reusing an existing post, do not duplicate in manage post! Add new targets directly to it.
+        if (dto.sourcePostId) {
+            const { data: existingPost } = await this.supabase
+                .from('social_posts')
+                .select('*, targets:social_post_targets(*)')
+                .eq('id', dto.sourcePostId)
+                .maybeSingle();
+
+            if (existingPost) {
+                this.logger.log(`[PublishingService] Reusing existing post ${existingPost.id} without duplication.`);
+
+                // Update post content if changed
+                await this.supabase.from('social_posts').update({
+                    caption: dto.caption ?? existingPost.caption,
+                    hashtags: dto.hashtags ?? existingPost.hashtags,
+                    media_url: dto.mediaUrl ?? existingPost.media_url,
+                    media_type: dto.mediaType ?? existingPost.media_type,
+                    platform_content: dto.platformContent ? { ...existingPost.platform_content, ...dto.platformContent } : existingPost.platform_content,
+                    status: dto.action === 'publish' ? (isScheduled ? 'scheduled' : 'queued') : existingPost.status,
+                    scheduled_at: isScheduled ? new Date(dto.scheduledAt!).toISOString() : existingPost.scheduled_at,
+                    updated_at: new Date().toISOString(),
+                }).eq('id', existingPost.id);
+
+                // Fetch pages
+                const { data: pages } = await this.supabase.from('pages').select('id, page_name, page_id, platform');
+                const pageMap = new Map();
+                (pages || []).forEach(p => {
+                    pageMap.set(p.id, p);
+                    if (p.page_id) {
+                        pageMap.set(p.page_id, p);
+                        pageMap.set(p.page_id.trim(), p);
+                    }
+                });
+
+                const existingTargets = existingPost.targets || [];
+                const newTargetInserts: any[] = [];
+
+                for (const t of dto.targets || []) {
+                    const cleanTargetId = typeof t.pageId === 'string' ? t.pageId.trim() : t.pageId;
+                    const page = pageMap.get(cleanTargetId);
+                    if (!page) continue;
+
+                    const match = existingTargets.find((et: any) => et.page_id === page.id);
+                    if (match) {
+                        if (match.status === 'failed' && dto.action === 'publish') {
+                            await this.supabase.from('social_post_targets').update({
+                                status: 'pending',
+                                error_message: null,
+                                updated_at: new Date().toISOString(),
+                            }).eq('id', match.id);
+                        }
+                    } else {
+                        newTargetInserts.push({
+                            post_id: existingPost.id,
+                            page_id: page.id,
+                            platform: page.platform || t.platform,
+                            page_name: page.page_name,
+                            status: 'pending',
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString(),
+                        });
+                    }
+                }
+
+                if (newTargetInserts.length > 0) {
+                    await this.supabase.from('social_post_targets').insert(newTargetInserts);
+                }
+
+                if (dto.action === 'publish' && !isScheduled) {
+                    await this.executePublishing(existingPost.id);
+                }
+
+                return this.getPostById(existingPost.id);
+            }
+        }
+
         // 1. Insert social_posts row
         const { data: post, error: postErr } = await this.supabase
             .from('social_posts')
@@ -98,22 +174,32 @@ export class PublishingService {
         const pageMap = new Map();
         (pages || []).forEach(p => {
             pageMap.set(p.id, p);
-            if (p.page_id) pageMap.set(p.page_id, p);
+            if (p.page_id) {
+                pageMap.set(p.page_id, p);
+                pageMap.set(p.page_id.trim(), p);
+            }
         });
 
         // 3. Insert social_post_targets rows
-        const targetInserts = (dto.targets || []).map(t => {
-            const page = pageMap.get(t.pageId);
-            return {
-                post_id: post.id,
-                page_id: page?.id || t.pageId,
-                platform: page?.platform || t.platform,
-                page_name: page?.page_name || `${t.platform} account`,
-                status: 'pending',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            };
-        });
+        const targetInserts = (dto.targets || [])
+            .map(t => {
+                const cleanTargetId = typeof t.pageId === 'string' ? t.pageId.trim() : t.pageId;
+                const page = pageMap.get(cleanTargetId);
+                if (!page) {
+                    this.logger.warn(`[PublishingService] Target with pageId '${t.pageId}' not found in active pages; skipping.`);
+                    return null;
+                }
+                return {
+                    post_id: post.id,
+                    page_id: page.id,
+                    platform: page.platform || t.platform,
+                    page_name: page.page_name,
+                    status: 'pending',
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                };
+            })
+            .filter((t): t is NonNullable<typeof t> => t !== null);
 
         if (targetInserts.length > 0) {
             const { error: targetErr } = await this.supabase
@@ -171,21 +257,31 @@ export class PublishingService {
         const pageMap = new Map();
         (pages || []).forEach(p => {
             pageMap.set(p.id, p);
-            if (p.page_id) pageMap.set(p.page_id, p);
+            if (p.page_id) {
+                pageMap.set(p.page_id, p);
+                pageMap.set(p.page_id.trim(), p);
+            }
         });
 
-        const targetInserts = (dto.targets || []).map(t => {
-            const page = pageMap.get(t.pageId);
-            return {
-                post_id: id,
-                page_id: page?.id || t.pageId,
-                platform: page?.platform || t.platform,
-                page_name: page?.page_name || `${t.platform} account`,
-                status: 'pending',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            };
-        });
+        const targetInserts = (dto.targets || [])
+            .map(t => {
+                const cleanTargetId = typeof t.pageId === 'string' ? t.pageId.trim() : t.pageId;
+                const page = pageMap.get(cleanTargetId);
+                if (!page) {
+                    this.logger.warn(`[PublishingService] Target with pageId '${t.pageId}' not found in active pages; skipping.`);
+                    return null;
+                }
+                return {
+                    post_id: id,
+                    page_id: page.id,
+                    platform: page.platform || t.platform,
+                    page_name: page.page_name,
+                    status: 'pending',
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                };
+            })
+            .filter((t): t is NonNullable<typeof t> => t !== null);
 
         if (targetInserts.length > 0) {
             const { error: targetErr } = await this.supabase
@@ -193,12 +289,11 @@ export class PublishingService {
                 .insert(targetInserts);
 
             if (targetErr) {
-                this.logger.error('[PublishingService] Failed to insert targets on update:', targetErr.message);
-                throw new Error(`Failed to update targets: ${targetErr.message}`);
+                throw new Error(`Failed to save post targets: ${targetErr.message}`);
             }
         }
 
-        // 3. Trigger publish if requested
+        // 3. If action is 'publish' and not scheduled, execute publishing immediately
         if (dto.action === 'publish' && !isScheduled) {
             await this.executePublishing(id);
         }
@@ -219,18 +314,29 @@ export class PublishingService {
                 .maybeSingle();
 
             if (post?.media_url) {
-                // Extract file path from Supabase storage public URL
-                // e.g. .../storage/v1/object/public/content/1788165277688_file.jpg
-                const match = post.media_url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
-                if (match) {
-                    const bucket = match[1];
-                    const filePath = decodeURIComponent(match[2]);
-                    this.logger.log(`[PublishingService] Removing media from storage bucket '${bucket}': ${filePath}`);
-                    const { error: storageErr } = await this.supabase.storage.from(bucket).remove([filePath]);
-                    if (storageErr) {
-                        this.logger.warn(`[PublishingService] Storage deletion warning: ${storageErr.message}`);
-                    } else {
-                        this.logger.log(`[PublishingService] Storage file removed successfully: ${filePath}`);
+                // Check if other posts are still referencing this exact media_url
+                const { data: otherPosts } = await this.supabase
+                    .from('social_posts')
+                    .select('id')
+                    .eq('media_url', post.media_url)
+                    .neq('id', id);
+
+                if (otherPosts && otherPosts.length > 0) {
+                    this.logger.log(`[PublishingService] Media is still in use by ${otherPosts.length} other post(s); preserving storage file.`);
+                } else {
+                    // Extract file path from Supabase storage public URL
+                    // e.g. .../storage/v1/object/public/content/1788165277688_file.jpg
+                    const match = post.media_url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+                    if (match) {
+                        const bucket = match[1];
+                        const filePath = decodeURIComponent(match[2]);
+                        this.logger.log(`[PublishingService] Removing media from storage bucket '${bucket}': ${filePath}`);
+                        const { error: storageErr } = await this.supabase.storage.from(bucket).remove([filePath]);
+                        if (storageErr) {
+                            this.logger.warn(`[PublishingService] Storage deletion warning: ${storageErr.message}`);
+                        } else {
+                            this.logger.log(`[PublishingService] Storage file removed successfully: ${filePath}`);
+                        }
                     }
                 }
             }
@@ -269,6 +375,12 @@ export class PublishingService {
         let failCount = 0;
 
         for (const target of targets) {
+            // If already successfully published, skip and count towards overall success!
+            if (target.status === 'success') {
+                successCount++;
+                continue;
+            }
+
             await this.supabase.from('social_post_targets').update({ status: 'processing' }).eq('id', target.id);
 
             try {

@@ -21,7 +21,8 @@ export declare class WebhooksController {
     constructor(configService: ConfigService, messagingGateway: MessagingGateway, commentsService: CommentsService, facebookService: FacebookService, settingsService: SettingsService, autoReplyService: AutoReplyService, jwtService: JwtService);
     verifyMetaWebhook(mode: string, token: string, challenge: string, res: Response): Response<any, Record<string, any>>;
     handleMetaWebhook(body: any): Promise<string>;
-    handleTikTokWebhook(body: any): Promise<string>;
+    verifyTikTokWebhook(query: any, res: Response): Response<any, Record<string, any>>;
+    handleTikTokWebhook(body: any, query: any, res: Response): Promise<Response<any, Record<string, any>>>;
     handleMarketplaceWebhook(req: any, body: any, res: Response): Promise<Response<any, Record<string, any>>>;
     debugProfile(id: string): Promise<{
         id: string;

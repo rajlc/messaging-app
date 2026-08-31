@@ -12,6 +12,7 @@ export interface PlatformContentOverride {
 }
 
 export interface CreatePostDto {
+    sourcePostId?: string;
     caption?: string;
     hashtags?: string[];
     mediaUrl?: string;

@@ -368,9 +368,22 @@ let WebhooksController = class WebhooksController {
         console.log('✅ Webhook processing complete\n');
         return 'OK';
     }
-    async handleTikTokWebhook(body) {
-        console.log('Incoming TikTok Webhook:', JSON.stringify(body, null, 2));
-        return 'OK';
+    verifyTikTokWebhook(query, res) {
+        console.log('Incoming TikTok Webhook GET verification:', query);
+        const challenge = query.challenge || query['hub.challenge'] || query.echo;
+        if (challenge) {
+            return res.status(200).send(challenge);
+        }
+        return res.status(200).send('OK');
+    }
+    async handleTikTokWebhook(body, query, res) {
+        console.log('Incoming TikTok Webhook POST:', JSON.stringify(body, null, 2));
+        const challenge = body?.challenge || body?.content?.challenge || query?.challenge;
+        if (challenge) {
+            console.log('Responding to TikTok verification challenge:', challenge);
+            return res.status(200).json({ challenge });
+        }
+        return res.status(200).send('OK');
     }
     async handleMarketplaceWebhook(req, body, res) {
         console.log('--- Incoming Marketplace Webhook ---');
@@ -708,10 +721,20 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], WebhooksController.prototype, "handleMetaWebhook", null);
 __decorate([
+    (0, common_1.Get)('tiktok'),
+    __param(0, (0, common_1.Query)()),
+    __param(1, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], WebhooksController.prototype, "verifyTikTokWebhook", null);
+__decorate([
     (0, common_1.Post)('tiktok'),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Query)()),
+    __param(2, (0, common_1.Res)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, Object, Object]),
     __metadata("design:returntype", Promise)
 ], WebhooksController.prototype, "handleTikTokWebhook", null);
 __decorate([

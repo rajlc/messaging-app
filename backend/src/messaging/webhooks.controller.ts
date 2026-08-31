@@ -435,12 +435,31 @@ export class WebhooksController {
         return 'OK';
     }
 
-    // TikTok Webhook receiver
+    // TikTok Webhook verification (GET)
+    @Get('tiktok')
+    verifyTikTokWebhook(@Query() query: any, @Res() res: Response) {
+        console.log('Incoming TikTok Webhook GET verification:', query);
+        const challenge = query.challenge || query['hub.challenge'] || query.echo;
+        if (challenge) {
+            return res.status(200).send(challenge);
+        }
+        return res.status(200).send('OK');
+    }
+
+    // TikTok Webhook receiver & challenge response (POST)
     @Post('tiktok')
-    async handleTikTokWebhook(@Body() body: any) {
-        console.log('Incoming TikTok Webhook:', JSON.stringify(body, null, 2));
-        // TODO: Process TikTok message and broadcast
-        return 'OK';
+    async handleTikTokWebhook(@Body() body: any, @Query() query: any, @Res() res: Response) {
+        console.log('Incoming TikTok Webhook POST:', JSON.stringify(body, null, 2));
+
+        // 1. Handle TikTok verification challenge
+        const challenge = body?.challenge || body?.content?.challenge || query?.challenge;
+        if (challenge) {
+            console.log('Responding to TikTok verification challenge:', challenge);
+            return res.status(200).json({ challenge });
+        }
+
+        // 2. Process TikTok events (messages, mentions, video publish updates)
+        return res.status(200).send('OK');
     }
 
     // Marketplace Webhook receiver (called by Chrome Extension)

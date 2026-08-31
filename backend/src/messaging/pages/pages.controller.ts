@@ -24,53 +24,68 @@ export class PagesController {
             throw new HttpException('Page ID is required', HttpStatus.BAD_REQUEST);
         }
 
+        const cleanPageId = body.pageId.trim();
+        const cleanAccessToken = (body.accessToken || '').trim();
         const platform = body.platform || 'facebook';
         const isFacebookPage = platform === 'facebook';
 
-        if (isFacebookPage && !body.accessToken) {
+        if (isFacebookPage && !cleanAccessToken) {
             throw new HttpException('Access Token is required for Facebook Pages', HttpStatus.BAD_REQUEST);
         }
 
         let pageName = body.pageName || 'Social Account';
 
         if (isFacebookPage) {
-            const isValid = await this.facebookService.validatePageToken(body.pageId, body.accessToken!);
+            const isValid = await this.facebookService.validatePageToken(cleanPageId, cleanAccessToken);
             if (!isValid) {
                 throw new HttpException('Invalid Facebook Page ID or Access Token', HttpStatus.BAD_REQUEST);
             }
 
             if (!body.pageName) {
                 try {
-                    pageName = await this.facebookService.getPageName(body.pageId, body.accessToken!);
+                    pageName = await this.facebookService.getPageName(cleanPageId, cleanAccessToken);
                 } catch (error) {
                     console.warn('Could not fetch page name, using default');
                 }
             }
         } else if (platform === 'instagram') {
-            if (body.accessToken && body.accessToken !== 'none' && !body.pageName) {
+            if (cleanAccessToken && cleanAccessToken !== 'none' && !body.pageName) {
                 try {
-                    const igRes = await axios.get(`https://graph.facebook.com/v21.0/${body.pageId}`, {
-                        params: {
-                            fields: 'name,username',
-                            access_token: body.accessToken
-                        }
-                    });
-                    if (igRes.data) {
-                        pageName = igRes.data.username ? `@${igRes.data.username}` : (igRes.data.name || pageName);
+                    let igData: any = null;
+                    if (cleanAccessToken.startsWith('IG')) {
+                        const igRes = await axios.get('https://graph.instagram.com/me', {
+                            params: {
+                                fields: 'id,username,name,profile_picture_url',
+                                access_token: cleanAccessToken
+                            }
+                        });
+                        igData = igRes.data;
+                    } else {
+                        const igRes = await axios.get(`https://graph.facebook.com/v21.0/${cleanPageId}`, {
+                            params: {
+                                fields: 'id,name,username,profile_picture_url',
+                                access_token: cleanAccessToken
+                            }
+                        });
+                        igData = igRes.data;
+                    }
+
+                    if (igData) {
+                        pageName = igData.username ? `${igData.username} (${igData.name || 'Instagram'})` : (igData.name || pageName);
                     }
                 } catch (err: any) {
                     console.warn('Could not fetch Instagram account name:', err.response?.data || err.message);
                 }
             }
         } else if (!body.pageName) {
-            pageName = `${platform.charAt(0).toUpperCase() + platform.slice(1)} Account (${body.pageId})`;
+            pageName = `${platform.charAt(0).toUpperCase() + platform.slice(1)} Account (${cleanPageId})`;
         }
 
         const page = await supabaseService.createPage({
             platform: platform,
             pageName: pageName,
-            pageId: body.pageId,
-            accessToken: body.accessToken || 'none'
+            pageId: cleanPageId,
+            accessToken: cleanAccessToken || 'none'
         });
 
         return page;

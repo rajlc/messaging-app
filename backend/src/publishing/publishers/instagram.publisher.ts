@@ -22,32 +22,48 @@ export class InstagramPublisher {
                 errorMessage: 'Instagram requires a photo or video. Text-only posts are not supported.',
             };
         }
+        // Pre-check if media URL is accessible before sending to Instagram
+        try {
+            await axios.head(mediaUrl, { timeout: 7000 });
+        } catch (err: any) {
+            if (err.response?.status === 404) {
+                return {
+                    success: false,
+                    errorMessage: 'The media file is no longer available (404 Not Found) because it was removed from storage. Please upload the photo or video again.',
+                };
+            }
+        }
+
+        const cleanToken = accessToken.trim();
+        const cleanPageId = pageId.trim();
+        const isIgLoginToken = cleanToken.startsWith('IG');
+        const apiHost = isIgLoginToken ? 'https://graph.instagram.com/v21.0' : `https://graph.facebook.com/${this.graphApiVersion}`;
 
         try {
             // First determine the IG Business User ID
-            // If pageId is a FB page, try fetching linked instagram_business_account
-            let igUserId = pageId;
-            try {
-                const pageCheck = await axios.get(`https://graph.facebook.com/${this.graphApiVersion}/${pageId}`, {
-                    params: {
-                        fields: 'instagram_business_account',
-                        access_token: accessToken,
-                    },
-                });
-                if (pageCheck.data?.instagram_business_account?.id) {
-                    igUserId = pageCheck.data.instagram_business_account.id;
-                    this.logger.log(`[Instagram] Resolved IG Business Account ID: ${igUserId} from FB Page: ${pageId}`);
+            let igUserId = cleanPageId;
+            if (!isIgLoginToken) {
+                try {
+                    const pageCheck = await axios.get(`https://graph.facebook.com/${this.graphApiVersion}/${cleanPageId}`, {
+                        params: {
+                            fields: 'instagram_business_account',
+                            access_token: cleanToken,
+                        },
+                    });
+                    if (pageCheck.data?.instagram_business_account?.id) {
+                        igUserId = pageCheck.data.instagram_business_account.id;
+                        this.logger.log(`[Instagram] Resolved IG Business Account ID: ${igUserId} from FB Page: ${cleanPageId}`);
+                    }
+                } catch (err: any) {
+                    this.logger.debug(`[Instagram] Using pageId directly as IG User ID: ${cleanPageId}`);
                 }
-            } catch (err: any) {
-                // pageId might already be the IG User ID directly
-                this.logger.debug(`[Instagram] Using pageId directly as IG User ID: ${pageId}`);
             }
 
             // Step 1: Create Container
-            const containerUrl = `https://graph.facebook.com/${this.graphApiVersion}/${igUserId}/media`;
+            const containerUrl = `${apiHost}/${igUserId}/media`;
             const containerParams: Record<string, any> = {
                 caption: caption || '',
-                access_token: accessToken,
+                access_token: cleanToken,
             };
 
             if (mediaType === 'video') {
@@ -57,7 +73,7 @@ export class InstagramPublisher {
                 containerParams.image_url = mediaUrl;
             }
 
-            this.logger.log(`[Instagram] Creating container for ${igUserId} (${mediaType})...`);
+            this.logger.log(`[Instagram] Creating container for ${igUserId} (${mediaType}) via ${apiHost}...`);
             const containerRes = await axios.post(containerUrl, null, { params: containerParams });
             const containerId = containerRes.data.id;
 
@@ -74,10 +90,10 @@ export class InstagramPublisher {
                 attempts++;
                 await new Promise(r => setTimeout(r, 2000)); // wait 2s
 
-                const statusRes = await axios.get(`https://graph.facebook.com/${this.graphApiVersion}/${containerId}`, {
+                const statusRes = await axios.get(`${apiHost}/${containerId}`, {
                     params: {
                         fields: 'status_code,status',
-                        access_token: accessToken,
+                        access_token: cleanToken,
                     },
                 });
 
@@ -97,11 +113,11 @@ export class InstagramPublisher {
             }
 
             // Step 3: Publish container
-            const publishUrl = `https://graph.facebook.com/${this.graphApiVersion}/${igUserId}/media_publish`;
+            const publishUrl = `${apiHost}/${igUserId}/media_publish`;
             const publishRes = await axios.post(publishUrl, null, {
                 params: {
                     creation_id: containerId,
-                    access_token: accessToken,
+                    access_token: cleanToken,
                 },
             });
 
