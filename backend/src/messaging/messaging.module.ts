@@ -8,6 +8,7 @@ import { UploadController } from './upload.controller';
 import { AutoReplyService } from '../auto-reply/auto-reply.service';
 import { AutoReplyController } from '../auto-reply/auto-reply.controller';
 import { PagesController } from './pages/pages.controller';
+import { TikTokAuthController } from './tiktok-auth.controller';
 import { SettingsModule } from '../settings/settings.module';
 import { CommentsModule } from '../comments/comments.module';
 import { SocketModule } from '../socket/socket.module';
@@ -28,7 +29,8 @@ import { AuthModule } from '../auth/auth.module';
         WebhooksController,
         UploadController,
         AutoReplyController,
-        PagesController
+        PagesController,
+        TikTokAuthController
     ],
     exports: [FacebookService, AutoReplyService]
 })

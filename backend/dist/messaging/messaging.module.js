@@ -17,6 +17,7 @@ const upload_controller_1 = require("./upload.controller");
 const auto_reply_service_1 = require("../auto-reply/auto-reply.service");
 const auto_reply_controller_1 = require("../auto-reply/auto-reply.controller");
 const pages_controller_1 = require("./pages/pages.controller");
+const tiktok_auth_controller_1 = require("./tiktok-auth.controller");
 const settings_module_1 = require("../settings/settings.module");
 const comments_module_1 = require("../comments/comments.module");
 const socket_module_1 = require("../socket/socket.module");
@@ -40,7 +41,8 @@ exports.MessagingModule = MessagingModule = __decorate([
             webhooks_controller_1.WebhooksController,
             upload_controller_1.UploadController,
             auto_reply_controller_1.AutoReplyController,
-            pages_controller_1.PagesController
+            pages_controller_1.PagesController,
+            tiktok_auth_controller_1.TikTokAuthController
         ],
         exports: [facebook_service_1.FacebookService, auto_reply_service_1.AutoReplyService]
     })

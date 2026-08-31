@@ -23,6 +23,11 @@ export default function PagesSettings() {
             if (event.data && event.data.type === 'FB_PAGES_RECEIVED') {
                 setOauthPages(event.data.pages || []);
                 setIsOauthModalOpen(true);
+            } else if (event.data && event.data.type === 'TIKTOK_AUTH_SUCCESS') {
+                fetchPages();
+                alert(`TikTok account ${event.data.username ? '@' + event.data.username : ''} connected successfully!`);
+            } else if (event.data && event.data.type === 'TIKTOK_AUTH_ERROR') {
+                alert(`TikTok connection failed: ${event.data.error}`);
             }
         };
 
@@ -40,6 +45,12 @@ export default function PagesSettings() {
         const oauthUrl = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&auth_type=rerequest&return_scopes=true&response_type=code`;
         
         window.open(oauthUrl, 'Facebook Connect', 'width=600,height=650,status=no,toolbar=no,menubar=no,location=no');
+    };
+
+    const handleTikTokLoginConnect = () => {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
+        const loginUrl = `${apiUrl}/api/auth/tiktok/login`;
+        window.open(loginUrl, 'TikTok Connect', 'width=600,height=750,status=no,toolbar=no,menubar=no,location=no');
     };
 
     const handleConnectOauthPage = async (page: { pageId: string; pageName: string; accessToken: string }) => {
@@ -223,17 +234,31 @@ export default function PagesSettings() {
                         </div>
                         {(selectedPlatform === 'facebook' || selectedPlatform === 'instagram' || selectedPlatform === 'tiktok') && (
                             <div className="flex gap-3">
-                                {(selectedPlatform === 'facebook' || selectedPlatform === 'instagram') && (
+                                {selectedPlatform === 'facebook' && (
                                     <button
                                         onClick={handleFacebookLoginConnect}
-                                        className={`px-6 py-2.5 rounded-xl flex items-center gap-2 font-bold uppercase tracking-widest text-xs transition-all shadow-lg active:scale-95 ${
-                                            selectedPlatform === 'instagram'
-                                            ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 text-white hover:opacity-90 shadow-pink-600/20'
-                                            : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/10'
-                                        }`}
+                                        className="px-6 py-2.5 rounded-xl flex items-center gap-2 font-bold uppercase tracking-widest text-xs transition-all shadow-lg active:scale-95 bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/10"
                                     >
-                                        {selectedPlatform === 'instagram' ? <Instagram size={18} /> : <Facebook size={18} />}
-                                        Connect {selectedPlatform === 'instagram' ? 'Instagram' : 'page'} by login
+                                        <Facebook size={18} />
+                                        Connect page by login
+                                    </button>
+                                )}
+                                {selectedPlatform === 'instagram' && (
+                                    <button
+                                        onClick={handleFacebookLoginConnect}
+                                        className="px-6 py-2.5 rounded-xl flex items-center gap-2 font-bold uppercase tracking-widest text-xs transition-all shadow-lg active:scale-95 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 text-white hover:opacity-90 shadow-pink-600/20"
+                                    >
+                                        <Instagram size={18} />
+                                        Connect Instagram by login
+                                    </button>
+                                )}
+                                {selectedPlatform === 'tiktok' && (
+                                    <button
+                                        onClick={handleTikTokLoginConnect}
+                                        className="px-6 py-2.5 rounded-xl flex items-center gap-2 font-bold uppercase tracking-widest text-xs transition-all shadow-lg active:scale-95 bg-black hover:bg-slate-900 text-white shadow-slate-900/30 border border-slate-700"
+                                    >
+                                        <Music2 size={18} className="text-pink-500" />
+                                        Connect TikTok by login
                                     </button>
                                 )}
                                 <button
@@ -244,7 +269,7 @@ export default function PagesSettings() {
                                         : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-600/20'
                                     }`}
                                 >
-                                    {isAdding ? 'Cancel' : <><Plus size={18} /> Connect {selectedPlatform === 'facebook' ? 'Page' : selectedPlatform === 'instagram' ? 'Instagram' : 'Account'}</>}
+                                    {isAdding ? 'Cancel' : <><Plus size={18} /> Manual Setup</>}
                                 </button>
                             </div>
                         )}
@@ -396,15 +421,52 @@ export default function PagesSettings() {
 
                                 {!isLoading && filteredPages.length === 0 && !isAdding && (
                                     <div className="col-span-full py-20 text-center text-slate-400 border-2 border-slate-100 dark:border-slate-800 border-dashed rounded-[2.5rem] bg-white dark:bg-slate-800/50 shadow-sm">
-                                        <Facebook className="mx-auto mb-6 opacity-10" size={64} />
+                                        {selectedPlatform === 'tiktok' ? (
+                                            <Music2 className="mx-auto mb-6 text-pink-500 opacity-30" size={64} />
+                                        ) : selectedPlatform === 'instagram' ? (
+                                            <Instagram className="mx-auto mb-6 text-purple-500 opacity-30" size={64} />
+                                        ) : (
+                                            <Facebook className="mx-auto mb-6 text-blue-500 opacity-30" size={64} />
+                                        )}
                                         <h4 className="text-xl font-black text-slate-900 dark:text-white mb-2">No {platforms.find(p => p.id === selectedPlatform)?.label} Connected</h4>
-                                        <p className="text-sm font-medium mb-8">Connect your page to start automating your messages.</p>
-                                        <button 
-                                            onClick={() => setIsAdding(true)} 
-                                            className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest text-xs hover:bg-indigo-700 shadow-xl shadow-indigo-600/20 transition-all"
-                                        >
-                                            Connect your first page
-                                        </button>
+                                        <p className="text-sm font-medium mb-8">
+                                            {selectedPlatform === 'tiktok'
+                                                ? 'Connect your TikTok account to publish videos and manage posts.'
+                                                : 'Connect your page to start automating your messages and posts.'}
+                                        </p>
+                                        <div className="flex justify-center items-center gap-3">
+                                            {selectedPlatform === 'tiktok' ? (
+                                                <button 
+                                                    onClick={handleTikTokLoginConnect} 
+                                                    className="bg-black hover:bg-slate-900 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl shadow-slate-900/30 transition-all flex items-center gap-2 border border-slate-700"
+                                                >
+                                                    <Music2 size={16} className="text-pink-500" />
+                                                    Connect TikTok by Login
+                                                </button>
+                                            ) : selectedPlatform === 'instagram' ? (
+                                                <button 
+                                                    onClick={handleFacebookLoginConnect} 
+                                                    className="bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl shadow-pink-600/20 transition-all flex items-center gap-2"
+                                                >
+                                                    <Instagram size={16} />
+                                                    Connect Instagram by Login
+                                                </button>
+                                            ) : (
+                                                <button 
+                                                    onClick={handleFacebookLoginConnect} 
+                                                    className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl shadow-blue-600/20 transition-all flex items-center gap-2"
+                                                >
+                                                    <Facebook size={16} />
+                                                    Connect Facebook by Login
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={() => setIsAdding(true)}
+                                                className="bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-6 py-3 rounded-xl font-black uppercase tracking-widest text-xs hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+                                            >
+                                                Manual Setup
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                             </div>
