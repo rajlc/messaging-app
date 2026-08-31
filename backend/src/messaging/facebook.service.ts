@@ -214,10 +214,13 @@ export class FacebookService {
             params: {
                 access_token: userAccessToken,
                 fields: 'id,name,access_token,category,tasks',
+                limit: 100,
             },
         });
 
+        console.log(`[FacebookService] /me/accounts raw count: ${response.data?.data?.length || 0}`);
         if (response.data && response.data.data) {
+            console.log(`[FacebookService] Pages found:`, response.data.data.map((p: any) => `${p.name} (${p.id})`));
             const accounts = response.data.data;
             
             const accountsWithIg = await Promise.all(accounts.map(async (acc: any) => {

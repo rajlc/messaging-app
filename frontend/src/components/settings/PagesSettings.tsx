@@ -37,7 +37,7 @@ export default function PagesSettings() {
             ? 'pages_show_list,pages_messaging,pages_read_engagement,pages_manage_metadata,pages_manage_posts'
             : 'pages_show_list,pages_messaging,pages_read_engagement,pages_manage_metadata,pages_manage_posts,instagram_basic,instagram_manage_messages,instagram_content_publish';
         
-        const oauthUrl = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&response_type=code`;
+        const oauthUrl = `https://www.facebook.com/v21.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&auth_type=rerequest&return_scopes=true&response_type=code`;
         
         window.open(oauthUrl, 'Facebook Connect', 'width=600,height=650,status=no,toolbar=no,menubar=no,location=no');
     };
@@ -431,7 +431,45 @@ export default function PagesSettings() {
                         {/* Modal Body */}
                         <div className="p-6 max-h-[30rem] overflow-y-auto custom-scrollbar space-y-4">
                             {oauthPages.length === 0 ? (
-                                <p className="text-center py-8 text-slate-500 text-sm">No new connectable pages found.</p>
+                                <div className="py-6 px-4 text-center space-y-4">
+                                    <div className="w-14 h-14 bg-amber-50 dark:bg-amber-900/20 text-amber-500 rounded-2xl flex items-center justify-center mx-auto">
+                                        <Facebook size={28} />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-slate-800 dark:text-white text-base">No New Pages Returned by Meta</h4>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto leading-relaxed">
+                                            Facebook didn't send back any new pages. This usually happens if the page was already connected, permissions were skipped, or granular access was restricted.
+                                        </p>
+                                    </div>
+                                    <div className="bg-slate-50 dark:bg-slate-900/60 rounded-2xl p-4 text-left text-xs space-y-2 border border-slate-200 dark:border-slate-700 max-w-md mx-auto">
+                                        <p className="font-bold text-slate-700 dark:text-slate-300">How to ensure your Page (e.g. Bagmati Shop) appears:</p>
+                                        <ul className="list-disc list-inside space-y-1.5 text-slate-600 dark:text-slate-400 leading-relaxed">
+                                            <li>In the Facebook popup, select <b>"Opt in to all current and future Pages"</b> instead of only one page.</li>
+                                            <li>In step 2 (<i>"What is test2 allowed to do?"</i>), ensure <b>all permission toggles are switched ON</b>.</li>
+                                            <li>Or, connect it directly using <b>+ Connect Page</b> (enter Page ID & Token).</li>
+                                        </ul>
+                                    </div>
+                                    <div className="flex items-center justify-center gap-3 pt-2">
+                                        <button
+                                            onClick={() => {
+                                                setIsOauthModalOpen(false);
+                                                handleFacebookLoginConnect();
+                                            }}
+                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
+                                        >
+                                            Try Again (Rerequest)
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setIsOauthModalOpen(false);
+                                                setIsAdding(true);
+                                            }}
+                                            className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-xl text-xs font-bold transition-all"
+                                        >
+                                            Connect Manually
+                                        </button>
+                                    </div>
+                                </div>
                             ) : (
                                 selectedPlatform === 'facebook' ? (
                                     oauthPages.map((page) => {
