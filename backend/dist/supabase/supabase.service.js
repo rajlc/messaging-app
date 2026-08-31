@@ -478,10 +478,11 @@ class SupabaseService {
         return true;
     }
     async uploadFile(file, fileName, mimeType, bucket = 'content') {
+        const safeName = fileName.replace(/[^\w.-]/g, '_').replace(/_+/g, '_');
         const { data, error } = await this.getClient()
             .storage
             .from(bucket)
-            .upload(fileName, file, {
+            .upload(safeName, file, {
             contentType: mimeType,
             upsert: true
         });

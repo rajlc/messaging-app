@@ -24,6 +24,7 @@ import { SocketModule } from './socket/socket.module';
 import { AdsManagementModule } from './ads-management/ads-management.module';
 import { SettlementsModule } from './settlements/settlements.module';
 import { RiderInventoryModule } from './rider-inventory/rider-inventory.module';
+import { PublishingModule } from './publishing/publishing.module';
 
 import { AppService } from './app.service';
 
@@ -44,6 +45,7 @@ import { AppService } from './app.service';
     AdsManagementModule,
     SettlementsModule,
     RiderInventoryModule,
+    PublishingModule,
   ],
   controllers: [
     AppController,

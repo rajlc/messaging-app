@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
     MessageCircle, MessageSquare, User, ShoppingBag,
-    Settings, LogOut, BarChart3, Truck, Home, Store, Boxes
+    Settings, LogOut, BarChart3, Truck, Home, Store, Boxes, Rss
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -107,6 +107,7 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
                 <NavButton label="Messages"    icon={<MessageCircle size={18} />} active={activeView === 'messages' && activeType === 'messages'}         onClick={() => navigateTo('messages', 'messages')} />
                 <NavButton label="Comments"    icon={<MessageSquare size={18} />} active={activeView === 'messages' && activeType === 'comments'}         onClick={() => navigateTo('messages', 'comments')} />
                 <NavButton label="Marketplace" icon={<Store size={18} />}         active={activeView === 'messages' && activeType === 'marketplace'}      onClick={() => navigateTo('messages', 'marketplace')} />
+                <NavButton label="Manage Post" icon={<Rss size={18} />}           active={activeView === 'manage-post'}                                  onClick={() => navigateTo('manage-post')} />
             </div>
 
             {/* Section Label */}

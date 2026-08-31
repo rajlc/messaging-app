@@ -1043,3 +1043,10 @@ Keep batch sizes reasonable (recommended ≤ 100 IDs per request).
 Please use this api endpoints very carefully.
 Avoid duplication of order creation from both bulk file upload and api system.
 No Spamming or running scripts to overload the server.
+README.md 2026-05-27
+31 / 32
+Tel: 015199684
+Tinkune, Kathmandu
+Nepal Can Move
+README.md 2026-05-27
+32 / 32

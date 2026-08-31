@@ -654,10 +654,11 @@ export class SupabaseService {
      * Upload a file to Supabase Storage
      */
     async uploadFile(file: Buffer, fileName: string, mimeType: string, bucket = 'content') {
+        const safeName = fileName.replace(/[^\w.-]/g, '_').replace(/_+/g, '_');
         const { data, error } = await this.getClient()
             .storage
             .from(bucket)
-            .upload(fileName, file, {
+            .upload(safeName, file, {
                 contentType: mimeType,
                 upsert: true
             });
