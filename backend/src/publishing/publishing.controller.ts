@@ -38,4 +38,9 @@ export class PublishingController {
         await this.publishingService.executePublishing(id);
         return await this.publishingService.getPostById(id);
     }
+
+    @Post('sync')
+    async syncPosts(@Body() body?: { pageId?: string; platform?: string }) {
+        return await this.publishingService.syncExternalPosts(body?.pageId, body?.platform);
+    }
 }

@@ -6,8 +6,8 @@ import {
     AlertCircle, Facebook, Instagram, ImagePlus,
     X, Calendar, Hash, Globe,
     Loader2, RefreshCw,
-    Image as ImageIcon, Film, Sparkles, Target, Check, Info,
-    Download, ExternalLink, Copy, Eye, Search, Repeat
+    Image as ImageIcon, Film, Play, Sparkles, Target, Check, Info,
+    Download, ExternalLink, Copy, Eye, Search, Repeat, ChevronDown
 } from 'lucide-react';
 import { ArrowLeft } from 'lucide-react';
 
@@ -27,6 +27,14 @@ async function downloadMedia(url: string, defaultName?: string) {
     } catch {
         window.open(url, '_blank');
     }
+}
+
+function isDirectVideoUrl(url?: string | null): boolean {
+    if (!url) return false;
+    const clean = url.toLowerCase().split('?')[0];
+    if (clean.endsWith('.mp4') || clean.endsWith('.webm') || clean.endsWith('.mov') || clean.endsWith('.m4v')) return true;
+    if (url.includes('.jpg') || url.includes('.jpeg') || url.includes('.png') || url.includes('.webp')) return false;
+    return false;
 }
 
 /* ─────────────────── Types ─────────────────── */
@@ -78,6 +86,7 @@ interface Post {
     updated_at: string;
     targets: PostTarget[];
     platformContent?: Record<Platform, PlatformContent>;
+    platform_content?: Record<string, any>;
 }
 
 /* ─────────────────── Platform Meta ─────────────────── */
@@ -127,13 +136,13 @@ function getPlatformMeta(platform?: string) {
 }
 
 const STATUS_META: Record<PostStatus, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
-    draft:      { label: 'Draft',      color: 'text-slate-500',   bg: 'bg-slate-100 dark:bg-slate-800',    icon: <Edit3 size={11} /> },
-    queued:     { label: 'Queued',     color: 'text-amber-600',   bg: 'bg-amber-50 dark:bg-amber-900/30',  icon: <Clock size={11} /> },
-    processing: { label: 'Processing', color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-900/30',    icon: <Loader2 size={11} className="animate-spin" /> },
-    partial:    { label: 'Partial',    color: 'text-orange-600',  bg: 'bg-orange-50 dark:bg-orange-900/30',icon: <AlertCircle size={11} /> },
-    published:  { label: 'Published',  color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/30', icon: <CheckCircle2 size={11} /> },
-    failed:     { label: 'Failed',     color: 'text-red-600',     bg: 'bg-red-50 dark:bg-red-900/30',      icon: <XCircle size={11} /> },
-    scheduled:  { label: 'Scheduled',  color: 'text-violet-600',  bg: 'bg-violet-50 dark:bg-violet-900/30',icon: <Calendar size={11} /> },
+    draft:      { label: 'Draft',      color: 'text-slate-500',   bg: 'bg-slate-100 dark:bg-slate-800',    icon: <Edit3 size={12} /> },
+    queued:     { label: 'Queued',     color: 'text-amber-600',   bg: 'bg-amber-50 dark:bg-amber-900/30',  icon: <Clock size={12} /> },
+    processing: { label: 'Processing', color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-900/30',    icon: <Loader2 size={12} className="animate-spin" /> },
+    partial:    { label: 'Partial',    color: 'text-orange-600',  bg: 'bg-orange-50 dark:bg-orange-900/30',icon: <AlertCircle size={12} /> },
+    published:  { label: 'Published',  color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/30', icon: <CheckCircle2 size={12} /> },
+    failed:     { label: 'Failed',     color: 'text-red-600',     bg: 'bg-red-50 dark:bg-red-900/30',      icon: <XCircle size={12} /> },
+    scheduled:  { label: 'Scheduled',  color: 'text-violet-600',  bg: 'bg-violet-50 dark:bg-violet-900/30',icon: <Calendar size={12} /> },
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
@@ -153,7 +162,7 @@ function getPlatformWarnings(platform: Platform, mediaType: MediaType): string[]
 function StatusBadge({ status }: { status: PostStatus }) {
     const s = STATUS_META[status] ?? STATUS_META.draft;
     return (
-        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${s.bg} ${s.color}`}>
+        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${s.bg} ${s.color}`}>
             {s.icon} {s.label}
         </span>
     );
@@ -433,6 +442,7 @@ function PostDetailsModal({
     const [copied, setCopied] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const isSyncedPost = (post.platform_content as any)?.is_synced === true || (post.platform_content as any)?.origin === 'platform_sync';
 
     const handleCopy = () => {
         const text = [post.caption, (post.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
@@ -480,14 +490,21 @@ function PostDetailsModal({
                 <div className="p-6 overflow-y-auto flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Media Preview & Download */}
                     <div className="space-y-3">
-                        <div className="rounded-2xl overflow-hidden bg-slate-950 border border-slate-200 dark:border-slate-700 flex items-center justify-center min-h-[220px] max-h-[360px]">
-                            {post.media_url && post.media_type === 'photo' && (
-                                <img src={post.media_url} alt="" className="w-full h-full max-h-[360px] object-contain" />
-                            )}
-                            {post.media_url && post.media_type === 'video' && (
-                                <video src={post.media_url} controls className="w-full h-full max-h-[360px]" />
-                            )}
-                            {!post.media_url && (
+                        <div className="rounded-2xl overflow-hidden bg-slate-950 border border-slate-200 dark:border-slate-700 flex items-center justify-center min-h-[220px] max-h-[360px] relative">
+                            {post.media_url ? (
+                                isDirectVideoUrl(post.media_url) ? (
+                                    <video src={post.media_url} controls className="w-full h-full max-h-[360px]" />
+                                ) : (
+                                    <div className="relative w-full h-full flex items-center justify-center">
+                                        <img src={post.media_url} alt="" className="w-full h-full max-h-[360px] object-contain" />
+                                        {post.media_type === 'video' && (
+                                            <div className="absolute bg-black/40 backdrop-blur-xs rounded-full p-4 pointer-events-none shadow-md">
+                                                <Play size={28} className="text-white fill-white ml-1" />
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            ) : (
                                 <div className="py-16 text-center text-slate-500">
                                     <ImageIcon size={36} className="mx-auto mb-2 opacity-40" />
                                     <p className="text-xs">Text-only post (No media)</p>
@@ -550,20 +567,33 @@ function PostDetailsModal({
                                                     <span style={{ color: meta.color }}>{meta.icon(16)}</span>
                                                     <div className="min-w-0">
                                                         <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{target.page_name}</p>
-                                                        <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${
-                                                            target.status === 'success' ? 'text-emerald-600 dark:text-emerald-400' :
-                                                            target.status === 'failed' ? 'text-red-500' : 'text-amber-500'
-                                                        }`}>
-                                                            {target.status === 'success' ? '✓ Published' : target.status === 'failed' ? '✕ Failed' : '● In progress'}
-                                                        </span>
+                                                        <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                                            <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${
+                                                                target.status === 'success' ? 'text-emerald-600 dark:text-emerald-400' :
+                                                                target.status === 'failed' ? 'text-red-500' : 'text-amber-500'
+                                                            }`}>
+                                                                {target.status === 'success' ? '✓ Published' : target.status === 'failed' ? '✕ Failed' : '● In progress'}
+                                                            </span>
+                                                            {target.published_at && (
+                                                                <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                                                                    <Clock size={10} /> {fmtDate(target.published_at)}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
 
                                                 {target.platform_post_id && (
-                                                    <a href={`https://facebook.com/${target.platform_post_id}`}
+                                                    <a href={
+                                                        target.platform === 'instagram'
+                                                            ? `https://instagram.com/p/${target.platform_post_id}`
+                                                            : target.platform === 'tiktok'
+                                                            ? `https://www.tiktok.com/@${target.page_name}`
+                                                            : `https://facebook.com/${target.platform_post_id}`
+                                                    }
                                                         target="_blank" rel="noopener noreferrer"
                                                         className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 hover:underline flex-shrink-0">
-                                                        View on Facebook <ExternalLink size={12} />
+                                                        View on {target.platform === 'facebook' ? 'Facebook' : target.platform === 'instagram' ? 'Instagram' : 'TikTok'} <ExternalLink size={12} />
                                                     </a>
                                                 )}
                                             </div>
@@ -575,11 +605,13 @@ function PostDetailsModal({
 
                         {/* Actions */}
                         <div className="flex items-center gap-2 pt-4 border-t border-slate-200 dark:border-slate-700 flex-wrap">
-                            <button onClick={handleDelete} disabled={deleting}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all border border-red-200 dark:border-red-800 disabled:opacity-50">
-                                {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                                Delete Post & Storage
-                            </button>
+                            {!isSyncedPost && (
+                                <button onClick={handleDelete} disabled={deleting}
+                                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all border border-red-200 dark:border-red-800 disabled:opacity-50">
+                                    {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                                    Delete Post & Storage
+                                </button>
+                            )}
 
                             <div className="flex-1" />
 
@@ -607,7 +639,7 @@ function PostDetailsModal({
     );
 }
 
-/* ─── PostCard ─── */
+/* ─── PostCard (Modern List Format) ─── */
 function PostCard({
     post,
     onView,
@@ -622,6 +654,7 @@ function PostCard({
     onDelete: () => void;
 }) {
     const [deleting, setDeleting] = useState(false);
+    const isSyncedPost = (post.platform_content as any)?.is_synced === true || (post.platform_content as any)?.origin === 'platform_sync';
 
     const handleDelete = async () => {
         if (!confirm('Permanently delete this post and remove its media from storage to free up space?')) return;
@@ -635,137 +668,187 @@ function PostCard({
         } catch { setDeleting(false); }
     };
 
+    const latestPublishedAt = post.targets
+        ?.filter(t => t.status === 'success' && t.published_at)
+        ?.map(t => new Date(t.published_at!).getTime())
+        ?.sort((a, b) => b - a)[0];
+
+    const publishDateIso = latestPublishedAt
+        ? new Date(latestPublishedAt).toISOString()
+        : (post.status === 'published' ? post.updated_at || post.created_at : null);
+
     return (
-        <div className="group bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-lg hover:shadow-indigo-500/5 transition-all duration-200 overflow-hidden flex flex-col justify-between">
-            <div>
-                {/* Thumbnail with Download Overlay */}
-                <div className="relative overflow-hidden group/media">
-                    {post.media_url && post.media_type === 'photo' && (
-                        <div className="h-44 overflow-hidden bg-slate-950">
-                            <img src={post.media_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                        </div>
-                    )}
-                    {post.media_url && post.media_type === 'video' && (
-                        <div className="h-44 bg-slate-950 flex items-center justify-center relative overflow-hidden">
-                            <video src={post.media_url} className="h-full w-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-300" muted />
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <div className="bg-white/20 backdrop-blur-sm rounded-full p-3 shadow-lg">
-                                    <Film size={20} className="text-white" />
+        <div className="group bg-white dark:bg-slate-800/95 hover:bg-slate-50/90 dark:hover:bg-slate-750 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 hover:border-indigo-400/70 dark:hover:border-indigo-500/70 hover:shadow-md transition-all duration-150 p-3 flex items-center justify-between gap-3 w-full min-w-[740px]">
+            {/* COLUMN 1: Product Image or Video Thumbnail */}
+            <div className="flex-shrink-0">
+                <div
+                    onClick={onView}
+                    className="w-20 h-20 rounded-xl overflow-hidden bg-slate-950 border border-slate-200 dark:border-slate-700 flex items-center justify-center relative cursor-pointer group/thumb shadow-xs flex-shrink-0"
+                    title="Click to view details"
+                >
+                    {post.media_url ? (
+                        isDirectVideoUrl(post.media_url) ? (
+                            <>
+                                <video src={post.media_url} className="w-full h-full object-cover opacity-85" muted />
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                    <div className="bg-white/30 backdrop-blur-xs rounded-full p-2 shadow-sm">
+                                        <Play size={13} className="text-white fill-white ml-0.5" />
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
-                    )}
-                    {!post.media_url && (
-                        <div className="h-20 bg-gradient-to-br from-indigo-50 to-violet-50 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center">
-                            <ImageIcon size={24} className="text-indigo-200 dark:text-slate-600" />
-                        </div>
-                    )}
-
-                    {/* Quick Download Button on media hover */}
-                    {post.media_url && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                downloadMedia(post.media_url!, `${post.caption?.slice(0, 20) || 'media'}.${post.media_type === 'video' ? 'mp4' : 'jpg'}`);
-                            }}
-                            title="Download media in original quality"
-                            className="absolute top-2.5 right-2.5 bg-black/65 hover:bg-black/90 text-white rounded-full p-2 opacity-0 group-hover/media:opacity-100 transition-all shadow-md backdrop-blur-sm active:scale-95">
-                            <Download size={13} />
-                        </button>
-                    )}
-                </div>
-
-                <div className="p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                        <StatusBadge status={post.status} />
-                        <span className="text-[11px] text-slate-400">{fmtDate(post.created_at)}</span>
-                    </div>
-
-                    <p className="text-sm text-slate-700 dark:text-slate-200 line-clamp-2 leading-relaxed min-h-[40px]">
-                        {post.caption || <span className="text-slate-400 italic">No caption</span>}
-                    </p>
-
-                    {/* Published Account Badges */}
-                    <div className="space-y-1.5 pt-1">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Published Accounts</p>
-                        <div className="flex flex-wrap gap-1.5">
-                            {post.targets.length > 0 ? (
-                                post.targets.map(t => {
-                                    const m = getPlatformMeta(t.platform);
-                                    return (
-                                        <span key={t.id} title={`${t.page_name} • ${t.status}`}
-                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-slate-600/60">
-                                            <span style={{ color: m.color }}>{m.icon(12)}</span>
-                                            <span className="truncate max-w-[120px]">{t.page_name}</span>
-                                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                                                t.status === 'success' ? 'bg-emerald-500' :
-                                                t.status === 'failed' ? 'bg-red-500' :
-                                                t.status === 'processing' ? 'bg-blue-400 animate-pulse' : 'bg-slate-300 dark:bg-slate-500'
-                                            }`} />
-                                        </span>
-                                    );
-                                })
-                            ) : (
-                                <span className="text-xs text-slate-400 italic">No accounts selected</span>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Target error messages if any failed */}
-                    {post.targets.some(t => t.status === 'failed' && t.error_message) && (
-                        <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-xl p-2.5 space-y-1">
-                            {post.targets.filter(t => t.status === 'failed' && t.error_message).map(t => (
-                                <p key={t.id} className="truncate" title={t.error_message}>
-                                    <span className="font-semibold">{t.page_name}:</span> {t.error_message}
-                                </p>
-                            ))}
-                        </div>
-                    )}
-
-                    {post.scheduled_at && (
-                        <div className="flex items-center gap-1.5 text-xs text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20 rounded-lg px-2 py-1">
-                            <Calendar size={10} /> {fmtDate(post.scheduled_at)}
+                            </>
+                        ) : (
+                            <>
+                                <img
+                                    src={post.media_url}
+                                    alt=""
+                                    className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform duration-200"
+                                />
+                                {post.media_type === 'video' && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                                        <div className="bg-white/30 backdrop-blur-xs rounded-full p-2 shadow-sm">
+                                            <Play size={13} className="text-white fill-white ml-0.5" />
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )
+                    ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-indigo-50 to-violet-50 dark:from-slate-800 dark:to-slate-900 flex items-center justify-center">
+                            <ImageIcon size={24} className="text-indigo-300 dark:text-slate-600" />
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Actions Footer */}
-            <div className="p-4 pt-0">
-                <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
-                    <button onClick={onView}
-                        className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-2 px-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-all">
-                        <Eye size={13} /> View Details
-                    </button>
+            {/* COLUMN 2: Product Name (long in 2nd row), Date/Time, and Status below */}
+            <div className="flex-1 min-w-[180px] max-w-sm flex flex-col justify-center gap-1">
+                <h4
+                    className="text-sm font-bold text-slate-800 dark:text-slate-100 line-clamp-2 leading-snug hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                    title={post.caption || 'Untitled post'}
+                    onClick={onView}
+                >
+                    {post.caption || <span className="text-slate-400 italic font-normal">No caption / Untitled</span>}
+                </h4>
 
-                    <button onClick={onReuse}
-                        className="flex items-center justify-center gap-1 text-xs font-semibold py-2 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-400 transition-all"
-                        title="Reuse caption and media as a new post">
-                        <Repeat size={12} /> Reuse
-                    </button>
-
-                    {(post.status === 'draft' || post.status === 'failed') && (
-                        <button onClick={onEdit}
-                            className="flex items-center justify-center gap-1.5 text-xs font-semibold py-2 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-all"
-                            title="Edit & Retry">
-                            <Edit3 size={13} />
-                        </button>
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    <Clock size={12} className="text-slate-400 flex-shrink-0" />
+                    <span>
+                        {publishDateIso ? fmtDate(publishDateIso) : fmtDate(post.created_at)}
+                    </span>
+                    {post.scheduled_at && (
+                        <span className="ml-1.5 inline-flex items-center gap-1 text-violet-600 dark:text-violet-400 font-semibold">
+                            <Calendar size={11} /> Sch: {fmtDate(post.scheduled_at)}
+                        </span>
                     )}
+                </div>
 
-                    {post.media_url && (
-                        <button onClick={() => downloadMedia(post.media_url!, `${post.caption?.slice(0, 20) || 'media'}.${post.media_type === 'video' ? 'mp4' : 'jpg'}`)}
-                            className="flex items-center justify-center text-xs font-semibold p-2 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-all"
-                            title="Download media in original quality">
-                            <Download size={13} />
-                        </button>
+                {/* Status Badge below Time and Date */}
+                <div className="pt-0.5">
+                    <StatusBadge status={post.status} />
+                </div>
+            </div>
+
+            {/* COLUMN 3: Published Accounts in Row Wise */}
+            <div className="flex-1 min-w-[160px] flex flex-col justify-center gap-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Published Accounts</span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {post.targets && post.targets.length > 0 ? (
+                        post.targets.map(t => {
+                            const m = getPlatformMeta(t.platform);
+                            return (
+                                <span
+                                    key={t.id}
+                                    title={`${t.page_name} • ${t.status}${t.published_at ? ` (${fmtDate(t.published_at)})` : ''}`}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-700/70 text-slate-700 dark:text-slate-200 border border-slate-200/70 dark:border-slate-600/70"
+                                >
+                                    <span style={{ color: m.color }}>{m.icon(12)}</span>
+                                    <span className="truncate max-w-[130px]">{t.page_name}</span>
+                                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                        t.status === 'success' ? 'bg-emerald-500' :
+                                        t.status === 'failed' ? 'bg-red-500' :
+                                        t.status === 'processing' ? 'bg-blue-400 animate-pulse' : 'bg-slate-300 dark:bg-slate-500'
+                                    }`} />
+                                </span>
+                            );
+                        })
+                    ) : (
+                        <span className="text-xs text-slate-400 italic">No accounts selected</span>
                     )}
+                </div>
+            </div>
 
-                    {/* Delete button available for ALL posts */}
-                    <button onClick={handleDelete} disabled={deleting}
-                        className="flex items-center justify-center text-xs font-semibold p-2 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 transition-all disabled:opacity-50"
-                        title="Delete post and remove media from storage">
-                        {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+            {/* COLUMN 4: Action Buttons in Row/Stack Type (Top: View, Middle: Reuse, Bottom: Delete) */}
+            <div className="flex flex-col gap-1 w-20 flex-shrink-0">
+                <button
+                    onClick={onView}
+                    className="w-full inline-flex items-center justify-center gap-1 py-1 px-2.5 rounded-lg text-xs font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-all active:scale-95 shadow-2xs"
+                    title="View post details"
+                >
+                    <Eye size={12} /> View
+                </button>
+                <button
+                    onClick={onReuse}
+                    className="w-full inline-flex items-center justify-center gap-1 py-1 px-2.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 transition-all active:scale-95 shadow-2xs"
+                    title="Reuse caption and media as a new post"
+                >
+                    <Repeat size={12} /> Reuse
+                </button>
+                {!isSyncedPost && (
+                    <button
+                        onClick={handleDelete}
+                        disabled={deleting}
+                        className="w-full inline-flex items-center justify-center gap-1 py-1 px-2.5 rounded-lg text-xs font-semibold bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-all active:scale-95 disabled:opacity-50 shadow-2xs"
+                        title="Delete post and storage"
+                    >
+                        {deleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Delete
                     </button>
+                )}
+            </div>
+
+            {/* COLUMN 5: Download & Links of Posts */}
+            <div className="flex flex-col justify-center gap-1.5 w-28 flex-shrink-0 border-l border-slate-100 dark:border-slate-700/60 pl-3">
+                {/* Download Button */}
+                {post.media_url ? (
+                    <button
+                        onClick={() => downloadMedia(post.media_url!, `${post.caption?.slice(0, 20) || 'media'}.${post.media_type === 'video' ? 'mp4' : 'jpg'}`)}
+                        className="inline-flex items-center justify-center gap-1.5 py-1 px-2.5 rounded-lg text-xs font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/70 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-all active:scale-95 shadow-2xs"
+                        title="Download original photo/video"
+                    >
+                        <Download size={12} /> Download
+                    </button>
+                ) : (
+                    <span className="text-xs text-slate-400 italic">No media</span>
+                )}
+
+                {/* Direct Post Links */}
+                <div className="flex flex-col gap-0.5">
+                    {post.targets && post.targets.filter(t => t.status === 'success').length > 0 ? (
+                        post.targets.filter(t => t.status === 'success').map(t => {
+                            const m = getPlatformMeta(t.platform);
+                            const fbId = t.platform_post_id?.includes('_') ? t.platform_post_id.split('_')[1] : t.platform_post_id;
+                            const liveUrl = t.platform === 'facebook'
+                                ? `https://facebook.com/${fbId}`
+                                : t.platform === 'instagram'
+                                ? `https://www.instagram.com/p/${t.platform_post_id}`
+                                : `https://www.tiktok.com/@${t.page_name}`;
+                            return (
+                                <a
+                                    key={t.id}
+                                    href={liveUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 hover:underline"
+                                    title={`Open on ${m.label}`}
+                                >
+                                    <span style={{ color: m.color }}>{m.icon(11)}</span>
+                                    <span className="truncate max-w-[80px]">{m.label} Link</span>
+                                    <ExternalLink size={10} className="text-slate-400" />
+                                </a>
+                            );
+                        })
+                    ) : (
+                        <span className="text-xs text-slate-400 italic">No live link</span>
+                    )}
                 </div>
             </div>
         </div>
@@ -1092,7 +1175,41 @@ export default function ManagePostView() {
     const [viewPost, setViewPost] = useState<Post | null>(null);
     const [filterStatus, setFilterStatus] = useState<PostStatus | 'all'>('all');
     const [filterPlatform, setFilterPlatform] = useState<Platform | 'all'>('all');
+    const [filterPageId, setFilterPageId] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState('');
+    const [syncing, setSyncing] = useState(false);
+
+    const handlePlatformChange = (p: Platform | 'all') => {
+        setFilterPlatform(p);
+        setFilterPageId('all');
+    };
+
+    const handleSync = async () => {
+        setSyncing(true);
+        try {
+            const payload: { platform?: string; pageId?: string } = {};
+            if (filterPlatform !== 'all') {
+                payload.platform = filterPlatform;
+            }
+            if (filterPageId !== 'all') {
+                payload.pageId = filterPageId;
+            }
+
+            await fetch(`${API_URL}/api/publish/sync`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${getToken()}`
+                },
+                body: JSON.stringify(payload)
+            });
+            await fetchData();
+        } catch (e) {
+            console.error('Failed to sync posts:', e);
+        } finally {
+            setSyncing(false);
+        }
+    };
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -1148,7 +1265,20 @@ export default function ManagePostView() {
 
     const filtered = posts.filter(p => {
         if (filterStatus !== 'all' && p.status !== filterStatus) return false;
-        if (filterPlatform !== 'all' && !p.targets.some(t => t.platform === filterPlatform)) return false;
+        if (filterPlatform !== 'all') {
+            const hasPlatform = p.targets?.some(t => t.platform === filterPlatform);
+            if (!hasPlatform) return false;
+
+            if (filterPageId !== 'all') {
+                const selectedPage = pages.find(pg => pg.id === filterPageId);
+                const matchesPage = p.targets?.some(t =>
+                    t.platform === filterPlatform &&
+                    (t.page_id === filterPageId ||
+                        (selectedPage && (t.page_id === selectedPage.page_id || t.page_name === selectedPage.page_name)))
+                );
+                if (!matchesPage) return false;
+            }
+        }
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase().trim();
             const matchCaption = (p.caption || '').toLowerCase().includes(q);
@@ -1203,9 +1333,25 @@ export default function ManagePostView() {
                 </div>
 
                 <div className="flex items-center gap-2 flex-shrink-0">
-                    <button onClick={fetchData}
-                        className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all" title="Refresh">
-                        <RefreshCw size={16} />
+                    <button onClick={handleSync} disabled={syncing}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-all border border-indigo-200/50 dark:border-indigo-800/40 disabled:opacity-50"
+                        title={
+                            filterPageId !== 'all'
+                                ? `Sync posts for ${pages.find(p => p.id === filterPageId)?.page_name}`
+                                : filterPlatform !== 'all'
+                                ? `Sync all ${filterPlatform} posts`
+                                : 'Sync live posts from all platforms'
+                        }>
+                        <RefreshCw size={13} className={syncing ? "animate-spin" : ""} />
+                        <span>
+                            {syncing
+                                ? 'Syncing...'
+                                : filterPageId !== 'all'
+                                ? `Sync ${pages.find(p => p.id === filterPageId)?.page_name?.split(' ')?.[0] || 'Page'}`
+                                : filterPlatform !== 'all'
+                                ? `Sync ${filterPlatform === 'facebook' ? 'Facebook' : filterPlatform === 'instagram' ? 'Instagram' : 'TikTok'}`
+                                : 'Sync Live Posts'}
+                        </span>
                     </button>
                     <button onClick={() => { setEditPost(null); setIsReusing(false); setView('compose'); }}
                         className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/25 active:scale-[0.98] transition-all">
@@ -1215,35 +1361,84 @@ export default function ManagePostView() {
             </div>
 
             {/* Filter bar */}
-            <div className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-6 py-3 flex items-center gap-3 flex-shrink-0 flex-wrap">
-                {/* Status */}
+            <div className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-6 py-2.5 flex items-center gap-3 flex-shrink-0 flex-wrap">
+                {/* Status Tabs */}
                 <div className="flex items-center gap-1.5 flex-wrap">
-                    {(['all', 'draft', 'scheduled', 'published', 'failed'] as const).map(s => (
-                        <button key={s} onClick={() => setFilterStatus(s)}
-                            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all border ${filterStatus === s ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-transparent text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
-                            {s === 'all' ? 'All Posts' : s.charAt(0).toUpperCase() + s.slice(1)}
-                            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${filterStatus === s ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
-                                {counts[s] ?? 0}
-                            </span>
-                        </button>
-                    ))}
+                    {(['all', 'draft', 'scheduled', 'published', 'failed'] as const).map(s => {
+                        const isActive = filterStatus === s;
+                        return (
+                            <button
+                                key={s}
+                                onClick={() => setFilterStatus(s)}
+                                className={`h-9 flex items-center gap-2 rounded-xl px-3 transition-all duration-200 text-left border cursor-pointer text-[13px] tracking-[0.1px] font-sans leading-none
+                                    ${isActive 
+                                        ? 'bg-[#EEF2FF] text-[#4F46E5] border-indigo-200/80 dark:bg-indigo-900/40 dark:text-indigo-400 dark:border-indigo-800/50 font-semibold shadow-xs' 
+                                        : 'bg-transparent text-[#374151] border-slate-200/80 hover:bg-slate-50 dark:text-slate-400 dark:border-slate-700/80 dark:hover:text-slate-200 dark:hover:bg-slate-800/50 font-medium'
+                                    }`}
+                            >
+                                <span>{s === 'all' ? 'All Posts' : s.charAt(0).toUpperCase() + s.slice(1)}</span>
+                                <span className={`px-1.5 py-0.5 rounded-lg text-[11px] font-bold leading-none ${
+                                    isActive 
+                                        ? 'bg-[#4F46E5] text-white dark:bg-indigo-500' 
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                                }`}>
+                                    {counts[s] ?? 0}
+                                </span>
+                            </button>
+                        );
+                    })}
                 </div>
 
-                <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
+                <div className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
 
-                {/* Platform */}
-                <div className="flex items-center gap-1.5">
+                {/* Platform Filter Buttons */}
+                <div className="flex items-center gap-1.5 flex-wrap">
                     {(['all', 'facebook', 'instagram', 'tiktok'] as const).map(p => {
                         const meta = p !== 'all' ? getPlatformMeta(p) : null;
                         const isActive = filterPlatform === p;
                         return (
-                            <button key={p} onClick={() => setFilterPlatform(p)}
-                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all border ${isActive ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-transparent text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
-                                {meta && <span style={isActive ? { color: 'white' } : { color: meta.color }}>{meta.icon(12)}</span>}
-                                {p === 'all' ? 'All Platforms' : meta!.label}
+                            <button
+                                key={p}
+                                onClick={() => handlePlatformChange(p)}
+                                className={`h-9 flex items-center gap-2 rounded-xl px-3 transition-all duration-200 border cursor-pointer text-[13px] tracking-[0.1px] font-sans leading-none
+                                    ${isActive 
+                                        ? 'bg-[#EEF2FF] text-[#4F46E5] border-indigo-200/80 dark:bg-indigo-900/40 dark:text-indigo-400 dark:border-indigo-800/50 font-semibold shadow-xs' 
+                                        : 'bg-transparent text-[#374151] border-slate-200/80 hover:bg-slate-50 dark:text-slate-400 dark:border-slate-700/80 dark:hover:text-slate-200 dark:hover:bg-slate-800/50 font-medium'
+                                    }`}
+                            >
+                                {meta && <span style={isActive ? { color: '#4F46E5' } : { color: meta.color }}>{meta.icon(14)}</span>}
+                                <span>{p === 'all' ? 'All Platforms' : meta!.label}</span>
                             </button>
                         );
                     })}
+
+                    {/* Dynamic Account Dropdown list when a platform is selected */}
+                    {filterPlatform !== 'all' && (() => {
+                        const platformPages = pages.filter(pg => pg.platform === filterPlatform);
+                        const platformLabel = filterPlatform === 'facebook' ? 'Pages' : 'Accounts';
+                        return (
+                            <div className="flex items-center gap-1.5 ml-1.5 animate-in fade-in zoom-in-95 duration-150">
+                                <span className="text-[12px] text-slate-500 font-semibold tracking-[0.1px]">Account:</span>
+                                <div className="relative">
+                                    <select
+                                        value={filterPageId}
+                                        onChange={(e) => setFilterPageId(e.target.value)}
+                                        className="appearance-none bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-[#374151] dark:text-slate-100 font-medium text-[13px] h-9 pl-3 pr-8 rounded-xl border border-slate-200/80 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer transition-all shadow-2xs"
+                                    >
+                                        <option value="all">
+                                            All {filterPlatform.charAt(0).toUpperCase() + filterPlatform.slice(1)} {platformLabel} ({platformPages.length})
+                                        </option>
+                                        {platformPages.map(page => (
+                                            <option key={page.id} value={page.id}>
+                                                {page.page_name} {page.username ? `(@${page.username})` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </div>
 
                 {searchQuery && (
@@ -1302,7 +1497,7 @@ export default function ManagePostView() {
                         )}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <div className="w-full space-y-2.5">
                         {filtered.map(post => (
                             <PostCard key={post.id} post={post}
                                 onView={() => setViewPost(post)}

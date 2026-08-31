@@ -36,8 +36,8 @@ export class TikTokAuthController {
         const redirectUri = this.getRedirectUri(req);
         const csrfState = crypto.randomBytes(16).toString('hex');
 
-        // Scopes: user profile info, video publish, video upload
-        const scope = 'user.info.basic,video.publish,video.upload';
+        // Scopes: user profile info, video publish, video upload, video list
+        const scope = 'user.info.basic,video.publish,video.upload,video.list';
 
         const authUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${clientKey}&scope=${encodeURIComponent(scope)}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&state=${csrfState}`;
 

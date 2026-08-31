@@ -1,4 +1,5 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import axios from 'axios';
 import { supabaseService } from '../supabase/supabase.service';
 import { FacebookPublisher } from './publishers/facebook.publisher';
 import { InstagramPublisher } from './publishers/instagram.publisher';
@@ -6,8 +7,10 @@ import { TikTokPublisher } from './publishers/tiktok.publisher';
 import { CreatePostDto, PlatformType, PostStatus } from './publishing.types';
 
 @Injectable()
-export class PublishingService {
+export class PublishingService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(PublishingService.name);
+    private schedulerInterval: NodeJS.Timeout | null = null;
+    private isCheckingScheduled = false;
 
     constructor(
         private readonly fbPublisher: FacebookPublisher,
@@ -19,10 +22,72 @@ export class PublishingService {
         return supabaseService.getClient();
     }
 
+    onModuleInit() {
+        this.logger.log('[PublishingService] Initializing background scheduler for scheduled posts (every 30 seconds)...');
+        // Initial check on server start
+        setTimeout(() => this.checkAndPublishScheduledPosts(), 3000);
+        // Periodic check every 30 seconds
+        this.schedulerInterval = setInterval(() => {
+            this.checkAndPublishScheduledPosts();
+        }, 30 * 1000);
+    }
+
+    onModuleDestroy() {
+        if (this.schedulerInterval) {
+            clearInterval(this.schedulerInterval);
+            this.schedulerInterval = null;
+        }
+    }
+
+    /**
+     * Periodically check for scheduled posts that have reached or passed their scheduled time
+     */
+    async checkAndPublishScheduledPosts() {
+        if (this.isCheckingScheduled) return;
+        this.isCheckingScheduled = true;
+        try {
+            const now = new Date().toISOString();
+            const { data: duePosts, error } = await this.supabase
+                .from('social_posts')
+                .select('id, scheduled_at, status')
+                .eq('status', 'scheduled')
+                .lte('scheduled_at', now);
+
+            if (error) {
+                this.logger.error(`[PublishingService] Error querying scheduled posts: ${error.message}`);
+                return;
+            }
+
+            if (duePosts && duePosts.length > 0) {
+                this.logger.log(`[PublishingService] Found ${duePosts.length} scheduled post(s) ready to publish!`);
+                for (const p of duePosts) {
+                    this.logger.log(`[PublishingService] Triggering auto-publish for scheduled post ${p.id} (scheduled for ${p.scheduled_at})`);
+                    // Mark as queued first to prevent concurrent execution
+                    await this.supabase.from('social_posts').update({
+                        status: 'queued',
+                        updated_at: new Date().toISOString()
+                    }).eq('id', p.id);
+
+                    // Execute publishing asynchronously
+                    this.executePublishing(p.id).catch(err => {
+                        this.logger.error(`[PublishingService] Error executing scheduled post ${p.id}: ${err.message}`);
+                    });
+                }
+            }
+        } catch (e: any) {
+            this.logger.error(`[PublishingService] Scheduled check exception: ${e.message}`);
+        } finally {
+            this.isCheckingScheduled = false;
+        }
+    }
+
     /**
      * Get all posts with their targets
      */
     async getPosts() {
+        // Eagerly trigger check on fetch as well
+        this.checkAndPublishScheduledPosts().catch(() => {});
+
         const { data: posts, error } = await this.supabase
             .from('social_posts')
             .select(`
@@ -156,7 +221,7 @@ export class PublishingService {
                 media_url: dto.mediaUrl || null,
                 media_type: dto.mediaType || 'none',
                 status: initialStatus,
-                platform_content: dto.platformContent || {},
+                platform_content: { ...(dto.platformContent || {}), is_synced: false, origin: 'webapp' },
                 scheduled_at: isScheduled ? new Date(dto.scheduledAt!).toISOString() : null,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
@@ -305,14 +370,23 @@ export class PublishingService {
      * Delete a post (cascades targets) and deletes media from Supabase Storage to free up space
      */
     async deletePost(id: string) {
-        try {
-            // 1. Fetch post first to get media_url
-            const { data: post } = await this.supabase
-                .from('social_posts')
-                .select('media_url')
-                .eq('id', id)
-                .maybeSingle();
+        // 1. Fetch post first to verify whether it is a synced external post and get media_url
+        const { data: post } = await this.supabase
+            .from('social_posts')
+            .select('media_url, platform_content')
+            .eq('id', id)
+            .maybeSingle();
 
+        if (!post) {
+            throw new NotFoundException(`Post with ID ${id} not found`);
+        }
+
+        const isSynced = post.platform_content?.is_synced === true || post.platform_content?.origin === 'platform_sync';
+        if (isSynced) {
+            throw new BadRequestException('Posts synced directly from external platforms cannot be deleted from the webapp.');
+        }
+
+        try {
             if (post?.media_url) {
                 // Check if other posts are still referencing this exact media_url
                 const { data: otherPosts } = await this.supabase
@@ -477,5 +551,443 @@ export class PublishingService {
         }).eq('id', postId);
 
         this.logger.log(`[PublishingService] Completed post ${postId} with status: ${finalStatus} (${successCount} succeeded, ${failCount} failed)`);
+    }
+
+    /**
+     * Sync previous/existing posts directly from Facebook Pages, Instagram & TikTok
+     */
+    async syncExternalPosts(targetPageId?: string, targetPlatform?: string) {
+        this.logger.log(`[PublishingService] Syncing external posts... (filter platform: ${targetPlatform || 'all'}, filter page: ${targetPageId || 'all'})`);
+
+        // Helper functions for matching
+        const cleanText = (t?: string) => (t || '').replace(/#[\w_]+/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+        const captionsMatch = (c1?: string, c2?: string) => {
+            const s1 = cleanText(c1);
+            const s2 = cleanText(c2);
+            if (!s1 || !s2) return false;
+            if (s1 === s2) return true;
+            const minLen = Math.min(s1.length, s2.length, 25);
+            return s1.slice(0, minLen) === s2.slice(0, minLen);
+        };
+        const timestampsClose = (t1?: string, t2?: string, maxMinutes = 240) => {
+            if (!t1 || !t2) return false;
+            const d1 = new Date(t1).getTime();
+            const d2 = new Date(t2).getTime();
+            if (isNaN(d1) || isNaN(d2)) return false;
+            return Math.abs(d1 - d2) <= maxMinutes * 60 * 1000;
+        };
+        const extractReelId = (url?: string) => {
+            if (!url) return null;
+            const match = url.match(/(?:reel|videos|posts|p)\/([\w\-]+)/);
+            return match ? match[1] : null;
+        };
+
+        // Load all existing posts and targets from database
+        const { data: existingPostsData } = await this.supabase
+            .from('social_posts')
+            .select(`
+                *,
+                targets:social_post_targets(*)
+            `);
+        const existingPosts: any[] = existingPostsData || [];
+
+        const existingIds = new Set<string>();
+        for (const p of existingPosts) {
+            for (const t of p.targets || []) {
+                if (t.platform_post_id) {
+                    existingIds.add(t.platform_post_id);
+                    if (t.platform_post_id.includes('_')) {
+                        existingIds.add(t.platform_post_id.split('_')[1]);
+                    }
+                }
+            }
+        }
+
+        let query = this.supabase.from('pages').select('*');
+        if (targetPageId && targetPageId !== 'all') {
+            query = query.eq('id', targetPageId);
+        } else if (targetPlatform && targetPlatform !== 'all') {
+            query = query.eq('platform', targetPlatform);
+        }
+        const { data: pages } = await query;
+        if (!pages || pages.length === 0) {
+            return { syncedCount: 0, message: 'No active connected pages found' };
+        }
+
+        let newSynced = 0;
+
+        for (const page of pages) {
+            if (!page.access_token || page.access_token === 'none') continue;
+
+            if (page.platform === 'facebook') {
+                try {
+                    const res = await axios.get(`https://graph.facebook.com/v21.0/${page.page_id}/posts`, {
+                        params: {
+                            fields: 'id,message,created_time,full_picture,attachments{media_type,media,unshimmed_url},permalink_url',
+                            limit: 50,
+                            access_token: page.access_token
+                        }
+                    });
+                    const fbPosts = res.data?.data || [];
+
+                    const liveIds = new Set<string>();
+                    const livePermalinks: string[] = [];
+                    const liveCaptions: string[] = [];
+
+                    for (const fp of fbPosts) {
+                        const rawId = fp.id;
+                        const shortId = fp.id.includes('_') ? fp.id.split('_')[1] : fp.id;
+                        const reelId = extractReelId(fp.permalink_url);
+
+                        liveIds.add(rawId);
+                        if (shortId) liveIds.add(shortId);
+                        if (reelId) liveIds.add(reelId);
+                        if (fp.permalink_url) livePermalinks.push(fp.permalink_url);
+                        if (fp.message) liveCaptions.push(fp.message);
+
+                        // De-duplication check: does this post match an existing post created from webapp or DB?
+                        let matchedPost = existingPosts.find((p: any) => {
+                            // 1. Direct ID match on targets
+                            const hasId = p.targets?.some((t: any) =>
+                                t.platform_post_id && (
+                                    t.platform_post_id === rawId ||
+                                    t.platform_post_id === shortId ||
+                                    (reelId && t.platform_post_id === reelId)
+                                )
+                            );
+                            if (hasId) return true;
+
+                            // 2. Permalink contains existing target platform_post_id
+                            if (fp.permalink_url && p.targets?.some((t: any) => t.platform_post_id && fp.permalink_url.includes(t.platform_post_id))) {
+                                return true;
+                            }
+
+                            // 3. Caption + Timestamp similarity (posted within 4 hours)
+                            if (captionsMatch(p.caption, fp.message) && timestampsClose(p.created_at, fp.created_time, 240)) {
+                                return true;
+                            }
+
+                            return false;
+                        });
+
+                        if (matchedPost) {
+                            // Already exists — ensure target has live feed ID and is marked success
+                            let target = matchedPost.targets?.find((t: any) =>
+                                t.platform === 'facebook' && (t.page_id === page.id || t.page_name === page.page_name)
+                            );
+
+                            if (target) {
+                                if (target.platform_post_id !== rawId || target.status !== 'success') {
+                                    await this.supabase.from('social_post_targets').update({
+                                        platform_post_id: rawId,
+                                        status: 'success',
+                                        published_at: fp.created_time,
+                                        updated_at: new Date().toISOString()
+                                    }).eq('id', target.id);
+                                    target.platform_post_id = rawId;
+                                    target.status = 'success';
+                                }
+                            } else {
+                                const { data: newTarget } = await this.supabase.from('social_post_targets').insert({
+                                    post_id: matchedPost.id,
+                                    page_id: page.id,
+                                    platform: 'facebook',
+                                    page_name: page.page_name,
+                                    status: 'success',
+                                    platform_post_id: rawId,
+                                    published_at: fp.created_time
+                                }).select().single();
+                                if (newTarget) {
+                                    matchedPost.targets = matchedPost.targets || [];
+                                    matchedPost.targets.push(newTarget);
+                                }
+                            }
+                            existingIds.add(rawId);
+                            if (shortId) existingIds.add(shortId);
+                            continue;
+                        }
+
+                        // Completely new external post
+                        const caption = fp.message || '';
+                        const mediaUrl = fp.attachments?.data?.[0]?.media?.image?.src || fp.full_picture || null;
+                        const isVideo = fp.attachments?.data?.[0]?.media_type === 'video';
+                        const mediaType = isVideo ? 'video' : (mediaUrl ? 'photo' : 'none');
+
+                        const { data: newPost, error: postErr } = await this.supabase
+                            .from('social_posts')
+                            .insert({
+                                caption: caption,
+                                media_url: mediaUrl,
+                                media_type: mediaType,
+                                status: 'published',
+                                platform_content: { is_synced: true, origin: 'platform_sync' },
+                                created_at: fp.created_time,
+                                updated_at: fp.created_time
+                            })
+                            .select()
+                            .single();
+
+                        if (postErr) {
+                            this.logger.error(`[PublishingService] Sync insert error: ${postErr.message}`);
+                            continue;
+                        }
+
+                        const { data: createdTarget } = await this.supabase.from('social_post_targets').insert({
+                            post_id: newPost.id,
+                            page_id: page.id,
+                            platform: 'facebook',
+                            page_name: page.page_name,
+                            status: 'success',
+                            platform_post_id: rawId,
+                            published_at: fp.created_time
+                        }).select().single();
+
+                        newPost.targets = [createdTarget];
+                        existingPosts.push(newPost);
+                        existingIds.add(rawId);
+                        if (shortId) existingIds.add(shortId);
+                        newSynced++;
+                    }
+
+                    // Live feed verification: check webapp posts that targeted this page
+                    for (const p of existingPosts) {
+                        const target = p.targets?.find((t: any) =>
+                            t.platform === 'facebook' && (t.page_id === page.id || t.page_name === page.page_name)
+                        );
+                        if (target && target.status === 'success') {
+                            const ageMinutes = (Date.now() - new Date(p.created_at).getTime()) / (1000 * 60);
+                            // Only check posts created more than 10 minutes ago
+                            if (ageMinutes > 10) {
+                                const foundInLive = liveIds.has(target.platform_post_id) ||
+                                    (target.platform_post_id && liveIds.has(target.platform_post_id.split('_')[1])) ||
+                                    (target.platform_post_id && livePermalinks.some(u => u.includes(target.platform_post_id))) ||
+                                    liveCaptions.some(c => captionsMatch(p.caption, c));
+
+                                if (!foundInLive) {
+                                    this.logger.log(`[PublishingService] Target ${target.id} on post ${p.id} not found on Facebook live feed. Marking as not published / failed.`);
+                                    await this.supabase.from('social_post_targets').update({
+                                        status: 'failed',
+                                        error_message: 'Post not found in page feed (deleted or unpublished).',
+                                        updated_at: new Date().toISOString()
+                                    }).eq('id', target.id);
+                                    target.status = 'failed';
+
+                                    const allFailed = (p.targets || []).every((t: any) => t.status === 'failed');
+                                    if (allFailed) {
+                                        await this.supabase.from('social_posts').update({
+                                            status: 'failed',
+                                            updated_at: new Date().toISOString()
+                                        }).eq('id', p.id);
+                                        p.status = 'failed';
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                } catch (err: any) {
+                    const isTokenError = err.response?.data?.error?.code === 190 || err.response?.status === 400;
+                    if (isTokenError) {
+                        this.logger.log(`[PublishingService] Facebook page ${page.page_name} token expired or requires reconnect.`);
+                    } else {
+                        this.logger.warn(`[PublishingService] Failed to sync Facebook page ${page.page_name}: ${err.message}`);
+                    }
+                }
+            } else if (page.platform === 'instagram') {
+                try {
+                    const isIgToken = page.access_token.startsWith('IG');
+                    const base = isIgToken ? 'https://graph.instagram.com/v21.0' : 'https://graph.facebook.com/v21.0';
+                    const endpoint = isIgToken ? `${base}/me/media` : `${base}/${page.page_id}/media`;
+
+                    const res = await axios.get(endpoint, {
+                        params: {
+                            fields: 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp',
+                            limit: 50,
+                            access_token: page.access_token
+                        }
+                    });
+                    const igPosts = res.data?.data || [];
+
+                    const liveIds = new Set<string>();
+                    const liveCaptions: string[] = [];
+
+                    for (const ip of igPosts) {
+                        liveIds.add(ip.id);
+                        if (ip.caption) liveCaptions.push(ip.caption);
+
+                        // De-duplication check
+                        let matchedPost = existingPosts.find((p: any) => {
+                            const hasId = p.targets?.some((t: any) => t.platform_post_id === ip.id);
+                            if (hasId) return true;
+                            if (captionsMatch(p.caption, ip.caption) && timestampsClose(p.created_at, ip.timestamp, 240)) {
+                                return true;
+                            }
+                            return false;
+                        });
+
+                        if (matchedPost) {
+                            let target = matchedPost.targets?.find((t: any) =>
+                                t.platform === 'instagram' && (t.page_id === page.id || t.page_name === page.page_name)
+                            );
+                            if (target) {
+                                if (target.platform_post_id !== ip.id || target.status !== 'success') {
+                                    await this.supabase.from('social_post_targets').update({
+                                        platform_post_id: ip.id,
+                                        status: 'success',
+                                        published_at: ip.timestamp,
+                                        updated_at: new Date().toISOString()
+                                    }).eq('id', target.id);
+                                    target.platform_post_id = ip.id;
+                                    target.status = 'success';
+                                }
+                            } else {
+                                const { data: newTarget } = await this.supabase.from('social_post_targets').insert({
+                                    post_id: matchedPost.id,
+                                    page_id: page.id,
+                                    platform: 'instagram',
+                                    page_name: page.page_name,
+                                    status: 'success',
+                                    platform_post_id: ip.id,
+                                    published_at: ip.timestamp
+                                }).select().single();
+                                if (newTarget) {
+                                    matchedPost.targets = matchedPost.targets || [];
+                                    matchedPost.targets.push(newTarget);
+                                }
+                            }
+                            existingIds.add(ip.id);
+                            continue;
+                        }
+
+                        // Completely new Instagram post
+                        const caption = ip.caption || '';
+                        const mediaUrl = ip.media_url || ip.thumbnail_url || null;
+                        const mediaType = ip.media_type === 'VIDEO' ? 'video' : (mediaUrl ? 'photo' : 'none');
+
+                        const { data: newPost, error: postErr } = await this.supabase
+                            .from('social_posts')
+                            .insert({
+                                caption: caption,
+                                media_url: mediaUrl,
+                                media_type: mediaType,
+                                status: 'published',
+                                platform_content: { is_synced: true, origin: 'platform_sync' },
+                                created_at: ip.timestamp,
+                                updated_at: ip.timestamp
+                            })
+                            .select()
+                            .single();
+
+                        if (postErr) {
+                            this.logger.error(`[PublishingService] Sync insert error: ${postErr.message}`);
+                            continue;
+                        }
+
+                        const { data: createdTarget } = await this.supabase.from('social_post_targets').insert({
+                            post_id: newPost.id,
+                            page_id: page.id,
+                            platform: 'instagram',
+                            page_name: page.page_name,
+                            status: 'success',
+                            platform_post_id: ip.id,
+                            published_at: ip.timestamp
+                        }).select().single();
+
+                        newPost.targets = [createdTarget];
+                        existingPosts.push(newPost);
+                        existingIds.add(ip.id);
+                        newSynced++;
+                    }
+
+                    // Live feed verification for Instagram
+                    for (const p of existingPosts) {
+                        const target = p.targets?.find((t: any) =>
+                            t.platform === 'instagram' && (t.page_id === page.id || t.page_name === page.page_name)
+                        );
+                        if (target && target.status === 'success') {
+                            const ageMinutes = (Date.now() - new Date(p.created_at).getTime()) / (1000 * 60);
+                            if (ageMinutes > 10) {
+                                const foundInLive = liveIds.has(target.platform_post_id) ||
+                                    liveCaptions.some(c => captionsMatch(p.caption, c));
+
+                                if (!foundInLive) {
+                                    this.logger.log(`[PublishingService] Target ${target.id} on post ${p.id} not found on Instagram feed. Marking as not published / failed.`);
+                                    await this.supabase.from('social_post_targets').update({
+                                        status: 'failed',
+                                        error_message: 'Post not found in Instagram feed (deleted or unpublished).',
+                                        updated_at: new Date().toISOString()
+                                    }).eq('id', target.id);
+                                    target.status = 'failed';
+
+                                    const allFailed = (p.targets || []).every((t: any) => t.status === 'failed');
+                                    if (allFailed) {
+                                        await this.supabase.from('social_posts').update({
+                                            status: 'failed',
+                                            updated_at: new Date().toISOString()
+                                        }).eq('id', p.id);
+                                        p.status = 'failed';
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                } catch (err: any) {
+                    this.logger.warn(`[PublishingService] Failed to sync Instagram ${page.page_name}: ${err.message}`);
+                }
+            } else if (page.platform === 'tiktok') {
+                try {
+                    const res = await axios.post(
+                        'https://open.tiktokapis.com/v2/video/list/?fields=id,title,video_description,duration,cover_image_url,embed_link,share_url',
+                        { max_count: 20 },
+                        {
+                            headers: {
+                                Authorization: `Bearer ${page.access_token}`,
+                                'Content-Type': 'application/json',
+                            },
+                        }
+                    );
+                    const ttVideos = res.data?.data?.videos || [];
+                    for (const tv of ttVideos) {
+                        if (existingIds.has(tv.id)) continue;
+                        const caption = tv.video_description || tv.title || '';
+                        const mediaUrl = tv.cover_image_url || null;
+
+                        const { data: newPost, error: postErr } = await this.supabase
+                            .from('social_posts')
+                            .insert({
+                                caption: caption,
+                                media_url: mediaUrl,
+                                media_type: 'video',
+                                status: 'published',
+                                platform_content: { is_synced: true, origin: 'platform_sync' },
+                                created_at: new Date().toISOString(),
+                                updated_at: new Date().toISOString(),
+                            })
+                            .select()
+                            .single();
+
+                        if (!postErr && newPost) {
+                            await this.supabase.from('social_post_targets').insert({
+                                post_id: newPost.id,
+                                page_id: page.id,
+                                platform: 'tiktok',
+                                page_name: page.page_name,
+                                status: 'success',
+                                platform_post_id: tv.id,
+                                published_at: new Date().toISOString(),
+                            });
+                            existingIds.add(tv.id);
+                            newSynced++;
+                        }
+                    }
+                } catch (err: any) {
+                    this.logger.log(`[PublishingService] TikTok sync note: ${err.response?.data?.error?.message || err.message}`);
+                }
+            }
+        }
+
+        this.logger.log(`[PublishingService] Sync finished! Synced ${newSynced} new external posts.`);
+        return { syncedCount: newSynced };
     }
 }
