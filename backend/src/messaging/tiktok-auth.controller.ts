@@ -102,15 +102,25 @@ export class TikTokAuthController {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
             });
 
-            const tokenData = tokenRes.data?.data;
-            if (!tokenData?.access_token) {
-                const apiErr = tokenRes.data?.error?.message || 'Token exchange failed';
-                throw new Error(apiErr);
+            this.logger.log(`[TikTok OAuth] Token Response: ${JSON.stringify(tokenRes.data)}`);
+
+            const raw = tokenRes.data || {};
+            // In TikTok API v2, access_token and open_id are returned at the root of the JSON response
+            const tokenData = (raw.access_token ? raw : raw.data) || {};
+
+            if (raw.error) {
+                const errMsg = raw.error_description || (typeof raw.error === 'object' ? raw.error?.message : raw.error);
+                throw new Error(`TikTok Error: ${errMsg || 'OAuth failed'}`);
             }
 
             const accessToken = tokenData.access_token;
             const openId = tokenData.open_id;
             const refreshToken = tokenData.refresh_token;
+
+            if (!accessToken) {
+                const apiErr = raw.error_description || raw.message || 'No access token returned by TikTok';
+                throw new Error(apiErr);
+            }
 
             this.logger.log(`[TikTok OAuth] Access token obtained for Open ID: ${openId}`);
 
@@ -125,7 +135,7 @@ export class TikTokAuthController {
                     headers: { Authorization: `Bearer ${accessToken}` }
                 });
 
-                const user = userRes.data?.data?.user;
+                const user = userRes.data?.data?.user || userRes.data?.user || userRes.data?.data;
                 if (user) {
                     displayName = user.display_name || user.username || displayName;
                     username = user.username || '';
@@ -198,7 +208,8 @@ export class TikTokAuthController {
             `);
         } catch (err: any) {
             this.logger.error(`[TikTok OAuth Error]: ${err.message}`, err.response?.data);
-            const detail = err.response?.data?.error?.message || err.message;
+            const resData = err.response?.data;
+            const detail = resData?.error_description || resData?.error?.message || resData?.error || err.message;
             return res.send(`
                 <!DOCTYPE html>
                 <html>
