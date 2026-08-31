@@ -11,6 +11,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 var PagesController_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PagesController = void 0;
@@ -18,6 +21,7 @@ const common_1 = require("@nestjs/common");
 const supabase_service_1 = require("../../supabase/supabase.service");
 const facebook_service_1 = require("../facebook.service");
 const passport_1 = require("@nestjs/passport");
+const axios_1 = __importDefault(require("axios"));
 let PagesController = class PagesController {
     static { PagesController_1 = this; }
     facebookService;
@@ -52,6 +56,24 @@ let PagesController = class PagesController {
                 }
                 catch (error) {
                     console.warn('Could not fetch page name, using default');
+                }
+            }
+        }
+        else if (platform === 'instagram') {
+            if (body.accessToken && body.accessToken !== 'none' && !body.pageName) {
+                try {
+                    const igRes = await axios_1.default.get(`https://graph.facebook.com/v21.0/${body.pageId}`, {
+                        params: {
+                            fields: 'name,username',
+                            access_token: body.accessToken
+                        }
+                    });
+                    if (igRes.data) {
+                        pageName = igRes.data.username ? `@${igRes.data.username}` : (igRes.data.name || pageName);
+                    }
+                }
+                catch (err) {
+                    console.warn('Could not fetch Instagram account name:', err.response?.data || err.message);
                 }
             }
         }

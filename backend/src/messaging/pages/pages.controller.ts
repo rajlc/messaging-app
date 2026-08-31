@@ -2,6 +2,7 @@ import { Controller, Get, Post, Delete, Patch, Body, Param, HttpException, HttpS
 import { supabaseService } from '../../supabase/supabase.service';
 import { FacebookService } from '../facebook.service';
 import { AuthGuard } from '@nestjs/passport';
+import axios from 'axios';
 
 @UseGuards(AuthGuard('jwt'))
 @Controller('api/pages')
@@ -43,6 +44,22 @@ export class PagesController {
                     pageName = await this.facebookService.getPageName(body.pageId, body.accessToken!);
                 } catch (error) {
                     console.warn('Could not fetch page name, using default');
+                }
+            }
+        } else if (platform === 'instagram') {
+            if (body.accessToken && body.accessToken !== 'none' && !body.pageName) {
+                try {
+                    const igRes = await axios.get(`https://graph.facebook.com/v21.0/${body.pageId}`, {
+                        params: {
+                            fields: 'name,username',
+                            access_token: body.accessToken
+                        }
+                    });
+                    if (igRes.data) {
+                        pageName = igRes.data.username ? `@${igRes.data.username}` : (igRes.data.name || pageName);
+                    }
+                } catch (err: any) {
+                    console.warn('Could not fetch Instagram account name:', err.response?.data || err.message);
                 }
             }
         } else if (!body.pageName) {

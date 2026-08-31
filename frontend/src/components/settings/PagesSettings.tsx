@@ -270,20 +270,34 @@ export default function PagesSettings() {
                                     <form onSubmit={handleAddPage} className="space-y-6 max-w-lg">
                                         <div>
                                             <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">
-                                                {selectedPlatform === 'facebook' ? 'Page ID' : 'TikTok Seller/Account ID'}
+                                                {selectedPlatform === 'facebook' 
+                                                    ? 'Facebook Page ID' 
+                                                    : selectedPlatform === 'instagram' 
+                                                    ? 'Instagram Business Account ID' 
+                                                    : 'TikTok Seller/Account ID'}
                                             </label>
                                             <input
                                                 type="text"
                                                 value={newPageId}
                                                 onChange={e => setNewPageId(e.target.value)}
-                                                placeholder={selectedPlatform === 'facebook' ? "e.g. 104568142519349" : "e.g. 745123456789"}
+                                                placeholder={
+                                                    selectedPlatform === 'facebook' 
+                                                        ? "e.g. 104568142519349" 
+                                                        : selectedPlatform === 'instagram' 
+                                                        ? "e.g. 17841400000000000" 
+                                                        : "e.g. 745123456789"
+                                                }
                                                 className="w-full bg-slate-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl p-3 text-slate-900 dark:text-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-mono"
                                                 required
                                             />
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">
-                                                {selectedPlatform === 'facebook' ? 'Access Token' : 'TikTok API Access Token'}
+                                                {selectedPlatform === 'facebook' 
+                                                    ? 'Facebook Page Access Token' 
+                                                    : selectedPlatform === 'instagram' 
+                                                    ? 'Instagram Graph API Access Token' 
+                                                    : 'TikTok API Access Token'}
                                             </label>
                                             <div className="relative">
                                                 <input
@@ -299,7 +313,9 @@ export default function PagesSettings() {
                                             <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1 ml-1">
                                                 <span className="w-1 h-1 bg-amber-500 rounded-full" />
                                                 {selectedPlatform === 'facebook' 
-                                                    ? 'Token must have pages_messaging and pages_manage_metadata permissions.'
+                                                    ? 'Token must have pages_messaging, pages_manage_metadata, and pages_manage_posts.' 
+                                                    : selectedPlatform === 'instagram' 
+                                                    ? 'Token must have instagram_basic, instagram_content_publish, and pages_read_engagement permissions.' 
                                                     : 'Token must have the required TikTok Business/Shop API permissions.'}
                                             </p>
                                         </div>
@@ -448,45 +464,68 @@ export default function PagesSettings() {
                                             </div>
                                         );
                                     })
-                                ) : (
-                                    oauthPages
-                                        .filter(page => page.instagramAccount !== null && page.instagramAccount !== undefined)
-                                        .map((page) => {
-                                            const ig = page.instagramAccount;
-                                            const isAlreadyConnected = pages.some(p => p.page_id === ig.id);
-                                            return (
-                                                <div
-                                                    key={ig.id}
-                                                    className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-gray-100 dark:border-slate-700"
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 rounded-xl flex items-center justify-center">
-                                                            <Instagram size={20} />
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <h4 className="font-bold text-slate-900 dark:text-white truncate max-w-[15rem]">{ig.name || ig.username}</h4>
-                                                            <p className="text-[10px] text-slate-400 font-mono">@{ig.username} | ID: {ig.id}</p>
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        disabled={isAlreadyConnected || isLoading}
-                                                        onClick={() => handleConnectOauthPage({
-                                                            pageId: ig.id,
-                                                            pageName: ig.name || ig.username,
-                                                            accessToken: page.accessToken
-                                                        })}
-                                                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm ${
-                                                            isAlreadyConnected
-                                                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
-                                                            : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/10 active:scale-95'
-                                                        }`}
-                                                    >
-                                                        {isAlreadyConnected ? 'Connected' : 'Connect'}
-                                                    </button>
+                                ) : (() => {
+                                    const igPages = oauthPages.filter(page => page.instagramAccount !== null && page.instagramAccount !== undefined);
+                                    if (igPages.length === 0) {
+                                        return (
+                                            <div className="py-6 px-4 text-center space-y-4">
+                                                <div className="w-14 h-14 bg-pink-50 dark:bg-pink-900/30 text-pink-500 rounded-2xl flex items-center justify-center mx-auto">
+                                                    <Instagram size={28} />
                                                 </div>
-                                            );
-                                        })
-                                )
+                                                <div>
+                                                    <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm">No Linked Instagram Account Found</h4>
+                                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto leading-relaxed">
+                                                        Meta retrieved your Facebook Pages, but none of them are linked to an <b>Instagram Professional (Business or Creator)</b> account.
+                                                    </p>
+                                                </div>
+                                                <div className="bg-slate-50 dark:bg-slate-900/60 rounded-2xl p-4 text-left text-xs space-y-2 border border-slate-200 dark:border-slate-700 max-w-md mx-auto">
+                                                    <p className="font-bold text-slate-700 dark:text-slate-300">How to link your Instagram to Facebook:</p>
+                                                    <ol className="list-decimal list-inside space-y-1.5 text-slate-600 dark:text-slate-400 leading-relaxed">
+                                                        <li>Open your <b>Instagram App</b> → <b>Settings</b> → <b>Account type</b> → Switch to <b>Professional Account</b>.</li>
+                                                        <li>Open <b>Facebook</b> on desktop → Switch to your Page (e.g. <i>Surbhika Cosmetic</i>).</li>
+                                                        <li>Go to <b>Settings</b> → <b>Linked Accounts</b> → Select <b>Instagram</b> → Click <b>Connect Account</b>.</li>
+                                                        <li>Click <b>Connect Instagram by login</b> again!</li>
+                                                    </ol>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    return igPages.map((page) => {
+                                        const ig = page.instagramAccount;
+                                        const isAlreadyConnected = pages.some(p => p.page_id === ig.id);
+                                        return (
+                                            <div
+                                                key={ig.id}
+                                                className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-gray-100 dark:border-slate-700"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 rounded-xl flex items-center justify-center">
+                                                        <Instagram size={20} />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <h4 className="font-bold text-slate-900 dark:text-white truncate max-w-[15rem]">{ig.name || ig.username}</h4>
+                                                        <p className="text-[10px] text-slate-400 font-mono">@{ig.username} | ID: {ig.id}</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    disabled={isAlreadyConnected || isLoading}
+                                                    onClick={() => handleConnectOauthPage({
+                                                        pageId: ig.id,
+                                                        pageName: ig.name || ig.username,
+                                                        accessToken: page.accessToken
+                                                    })}
+                                                    className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm ${
+                                                        isAlreadyConnected
+                                                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                                                        : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/10 active:scale-95'
+                                                    }`}
+                                                >
+                                                    {isAlreadyConnected ? 'Connected' : 'Connect'}
+                                                </button>
+                                            </div>
+                                        );
+                                    });
+                                })()
                             )}
                         </div>
                     </div>

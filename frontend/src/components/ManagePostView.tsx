@@ -7,7 +7,7 @@ import {
     X, Calendar, Hash, Globe,
     Loader2, RefreshCw,
     Image as ImageIcon, Film, Sparkles, Target, Check, Info,
-    Download, ExternalLink, Copy, Eye
+    Download, ExternalLink, Copy, Eye, Search, Repeat
 } from 'lucide-react';
 import { ArrowLeft } from 'lucide-react';
 
@@ -394,11 +394,13 @@ function PostDetailsModal({
     post,
     onClose,
     onEdit,
+    onReuse,
     onDelete,
 }: {
     post: Post;
     onClose: () => void;
     onEdit: () => void;
+    onReuse: () => void;
     onDelete: () => void;
 }) {
     const [copied, setCopied] = useState(false);
@@ -545,7 +547,7 @@ function PostDetailsModal({
                         </div>
 
                         {/* Actions */}
-                        <div className="flex items-center gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-2 pt-4 border-t border-slate-200 dark:border-slate-700 flex-wrap">
                             <button onClick={handleDelete} disabled={deleting}
                                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all border border-red-200 dark:border-red-800 disabled:opacity-50">
                                 {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
@@ -554,15 +556,20 @@ function PostDetailsModal({
 
                             <div className="flex-1" />
 
+                            <button onClick={onReuse}
+                                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-500/20 active:scale-[0.98] transition-all">
+                                <Repeat size={13} /> Reuse Post
+                            </button>
+
                             {(post.status === 'draft' || post.status === 'failed') && (
                                 <button onClick={onEdit}
-                                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition-all">
+                                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition-all">
                                     <Edit3 size={13} /> Edit
                                 </button>
                             )}
 
                             <button onClick={onClose}
-                                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 transition-all">
+                                className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 transition-all">
                                 Close
                             </button>
                         </div>
@@ -578,11 +585,13 @@ function PostCard({
     post,
     onView,
     onEdit,
+    onReuse,
     onDelete,
 }: {
     post: Post;
     onView: () => void;
     onEdit: () => void;
+    onReuse: () => void;
     onDelete: () => void;
 }) {
     const [deleting, setDeleting] = useState(false);
@@ -698,13 +707,19 @@ function PostCard({
             <div className="p-4 pt-0">
                 <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
                     <button onClick={onView}
-                        className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-2 px-3 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-all">
+                        className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-2 px-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-all">
                         <Eye size={13} /> View Details
+                    </button>
+
+                    <button onClick={onReuse}
+                        className="flex items-center justify-center gap-1 text-xs font-semibold py-2 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-400 transition-all"
+                        title="Reuse caption and media as a new post">
+                        <Repeat size={12} /> Reuse
                     </button>
 
                     {(post.status === 'draft' || post.status === 'failed') && (
                         <button onClick={onEdit}
-                            className="flex items-center justify-center gap-1.5 text-xs font-semibold py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-all"
+                            className="flex items-center justify-center gap-1.5 text-xs font-semibold py-2 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-all"
                             title="Edit & Retry">
                             <Edit3 size={13} />
                         </button>
@@ -734,7 +749,8 @@ function PostCard({
 function ComposerPanel({ pages, editPost, onClose, onSaved }: {
     pages: ConnectedPage[]; editPost: Post | null; onClose: () => void; onSaved: () => void;
 }) {
-    const isEditing = !!editPost;
+    const isEditing = !!editPost && !!editPost.id;
+    const isReused = !!editPost && !editPost.id;
     const [caption, setCaption] = useState(editPost?.caption || '');
     const [hashtags, setHashtags] = useState(editPost?.hashtags?.join(' ') || '');
     const [mediaUrl, setMediaUrl] = useState(editPost?.media_url || '');
@@ -817,7 +833,7 @@ function ComposerPanel({ pages, editPost, onClose, onSaved }: {
                     </button>
                     <div>
                         <h2 className="font-bold text-slate-800 dark:text-white text-base">
-                            {isEditing ? 'Edit Post' : 'Create New Post'}
+                            {isEditing ? 'Edit Post' : isReused ? 'New Post (Reused)' : 'Create New Post'}
                         </h2>
                         <p className="text-xs text-slate-400 dark:text-slate-500">
                             {selectedTargets.length === 0 ? 'Select accounts on the left' : `${selectedTargets.length} account${selectedTargets.length > 1 ? 's' : ''} selected`}
@@ -1006,6 +1022,7 @@ export default function ManagePostView() {
     const [viewPost, setViewPost] = useState<Post | null>(null);
     const [filterStatus, setFilterStatus] = useState<PostStatus | 'all'>('all');
     const [filterPlatform, setFilterPlatform] = useState<Platform | 'all'>('all');
+    const [searchQuery, setSearchQuery] = useState('');
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -1039,6 +1056,16 @@ export default function ManagePostView() {
         return () => clearInterval(interval);
     }, [posts, fetchData]);
 
+    // Reuse a post: clone content with empty id so it acts as a fresh new post
+    const handleReuse = (post: Post) => {
+        setEditPost({
+            ...post,
+            id: '', // empty id signifies a brand new post
+        });
+        setViewPost(null);
+        setView('compose');
+    };
+
     if (view === 'compose') {
         return (
             <div className="flex-1 flex flex-col h-full overflow-hidden bg-white dark:bg-slate-900">
@@ -1052,6 +1079,13 @@ export default function ManagePostView() {
     const filtered = posts.filter(p => {
         if (filterStatus !== 'all' && p.status !== filterStatus) return false;
         if (filterPlatform !== 'all' && !p.targets.some(t => t.platform === filterPlatform)) return false;
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase().trim();
+            const matchCaption = (p.caption || '').toLowerCase().includes(q);
+            const matchHashtags = (p.hashtags || []).some(h => h.toLowerCase().includes(q));
+            const matchTargets = (p.targets || []).some(t => (t.page_name || '').toLowerCase().includes(q));
+            if (!matchCaption && !matchHashtags && !matchTargets) return false;
+        }
         return true;
     });
 
@@ -1065,9 +1099,9 @@ export default function ManagePostView() {
 
     return (
         <div className="flex-1 flex flex-col bg-gray-50 dark:bg-slate-900 h-full overflow-hidden">
-            {/* Header */}
-            <div className="h-16 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-6 flex-shrink-0 shadow-sm">
-                <div className="flex items-center gap-3">
+            {/* Header with Title, Search Box, and Actions */}
+            <div className="h-16 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-6 flex-shrink-0 shadow-sm gap-4">
+                <div className="flex items-center gap-3 flex-shrink-0">
                     <div className="p-2 bg-indigo-100 dark:bg-indigo-900/40 rounded-xl">
                         <Rss size={18} className="text-indigo-600 dark:text-indigo-400" />
                     </div>
@@ -1076,7 +1110,29 @@ export default function ManagePostView() {
                         <p className="text-[11px] text-slate-400 dark:text-slate-500">Publish across Facebook, Instagram & TikTok</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+
+                {/* Search Box in Header */}
+                <div className="relative flex-1 max-w-md mx-2">
+                    <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search posts by caption, hashtags, accounts…"
+                        className="w-full pl-9 pr-9 py-2 text-xs bg-slate-100 dark:bg-slate-700/60 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery('')}
+                            title="Clear search"
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+                        >
+                            <X size={13} />
+                        </button>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-2 flex-shrink-0">
                     <button onClick={fetchData}
                         className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all" title="Refresh">
                         <RefreshCw size={16} />
@@ -1119,6 +1175,20 @@ export default function ManagePostView() {
                         );
                     })}
                 </div>
+
+                {searchQuery && (
+                    <div className="ml-auto flex items-center gap-2">
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                            Found <b>{filtered.length}</b> result{filtered.length !== 1 ? 's' : ''} for "{searchQuery}"
+                        </span>
+                        <button
+                            onClick={() => setSearchQuery('')}
+                            className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-semibold"
+                        >
+                            <X size={11} /> Clear
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Post grid */}
@@ -1131,19 +1201,30 @@ export default function ManagePostView() {
                 ) : filtered.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-64 gap-4 text-center">
                         <div className="w-16 h-16 bg-gradient-to-br from-indigo-100 to-violet-100 dark:from-indigo-900/30 dark:to-violet-900/30 rounded-3xl flex items-center justify-center">
-                            <Rss size={28} className="text-indigo-400 dark:text-indigo-300" />
+                            {searchQuery ? <Search size={28} className="text-indigo-400 dark:text-indigo-300" /> : <Rss size={28} className="text-indigo-400 dark:text-indigo-300" />}
                         </div>
                         <div>
                             <p className="text-base font-semibold text-slate-700 dark:text-slate-200">
-                                {filterStatus !== 'all' || filterPlatform !== 'all' ? 'No posts match your filter' : 'No posts yet'}
+                                {searchQuery
+                                    ? `No posts match "${searchQuery}"`
+                                    : filterStatus !== 'all' || filterPlatform !== 'all'
+                                    ? 'No posts match your filter'
+                                    : 'No posts yet'}
                             </p>
                             <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">
-                                {filterStatus !== 'all' || filterPlatform !== 'all'
+                                {searchQuery
+                                    ? 'Try checking for typos or searching with different keywords.'
+                                    : filterStatus !== 'all' || filterPlatform !== 'all'
                                     ? 'Try adjusting the filters above.'
                                     : 'Create your first post to get started.'}
                             </p>
                         </div>
-                        {filterStatus === 'all' && filterPlatform === 'all' && (
+                        {searchQuery ? (
+                            <button onClick={() => setSearchQuery('')}
+                                className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300 px-4 py-2 rounded-xl text-xs font-bold transition-all">
+                                <X size={14} /> Clear Search
+                            </button>
+                        ) : filterStatus === 'all' && filterPlatform === 'all' && (
                             <button onClick={() => { setEditPost(null); setView('compose'); }}
                                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 active:scale-[0.98] transition-all">
                                 <Plus size={16} /> Create First Post
@@ -1156,6 +1237,7 @@ export default function ManagePostView() {
                             <PostCard key={post.id} post={post}
                                 onView={() => setViewPost(post)}
                                 onEdit={() => { setEditPost(post); setView('compose'); }}
+                                onReuse={() => handleReuse(post)}
                                 onDelete={fetchData}
                             />
                         ))}
@@ -1173,6 +1255,7 @@ export default function ManagePostView() {
                         setViewPost(null);
                         setView('compose');
                     }}
+                    onReuse={() => handleReuse(viewPost)}
                     onDelete={() => {
                         setViewPost(null);
                         fetchData();
