@@ -25,7 +25,13 @@ export class TikTokPublisher {
 
         try {
             if (mediaType === 'video') {
-                // Draft/Inbox video upload: user receives notification in TikTok app to finalize & publish
+                // 1. Download video binary from storage
+                this.logger.log(`[TikTok] Downloading video from storage: ${mediaUrl}`);
+                const mediaRes = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
+                const videoBuffer = Buffer.from(mediaRes.data);
+                const totalSize = videoBuffer.length;
+
+                // 2. Initialize video upload via FILE_UPLOAD (bypasses URL domain ownership restrictions)
                 const initUrl = `${this.baseUrl}/post/publish/inbox/video/init/`;
                 const payload = {
                     post_info: {
@@ -35,12 +41,14 @@ export class TikTokPublisher {
                         disable_stitch: options?.allowStitch === false,
                     },
                     source_info: {
-                        source: 'PULL_FROM_URL',
-                        video_url: mediaUrl,
+                        source: 'FILE_UPLOAD',
+                        video_size: totalSize,
+                        chunk_size: totalSize,
+                        total_chunk_count: 1,
                     },
                 };
 
-                this.logger.log(`[TikTok] Sending video to TikTok Inbox/Draft...`);
+                this.logger.log(`[TikTok] Initializing FILE_UPLOAD (${totalSize} bytes)...`);
                 const response = await axios.post(initUrl, payload, {
                     headers: {
                         Authorization: `Bearer ${accessToken}`,
@@ -53,7 +61,25 @@ export class TikTokPublisher {
                 }
 
                 const publishId = response.data?.data?.publish_id;
-                this.logger.log(`[TikTok] Draft sent successfully! Publish ID: ${publishId}`);
+                const uploadUrl = response.data?.data?.upload_url;
+
+                if (!uploadUrl) {
+                    throw new Error('No upload_url received from TikTok');
+                }
+
+                // 3. Upload binary chunks directly to TikTok upload_url
+                this.logger.log(`[TikTok] Uploading video binary to TikTok upload_url...`);
+                await axios.put(uploadUrl, videoBuffer, {
+                    headers: {
+                        'Content-Type': 'video/mp4',
+                        'Content-Range': `bytes 0-${totalSize - 1}/${totalSize}`,
+                        'Content-Length': totalSize.toString(),
+                    },
+                    maxBodyLength: Infinity,
+                    maxContentLength: Infinity,
+                });
+
+                this.logger.log(`[TikTok] Video draft sent successfully! Publish ID: ${publishId}`);
                 return {
                     success: true,
                     platformPostId: publishId,

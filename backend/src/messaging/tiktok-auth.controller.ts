@@ -131,14 +131,14 @@ export class TikTokAuthController {
 
             try {
                 const userRes = await axios.get(`${this.baseUrl}/user/info/`, {
-                    params: { fields: 'open_id,union_id,avatar_url,display_name,username' },
+                    params: { fields: 'open_id,avatar_url,display_name' },
                     headers: { Authorization: `Bearer ${accessToken}` }
                 });
 
                 const user = userRes.data?.data?.user || userRes.data?.user || userRes.data?.data;
                 if (user) {
-                    displayName = user.display_name || user.username || displayName;
-                    username = user.username || '';
+                    displayName = user.display_name || displayName;
+                    username = user.display_name || '';
                     avatarUrl = user.avatar_url || '';
                 }
             } catch (err: any) {
