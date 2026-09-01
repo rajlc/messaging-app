@@ -265,7 +265,7 @@ export async function fetchListedInventoryIds(): Promise<Set<string>> {
     try {
         const { data, error } = await marketplaceSupabase
             .from('marketplace_products')
-            .select('id, inventory_id, profile_data');
+            .select('*');
 
         if (error) {
             console.error('[Marketplace Supabase] fetchListedInventoryIds error:', error);
