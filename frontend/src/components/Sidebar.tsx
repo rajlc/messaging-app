@@ -54,8 +54,8 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
     return (
         <div
             style={{
-                width: '200px',
-                minWidth: '200px',
+                width: '218px',
+                minWidth: '218px',
                 height: '100vh',
                 display: 'flex',
                 flexDirection: 'column',
@@ -65,8 +65,10 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
                 paddingBottom: '16px',
                 overflowY: 'auto',
                 overflowX: 'hidden',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none',
             }}
-            className="bg-white border-r border-slate-100 dark:bg-slate-900 dark:border-slate-800"
+            className="bg-white border-r border-slate-100 dark:bg-slate-900 dark:border-slate-800 [&::-webkit-scrollbar]:hidden select-none"
         >
             {/* Logo / Brand at top */}
             <div style={{ padding: '0 16px 4px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
@@ -90,6 +92,7 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
                     fontWeight: 700,
                     letterSpacing: '-0.3px',
                     fontFamily: "'Inter', sans-serif",
+                    whiteSpace: 'nowrap',
                 }}
                     className="text-[#1E1B4B] dark:text-white"
                 >
@@ -98,7 +101,7 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
             </div>
 
             {/* Divider */}
-            <div style={{ height: '1px', margin: '12px 16px' }} className="bg-slate-100 dark:bg-slate-700" />
+            <div style={{ height: '1px', margin: '8px 16px' }} className="bg-slate-100 dark:bg-slate-700" />
 
             {/* Top Nav Group */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 10px' }}>
@@ -106,7 +109,7 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
             </div>
 
             {/* Section Label */}
-            <div style={{ padding: '18px 18px 6px', fontSize: '10px', fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}
+            <div style={{ padding: '14px 16px 6px', fontSize: '10px', fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif", whiteSpace: 'nowrap' }}
                 className="text-slate-400 dark:text-slate-600"
             >
                 Facebook & Marketplace
@@ -180,7 +183,7 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
             </div>
 
             {/* Section Label */}
-            <div style={{ padding: '18px 18px 6px', fontSize: '10px', fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}
+            <div style={{ padding: '14px 16px 6px', fontSize: '10px', fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif", whiteSpace: 'nowrap' }}
                 className="text-slate-400 dark:text-slate-600"
             >
                 Operations
@@ -198,7 +201,7 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
             </div>
 
             {/* INV Merge Section Header */}
-            <div style={{ padding: '18px 18px 6px', fontSize: '10px', fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}
+            <div style={{ padding: '14px 16px 6px', fontSize: '10px', fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif", whiteSpace: 'nowrap' }}
                 className="text-slate-400 dark:text-slate-600"
             >
                 INV Merge
@@ -300,7 +303,7 @@ function NavButton({ label, icon, active, onClick }: {
 
             {/* Label */}
             <span
-                className={`text-[13px] tracking-[0.1px] font-sans leading-none
+                className={`text-[13px] tracking-[0.1px] font-sans leading-none whitespace-nowrap
                     ${active ? 'font-semibold' : 'font-medium'}`}
             >
                 {label}

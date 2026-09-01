@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
     Store, Upload, Download, Plus, Settings as SettingsIcon, FileSpreadsheet,
     CheckCircle2, Clock, Trash2, Eye, Edit3, X, Check, Copy, ChevronRight,
@@ -26,6 +26,7 @@ import {
     fetchImageFolderSetting,
     saveImageFolderSetting,
     searchInventoryProducts,
+    fetchListedInventoryIds,
     fetchPendingInventoryProducts,
     MarketplaceProfile,
     MarketplaceCategory,
@@ -647,6 +648,7 @@ export default function MarketplaceListingView() {
                     profiles={profiles}
                     categories={categories}
                     locations={locations}
+                    existingProducts={products}
                     onSave={async (savedItem) => {
                         setProducts(prev => {
                             const idx = prev.findIndex(p => p.id === savedItem.id);
@@ -1482,6 +1484,7 @@ function AddListModal({
     profiles,
     categories,
     locations,
+    existingProducts = [],
     onSave,
     onClose
 }: {
@@ -1489,9 +1492,20 @@ function AddListModal({
     profiles: MarketplaceProfile[];
     categories: MarketplaceCategory[];
     locations: MarketplaceLocation[];
+    existingProducts?: ProductItem[];
     onSave: (product: ProductItem) => Promise<void>;
     onClose: () => void;
 }) {
+    // Collect all already listed inventory IDs (excluding current product if editing)
+    const alreadyListedIds = useMemo(() => {
+        const set = new Set<string>();
+        for (const p of existingProducts) {
+            if (product && p.id === product.id) continue;
+            if (p.inventory_id) set.add(String(p.inventory_id).trim());
+        }
+        return set;
+    }, [existingProducts, product]);
+
     // Dynamic Product Name & Price per Profile
     const [profileRows, setProfileRows] = useState<Record<string, { title: string; price: string | number }>>(() => {
         const initial: Record<string, { title: string; price: string | number }> = {};
@@ -1544,11 +1558,17 @@ function AddListModal({
     }, [invSearchQuery]);
 
     const handleSelectInventoryProduct = (invProd: InventoryProductRef) => {
+        const refId = String(invProd.product_id || invProd.id).trim();
+        if (alreadyListedIds.has(refId)) {
+            setError(`Product #${refId} ("${invProd.product_name}") is already in Marketplace Listing. Duplicate products are not allowed.`);
+            return;
+        }
+
         setSelectedInventoryProduct(invProd);
-        const refId = String(invProd.product_id || invProd.id);
         setInventoryId(refId);
         setShowInvDropdown(false);
         setInvSearchQuery('');
+        setError('');
 
         // Pre-fill profile rows with product name and price
         setProfileRows(prev => {
@@ -1634,6 +1654,12 @@ function AddListModal({
         const firstProfileName = profiles[0]?.name || 'Default';
         if (!profileRows[firstProfileName]?.title?.trim()) {
             setError(`Please enter a Product Name for ${firstProfileName}.`);
+            return;
+        }
+
+        // Validate duplicate inventory ID
+        if (inventoryId && alreadyListedIds.has(String(inventoryId).trim())) {
+            setError(`Product #${inventoryId} is already added in Marketplace Listing. Duplicate items are not allowed.`);
             return;
         }
 
@@ -1769,35 +1795,55 @@ function AddListModal({
                                 {/* Dropdown results */}
                                 {showInvDropdown && invSearchResults.length > 0 && (
                                     <div className="absolute top-full left-0 right-0 mt-1.5 max-h-56 overflow-y-auto bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 z-50 divide-y divide-slate-100 dark:divide-slate-700/60">
-                                        {invSearchResults.map(item => (
-                                            <div
-                                                key={item.id}
-                                                onClick={() => handleSelectInventoryProduct(item)}
-                                                className="p-2.5 flex items-center justify-between gap-3 hover:bg-indigo-50/60 dark:hover:bg-slate-700/60 cursor-pointer transition-colors"
-                                            >
-                                                <div className="flex items-center gap-2.5 overflow-hidden">
-                                                    {item.image_url ? (
-                                                        <img src={item.image_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
-                                                    ) : (
-                                                        <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
-                                                            <Package size={14} className="text-slate-400" />
+                                        {invSearchResults.map(item => {
+                                            const itemRefId = String(item.product_id || item.id).trim();
+                                            const isAlreadyAdded = alreadyListedIds.has(itemRefId);
+
+                                            return (
+                                                <div
+                                                    key={item.id}
+                                                    onClick={() => {
+                                                        if (isAlreadyAdded) return;
+                                                        handleSelectInventoryProduct(item);
+                                                    }}
+                                                    className={`p-2.5 flex items-center justify-between gap-3 transition-colors ${
+                                                        isAlreadyAdded
+                                                            ? 'opacity-50 cursor-not-allowed bg-slate-50/80 dark:bg-slate-900/40'
+                                                            : 'hover:bg-indigo-50/60 dark:hover:bg-slate-700/60 cursor-pointer'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-2.5 overflow-hidden">
+                                                        {item.image_url ? (
+                                                            <img src={item.image_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
+                                                        ) : (
+                                                            <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
+                                                                <Package size={14} className="text-slate-400" />
+                                                            </div>
+                                                        )}
+                                                        <div className="truncate">
+                                                            <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                                                                {item.product_name}
+                                                            </p>
+                                                            <p className="text-[10px] text-slate-400 font-mono">
+                                                                #{item.product_id} • {item.category_name || item.marketplace_category || 'General'}
+                                                            </p>
                                                         </div>
-                                                    )}
-                                                    <div className="truncate">
-                                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
-                                                            {item.product_name}
-                                                        </p>
-                                                        <p className="text-[10px] text-slate-400 font-mono">
-                                                            #{item.product_id} • {item.category_name || item.marketplace_category || 'General'}
-                                                        </p>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        {isAlreadyAdded ? (
+                                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                                                                Already in List
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                                                Rs. {item.special_price || item.regular_price || 0}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
-
-                                                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex-shrink-0">
-                                                    Rs. {item.special_price || item.regular_price || 0}
-                                                </span>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -2714,12 +2760,30 @@ function ImportModal({
 
             const errors: string[] = [];
             let importedCount = 0;
+            const existingInvIds = await fetchListedInventoryIds();
+            const currentSheetSeenIds = new Set<string>();
 
             for (let i = 0; i < rawRows.length; i++) {
                 const row = rawRows[i];
                 const rowNum = i + 2;
 
-                const invId = findCol(row, ['inventory id', 'inventory_id', 'inv id', 'product id', 'product_id', 'id']);
+                const rawInvId = findCol(row, ['inventory id', 'inventory_id', 'inv id', 'product id', 'product_id', 'id']);
+                const cleanInvId = rawInvId ? String(rawInvId).trim() : null;
+
+                // Check duplicate inventory ID
+                if (cleanInvId) {
+                    if (existingInvIds.has(cleanInvId)) {
+                        errors.push(`Row ${rowNum}: Product #${cleanInvId} is already in Marketplace Listing. Skipped duplicate.`);
+                        continue;
+                    }
+                    if (currentSheetSeenIds.has(cleanInvId)) {
+                        errors.push(`Row ${rowNum}: Product #${cleanInvId} is repeated in this spreadsheet. Skipped duplicate.`);
+                        continue;
+                    }
+                    currentSheetSeenIds.add(cleanInvId);
+                    existingInvIds.add(cleanInvId);
+                }
+
                 const category = findCol(row, ['category', 'category name', 'cat']) || categories[0]?.name || 'General';
                 const condition = findCol(row, ['condition', 'item condition']) || 'New';
                 const location = findCol(row, ['location', 'city', 'area']) || 'Kathmandu';
@@ -2784,17 +2848,21 @@ function ImportModal({
                     continue;
                 }
 
-                await saveMarketplaceProduct({
-                    inventory_id: invId ? String(invId) : null,
-                    description: baseDescription,
-                    category: String(category).trim(),
-                    condition: String(condition).trim() || 'New',
-                    location: String(location).trim() || 'Kathmandu',
-                    images,
-                    profile_data: profileData,
-                    status_map: statusMap,
-                });
-                importedCount++;
+                try {
+                    await saveMarketplaceProduct({
+                        inventory_id: cleanInvId,
+                        description: baseDescription,
+                        category: String(category).trim(),
+                        condition: String(condition).trim() || 'New',
+                        location: String(location).trim() || 'Kathmandu',
+                        images,
+                        profile_data: profileData,
+                        status_map: statusMap,
+                    });
+                    importedCount++;
+                } catch (saveErr: any) {
+                    errors.push(`Row ${rowNum}: ${saveErr.message || 'Failed to save row'}`);
+                }
             }
 
             setResult({ importedCount, errors });

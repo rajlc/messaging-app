@@ -586,7 +586,11 @@ export class WebhooksController {
             // 6. Broadcast Customer Message to Frontend (always)
             this.messagingGateway.broadcastIncomingMessage('facebook_marketplace', {
                 ...savedMessage,
+                sender: 'customer',
                 isOwnMessage: false,
+                senderId: customerId,
+                recipientId: profileId,
+                pageId: profileId,
                 conversationId: conversation.id,
                 customerName: customerName,
                 productName: conversation.product_name,

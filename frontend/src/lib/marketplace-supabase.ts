@@ -371,7 +371,21 @@ export async function fetchMarketplaceProducts(): Promise<ProductItem[]> {
 export async function saveMarketplaceProduct(product: Partial<ProductItem>): Promise<ProductItem> {
     const profileData = { ...(product.profile_data || {}) };
     if (product.inventory_id) {
-        profileData._inventory_id = String(product.inventory_id);
+        const cleanInvId = String(product.inventory_id).trim();
+        const { data: existingRows } = await marketplaceSupabase
+            .from('marketplace_products')
+            .select('*');
+
+        const duplicate = (existingRows || []).find((row: any) => {
+            if (product.id && row.id === product.id) return false;
+            const rInv = row.inventory_id || row.profile_data?._inventory_id;
+            return rInv && String(rInv).trim() === cleanInvId;
+        });
+
+        if (duplicate) {
+            throw new Error(`Product #${cleanInvId} is already added in Marketplace Listing. Duplicate listings are not allowed.`);
+        }
+        profileData._inventory_id = cleanInvId;
     }
 
     const payload: any = {

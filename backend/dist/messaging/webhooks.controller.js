@@ -474,7 +474,11 @@ let WebhooksController = class WebhooksController {
             });
             this.messagingGateway.broadcastIncomingMessage('facebook_marketplace', {
                 ...savedMessage,
+                sender: 'customer',
                 isOwnMessage: false,
+                senderId: customerId,
+                recipientId: profileId,
+                pageId: profileId,
                 conversationId: conversation.id,
                 customerName: customerName,
                 productName: conversation.product_name,

@@ -571,9 +571,24 @@ function UnifiedInboxContent() {
         if (!hasPlatformAccess || !hasAccountAccess) return;
       }
 
-      const isOwnMessage = message.isOwnMessage || message.senderId === message.pageId;
-      const conversationId = isOwnMessage ? message.recipientId : message.senderId;
-      const senderRole = isOwnMessage ? 'agent' : 'customer';
+      let isOwnMessage = false;
+      if (typeof message.isOwnMessage === 'boolean') {
+        isOwnMessage = message.isOwnMessage;
+      } else if (message.sender === 'agent') {
+        isOwnMessage = true;
+      } else if (message.sender === 'customer') {
+        isOwnMessage = false;
+      } else if (message.senderId && message.pageId) {
+        isOwnMessage = message.senderId === message.pageId;
+      }
+
+      const senderRole: 'agent' | 'customer' = message.sender === 'agent' || message.sender === 'customer'
+        ? message.sender
+        : (isOwnMessage ? 'agent' : 'customer');
+
+      const conversationId = isOwnMessage 
+        ? (message.recipientId || message.customerId) 
+        : (message.senderId || message.customerId);
 
       const newMessage: Message = {
         id: message.id || Date.now().toString(),
@@ -581,18 +596,19 @@ function UnifiedInboxContent() {
         text: message.text,
         sender: senderRole,
         platform: message.platform || 'facebook',
-        pageId: message.pageId,
-        senderId: message.senderId,
-        recipientId: message.recipientId,
-        conversationId: message.conversationId,
-        timestamp: new Date(message.timestamp || Date.now()),
+        pageId: message.pageId || message.page_id,
+        senderId: message.senderId || (senderRole === 'customer' ? conversationId : message.pageId),
+        recipientId: message.recipientId || (senderRole === 'agent' ? conversationId : message.pageId),
+        conversationId: message.conversationId || message.conversation_id,
+        timestamp: new Date(message.timestamp || message.created_at || Date.now()),
         metadata: message.metadata,
       };
 
       const active = activeConversationRef.current;
       const isMatch = active && (
         (message.conversationId && active.id === message.conversationId) ||
-        (active.customerId === conversationId)
+        (active.id && message.conversation_id && active.id === message.conversation_id) ||
+        (active.customerId && conversationId && active.customerId === conversationId)
       );
 
       if (isMatch) {

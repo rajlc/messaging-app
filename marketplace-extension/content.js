@@ -16,23 +16,42 @@ function safeTimeout(callback, delay) {
   if (!isExtensionContextValid()) {
     return setTimeout(callback, delay);
   }
-  if (!document.hidden) {
+  // If focused and visible, standard setTimeout is immediate
+  if (!document.hidden && document.hasFocus()) {
     return setTimeout(callback, delay);
   }
 
   const id = nextTimeoutId++;
-  activeTimeouts.set(id, callback);
+  let fired = false;
+
+  const wrappedCallback = () => {
+    if (fired) return;
+    fired = true;
+    activeTimeouts.delete(id);
+    callback();
+  };
+
+  activeTimeouts.set(id, wrappedCallback);
+
   try {
     chrome.runtime.sendMessage({
       type: 'scheduleTimeout',
-      delay: delay,
+      delay: delay || 0,
       timeoutId: id
     });
   } catch (err) {
     activeTimeouts.delete(id);
     return setTimeout(callback, delay);
   }
+
+  // Backup timer in case background message has delay
+  setTimeout(wrappedCallback, (delay || 0) + 2000);
+
   return id;
+}
+
+function safeSleep(delay) {
+  return new Promise(resolve => safeTimeout(resolve, delay));
 }
 
 function safeClearTimeout(id) {
@@ -553,7 +572,9 @@ function renderSidebar() {
 
           <div class="mkt-form-group">
             <label class="mkt-sb-label">Chrome Profile Tag</label>
-            <input type="text" id="sb-profile" class="mkt-sb-input" value="${chromeProfileTag}">
+            <select id="sb-profile" class="mkt-sb-input" style="cursor:pointer; background:#1e293b; color:#f8fafc; border:1px solid #334155; border-radius:6px; padding:6px 8px; width:100%;">
+              <option value="${chromeProfileTag}">${chromeProfileTag}</option>
+            </select>
           </div>
 
           <div class="mkt-form-group">
@@ -572,6 +593,45 @@ function renderSidebar() {
         </div>
       `;
 
+      // Populate profile dropdown in sidebar asynchronously without duplicates
+      (async () => {
+        try {
+          const res = await fetch('https://jrcluodakvudjkwlrrxi.supabase.co/rest/v1/marketplace_profiles?select=*&order=created_at.asc', {
+            headers: {
+              'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpyY2x1b2Rha3Z1ZGprd2xycnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxODQ3NzgsImV4cCI6MjA4NDc2MDc3OH0.XtZdrmmG1YUAj22GPCZB0E48TtY-CdPlmdIGZYECk0s',
+              'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpyY2x1b2Rha3Z1ZGprd2xycnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxODQ3NzgsImV4cCI6MjA4NDc2MDc3OH0.XtZdrmmG1YUAj22GPCZB0E48TtY-CdPlmdIGZYECk0s'
+            }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const profSelect = document.getElementById('sb-profile');
+            if (profSelect && Array.isArray(data) && data.length > 0) {
+              const seen = new Set();
+              const unique = [];
+              for (const p of data) {
+                const n = (p.name || '').trim();
+                if (!n) continue;
+                if (!seen.has(n.toLowerCase())) {
+                  seen.add(n.toLowerCase());
+                  unique.push(n);
+                }
+              }
+              if (chromeProfileTag && !seen.has(chromeProfileTag.toLowerCase().trim())) {
+                unique.push(chromeProfileTag.trim());
+              }
+              profSelect.innerHTML = '';
+              for (const u of unique) {
+                const opt = document.createElement('option');
+                opt.value = u;
+                opt.textContent = u;
+                if (chromeProfileTag && chromeProfileTag.toLowerCase().trim() === u.toLowerCase()) opt.selected = true;
+                profSelect.appendChild(opt);
+              }
+            }
+          }
+        } catch (e) {}
+      })();
+
       // Event handlers
       document.getElementById('sb-url').onchange = (e) => {
         let val = e.target.value.trim();
@@ -579,7 +639,8 @@ function renderSidebar() {
         chrome.storage.local.set({ backendUrl: val });
       };
       document.getElementById('sb-profile').onchange = (e) => {
-        chrome.storage.local.set({ chromeProfile: e.target.value.trim() });
+        chromeProfileTag = e.target.value.trim();
+        chrome.storage.local.set({ chromeProfile: chromeProfileTag });
       };
 
       document.getElementById('sb-btn-login').onclick = async () => {
@@ -1666,7 +1727,7 @@ function typeAndSendReply(replyText) {
   const waitMs = Math.floor(Math.random() * 10000) + 5000;
   logToUI("Simulating typing: waiting " + (waitMs / 1000).toFixed(1) + "s...");
 
-  typingTimeoutId = setTimeout(() => {
+  typingTimeoutId = safeTimeout(() => {
     try {
       const currentCustomer = getCustomerDetails();
       if (currentCustomer.id !== targetCustomer.id || currentCustomer.name !== targetCustomer.name) {
@@ -1700,51 +1761,28 @@ function typeAndSendReply(replyText) {
         let execSuccess = false;
         try {
           input.focus();
-          const oldText = input.textContent || '';
-          document.execCommand('insertText', false, replyText);
-          const newText = input.textContent || '';
-          if (newText.includes(replyText)) {
+          execSuccess = document.execCommand('insertText', false, replyText);
+          if (execSuccess) {
             logToUI("Background insertText via execCommand succeeded.");
-            execSuccess = true;
           }
         } catch (execErr) {
-          console.warn("execCommand failed in background:", execErr);
+          execSuccess = false;
         }
 
-        // Direct DOM insertion fallback (only run if execCommand failed to populate the composer)
+        // Direct fallback only if execCommand failed
         if (!execSuccess) {
-          const currentText = input.textContent || '';
-          if (!currentText.includes(replyText.substring(0, Math.min(10, replyText.length)))) {
-            try {
-              input.focus();
-
-              let p = input.querySelector('p');
-              if (!p) {
-                p = document.createElement('p');
-                p.className = 'xdj266r x11i5rnm xat24cr x1mh8g0r x16tdct8';
-                input.appendChild(p);
-              }
-
-              let span = p.querySelector('span[data-lexical-text="true"]') || p.querySelector('span[data-text="true"]') || p.querySelector('span');
-              if (!span) {
-                span = document.createElement('span');
-                span.setAttribute('data-lexical-text', 'true');
-                p.appendChild(span);
-              }
-
-              span.textContent = replyText;
-              p.querySelectorAll('br').forEach(br => br.remove());
-
-              // Tell Lexical/React that the element text has changed without double-inserting
-              input.dispatchEvent(new Event('input', { bubbles: true }));
-              input.dispatchEvent(new Event('change', { bubbles: true }));
-            } catch (domErr) {
-              console.error("Direct DOM text injection failed:", domErr);
-            }
-          }
+          try {
+            input.dispatchEvent(new InputEvent('beforeinput', {
+              bubbles: true,
+              cancelable: true,
+              inputType: 'insertText',
+              data: replyText
+            }));
+            execSuccess = true;
+          } catch (ieErr) {}
         }
 
-        charTypingTimeoutId = setTimeout(() => {
+        charTypingTimeoutId = safeTimeout(() => {
           try {
             const checkCustomerFinal = getCustomerDetails();
             if (checkCustomerFinal.id !== targetCustomer.id || checkCustomerFinal.name !== targetCustomer.name) {
@@ -2093,11 +2131,10 @@ async function processPendingMessage(msgObj) {
     } else {
       // If anchor not found in sidebar list, navigate there directly
       window.location.href = `https://www.facebook.com/messages/t/${recipientId}`;
-      // Wait for page to reload/navigate
       return;
     }
-    // Wait a brief delay for DOM to load after clicking
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Wait a brief delay for DOM to load after clicking using safeSleep (unthrottled)
+    await safeSleep(2500);
   }
 
   // 2. We are on the correct thread, type and send it!
@@ -2121,7 +2158,7 @@ async function processPendingMessage(msgObj) {
       });
     });
   } else {
-    logToUI(`[Pending Send] Failed to type/send message. Will retry.`);
+    logToUI(`[Pending Send] Send attempt in-progress or composer not cleared. Will retry.`);
   }
 }
 
@@ -2135,53 +2172,42 @@ async function typeAndSendReplyDirectly(replyText) {
   input.focus();
   logToUI("[Pending Send] Inserting text: '" + replyText.substring(0, 25) + "...'");
 
-  let execSuccess = false;
+  // Focus cursor at the end and clear any leftover text
   try {
+    document.execCommand('selectAll', false, null);
+    document.execCommand('delete', false, null);
     const selection = window.getSelection();
     const range = document.createRange();
     range.selectNodeContents(input);
     range.collapse(false);
     selection.removeAllRanges();
     selection.addRange(range);
-  } catch (e) {
-    console.warn("Could not focus cursor explicitly:", e);
-  }
+  } catch (e) {}
 
+  let execSuccess = false;
+
+  // Attempt 1: execCommand (Standard)
   try {
-    document.execCommand('insertText', false, replyText);
-    const newText = input.textContent || '';
-    if (newText.includes(replyText)) {
-      execSuccess = true;
-    }
+    execSuccess = document.execCommand('insertText', false, replyText);
   } catch (execErr) {
-    console.warn("execCommand failed in foreground:", execErr);
+    execSuccess = false;
   }
 
+  // Attempt 2: beforeinput InputEvent (Only if execCommand returned false/failed)
   if (!execSuccess) {
     try {
-      let p = input.querySelector('p');
-      if (!p) {
-        p = document.createElement('p');
-        p.className = 'xdj266r x11i5rnm xat24cr x1mh8g0r x16tdct8';
-        input.appendChild(p);
-      }
-      let span = p.querySelector('span[data-lexical-text="true"]') || p.querySelector('span[data-text="true"]') || p.querySelector('span');
-      if (!span) {
-        span = document.createElement('span');
-        span.setAttribute('data-lexical-text', 'true');
-        p.appendChild(span);
-      }
-      span.textContent = replyText;
-      p.querySelectorAll('br').forEach(br => br.remove());
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.dispatchEvent(new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertText',
+        data: replyText
+      }));
       execSuccess = true;
-    } catch (domErr) {
-      console.error("Direct DOM text injection failed:", domErr);
-    }
+    } catch (ieErr) {}
   }
 
-  await new Promise(resolve => setTimeout(resolve, 800));
+  // Use unthrottled safeSleep
+  await safeSleep(400);
 
   const textLength = (input.textContent || '').trim().length;
   if (textLength === 0) {
@@ -2189,47 +2215,70 @@ async function typeAndSendReplyDirectly(replyText) {
     return false;
   }
 
-  // Click send button
-  const allButtons = queryOutsideSidebar('div[role="button"], button', true);
-  let finalSendBtn = allButtons.find(b => {
-    const label = (b.getAttribute('aria-label') || '').toLowerCase();
-    return label === 'send' || label === 'press enter to send';
-  });
+  // Full mouse event helper
+  const dispatchFullClick = (elem) => {
+    elem.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+    elem.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+    elem.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+    elem.click();
+  };
 
-  if (!finalSendBtn) {
-    finalSendBtn = allButtons.find(b => {
+  // Keyboard Enter helper
+  const dispatchEnterKey = () => {
+    const opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true, view: window };
+    input.dispatchEvent(new KeyboardEvent('keydown', opts));
+    input.dispatchEvent(new KeyboardEvent('keypress', opts));
+    input.dispatchEvent(new KeyboardEvent('keyup', opts));
+  };
+
+  // Try sending up to 3 times and check if composer clears
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const allButtons = queryOutsideSidebar('div[role="button"], button', true);
+    let finalSendBtn = allButtons.find(b => {
       const label = (b.getAttribute('aria-label') || '').toLowerCase();
-      if (label.includes('like')) return false;
-      const svg = b.querySelector('svg');
-      if (svg) {
-        const fill = svg.getAttribute('fill') || '';
-        return fill === '#0084ff' || svg.querySelector('path');
-      }
-      return false;
+      return (label === 'send' || label.includes('press enter to send')) && !label.includes('like');
     });
+
+    if (!finalSendBtn) {
+      finalSendBtn = allButtons.find(b => {
+        const label = (b.getAttribute('aria-label') || '').toLowerCase();
+        if (label.includes('like') || label.includes('thumbs') || label.includes('attach')) return false;
+        const svg = b.querySelector('svg');
+        if (svg) {
+          const fill = svg.getAttribute('fill') || '';
+          return fill === '#0084ff' || fill.includes('blue') || svg.querySelector('path');
+        }
+        return false;
+      });
+    }
+
+    if (finalSendBtn) {
+      dispatchFullClick(finalSendBtn);
+      logToUI(`[Pending Send] Attempt ${attempt}: Triggered Send button.`);
+    } else {
+      dispatchEnterKey();
+      logToUI(`[Pending Send] Attempt ${attempt}: Dispatched Enter key.`);
+    }
+
+    // Wait and verify if composer text was sent/cleared
+    await safeSleep(600);
+
+    const remaining = (input.textContent || '').trim();
+    if (remaining.length === 0) {
+      logToUI("[Pending Send] Message sent successfully (composer cleared)!");
+      return true;
+    }
   }
 
-  if (finalSendBtn) {
-    finalSendBtn.click();
-    logToUI("[Pending Send] Sent via Send button!");
-    return true;
-  } else {
-    const dispatchKey = (type) => {
-      input.dispatchEvent(new KeyboardEvent(type, {
-        key: 'Enter',
-        code: 'Enter',
-        keyCode: 13,
-        which: 13,
-        bubbles: true,
-        cancelable: true
-      }));
-    };
-    dispatchKey('keydown');
-    dispatchKey('keypress');
-    dispatchKey('keyup');
-    logToUI("[Pending Send] Sent via Enter simulation!");
+  // Verify final state
+  const finalRemaining = (input.textContent || '').trim();
+  if (finalRemaining.length === 0) {
+    logToUI("[Pending Send] Message sent successfully!");
     return true;
   }
+
+  logToUI("[Pending Send] Composer text not cleared yet. Will retry next cycle.");
+  return false;
 }
 
 async function syncCustomerNameWithBackend(customerId, customerName) {

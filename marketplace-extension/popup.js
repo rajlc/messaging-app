@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const backendUrlInput = document.getElementById('backend-url');
-  const chromeProfileInput = document.getElementById('chrome-profile');
+  const chromeProfileSelect = document.getElementById('chrome-profile');
+  const btnRefreshProfiles = document.getElementById('btn-refresh-profiles');
   const emailInput = document.getElementById('email');
   const passwordInput = document.getElementById('password');
   const btnLogin = document.getElementById('btn-login');
@@ -11,16 +12,107 @@ document.addEventListener('DOMContentLoaded', () => {
   const loggedInRoleSpan = document.getElementById('logged-in-role');
   const connectionStatusSpan = document.getElementById('connection-status');
 
-  // Load saved settings
-  chrome.storage.local.get(['backendUrl', 'chromeProfile', 'token', 'user'], (data) => {
+  const SUPABASE_URL = 'https://jrcluodakvudjkwlrrxi.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpyY2x1b2Rha3Z1ZGprd2xycnhpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxODQ3NzgsImV4cCI6MjA4NDc2MDc3OH0.XtZdrmmG1YUAj22GPCZB0E48TtY-CdPlmdIGZYECk0s';
+
+  async function fetchMarketplaceProfiles(backendUrl) {
+    // 1. Direct Supabase REST API (Directly matches Marketplace Settings in real-time)
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/marketplace_profiles?select=*&order=created_at.asc`, {
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return data;
+        }
+      }
+    } catch (err) {
+      console.warn('[Marketplace Assistant] Supabase REST error:', err);
+    }
+
+    // 2. Fallback backend endpoint
+    try {
+      if (backendUrl) {
+        const res = await fetch(`${backendUrl}/marketplace/settings`);
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json?.profiles) && json.profiles.length > 0) {
+            return json.profiles;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Marketplace Assistant] Backend profiles fallback error:', err);
+    }
+
+    return [];
+  }
+
+  function populateProfilesDropdown(profiles, currentSelected) {
+    chromeProfileSelect.innerHTML = '';
+    const seen = new Set();
+    const uniqueNames = [];
+
+    // Deduplicate profiles case-insensitively
+    for (const p of profiles) {
+      const name = (p.name || '').trim();
+      if (!name) continue;
+      const lower = name.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        uniqueNames.push(name);
+      }
+    }
+
+    // Default fallback
+    if (uniqueNames.length === 0) {
+      uniqueNames.push('Default');
+      seen.add('default');
+    }
+
+    // Preserve previously selected custom profile without duplicating
+    if (currentSelected && typeof currentSelected === 'string' && currentSelected.trim()) {
+      const cleanSel = currentSelected.trim();
+      if (!seen.has(cleanSel.toLowerCase())) {
+        uniqueNames.push(cleanSel);
+        seen.add(cleanSel.toLowerCase());
+      }
+    }
+
+    for (const name of uniqueNames) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      if (currentSelected && currentSelected.trim().toLowerCase() === name.toLowerCase()) {
+        opt.selected = true;
+      }
+      chromeProfileSelect.appendChild(opt);
+    }
+
+    if (!chromeProfileSelect.value && uniqueNames.length > 0) {
+      chromeProfileSelect.value = uniqueNames[0];
+    }
+  }
+
+  // Load saved settings & profiles
+  chrome.storage.local.get(['backendUrl', 'chromeProfile', 'token', 'user'], async (data) => {
     if (data.backendUrl) {
       backendUrlInput.value = data.backendUrl;
     } else {
       chrome.storage.local.set({ backendUrl: 'http://localhost:3002' });
     }
 
-    if (data.chromeProfile) {
-      chromeProfileInput.value = data.chromeProfile;
+    // Fetch and populate profiles without duplicates
+    const profiles = await fetchMarketplaceProfiles(data.backendUrl);
+    populateProfilesDropdown(profiles, data.chromeProfile);
+
+    // Save initial selected profile if none set
+    if (!data.chromeProfile && chromeProfileSelect.value) {
+      chrome.storage.local.set({ chromeProfile: chromeProfileSelect.value });
     }
 
     if (data.token && data.user) {
@@ -32,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkConnection();
   });
 
-  // Save backend URL & chrome profile on change
+  // Save backend URL on change
   backendUrlInput.addEventListener('change', () => {
     let url = backendUrlInput.value.trim();
     if (url.endsWith('/')) url = url.slice(0, -1);
@@ -41,9 +133,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  chromeProfileInput.addEventListener('change', () => {
-    chrome.storage.local.set({ chromeProfile: chromeProfileInput.value.trim() });
+  // Save selected profile on change
+  chromeProfileSelect.addEventListener('change', () => {
+    const selected = chromeProfileSelect.value;
+    chrome.storage.local.set({ chromeProfile: selected });
   });
+
+  // Refresh profiles button
+  if (btnRefreshProfiles) {
+    btnRefreshProfiles.addEventListener('click', async () => {
+      btnRefreshProfiles.textContent = '↻ Loading...';
+      const data = await chrome.storage.local.get(['backendUrl', 'chromeProfile']);
+      const profiles = await fetchMarketplaceProfiles(data.backendUrl);
+      populateProfilesDropdown(profiles, data.chromeProfile);
+      if (chromeProfileSelect.value) {
+        chrome.storage.local.set({ chromeProfile: chromeProfileSelect.value });
+      }
+      btnRefreshProfiles.textContent = '↻ Refresh';
+    });
+  }
 
   // Login click handler
   btnLogin.addEventListener('click', async () => {
