@@ -1828,6 +1828,8 @@ function LaunchBulkListingModal({
             const price = pData.price || 0;
             const description = pData.final_description || p.description || '';
 
+            const cleanImages = (p.images || []).map(u => (typeof u === 'string' ? u.trim() : '')).filter(Boolean);
+
             return {
                 id: idx + 1,
                 productId: p.id,
@@ -1837,11 +1839,7 @@ function LaunchBulkListingModal({
                 condition: p.condition || 'New',
                 location: p.location || 'Kathmandu',
                 description,
-                images: p.images || [],
-                image1: p.images?.[0] || '',
-                image2: p.images?.[1] || '',
-                image3: p.images?.[2] || '',
-                image4: p.images?.[3] || '',
+                images: cleanImages,
             };
         });
 
