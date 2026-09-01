@@ -25,10 +25,17 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
     useEffect(() => {
         if (isMarketplaceActive) {
             setMarketplaceOpen(true);
+        } else {
+            setMarketplaceOpen(false);
         }
     }, [isMarketplaceActive]);
 
     const navigateTo = (view: string, type?: string) => {
+        const isNextMarketplace = (view === 'messages' && type === 'marketplace') || view === 'marketplace-listing';
+        if (!isNextMarketplace) {
+            setMarketplaceOpen(false);
+        }
+
         const params = new URLSearchParams(searchParams.toString());
         params.set('view', view);
         if (type) {
