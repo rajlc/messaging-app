@@ -1,9 +1,11 @@
 "use client";
 
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
     MessageCircle, MessageSquare, User, ShoppingBag,
-    Settings, LogOut, BarChart3, Truck, Home, Store, Boxes, Rss
+    Settings, LogOut, BarChart3, Truck, Home, Store, Boxes, Rss,
+    ChevronDown, Tag
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -17,6 +19,14 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
     const { user, logout } = useAuth();
 
     const activeType = searchParams.get('type') || 'messages';
+    const isMarketplaceActive = (activeView === 'messages' && activeType === 'marketplace') || activeView === 'marketplace-listing';
+    const [marketplaceOpen, setMarketplaceOpen] = useState(isMarketplaceActive);
+
+    useEffect(() => {
+        if (isMarketplaceActive) {
+            setMarketplaceOpen(true);
+        }
+    }, [isMarketplaceActive]);
 
     const navigateTo = (view: string, type?: string) => {
         const params = new URLSearchParams(searchParams.toString());
@@ -106,7 +116,66 @@ export default function Sidebar({ activeView = 'messages' }: SidebarProps) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 10px' }}>
                 <NavButton label="Messages"    icon={<MessageCircle size={18} />} active={activeView === 'messages' && activeType === 'messages'}         onClick={() => navigateTo('messages', 'messages')} />
                 <NavButton label="Comments"    icon={<MessageSquare size={18} />} active={activeView === 'messages' && activeType === 'comments'}         onClick={() => navigateTo('messages', 'comments')} />
-                <NavButton label="Marketplace" icon={<Store size={18} />}         active={activeView === 'messages' && activeType === 'marketplace'}      onClick={() => navigateTo('messages', 'marketplace')} />
+                
+                {/* Marketplace Dropdown Parent */}
+                <div className="flex flex-col gap-1">
+                    <button
+                        onClick={() => {
+                            if (!marketplaceOpen && !isMarketplaceActive) {
+                                navigateTo('messages', 'marketplace');
+                            }
+                            setMarketplaceOpen(!marketplaceOpen);
+                        }}
+                        className={`w-full h-11 flex items-center justify-between rounded-xl px-3 transition-all duration-200 text-left border-none cursor-pointer
+                            ${isMarketplaceActive 
+                                ? 'bg-[#EEF2FF] text-[#4F46E5] dark:bg-indigo-900/40 dark:text-indigo-400 font-semibold' 
+                                : 'bg-transparent text-[#374151] hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/50 font-medium'
+                            }`}
+                    >
+                        <div className="flex items-center gap-[10px] min-w-0">
+                            <span className="flex items-center justify-center w-5 h-5 shrink-0">
+                                <Store size={18} />
+                            </span>
+                            <span className="text-[13px] tracking-[0.1px] font-sans leading-none truncate">
+                                Marketplace
+                            </span>
+                        </div>
+                        <ChevronDown size={14} className={`transition-transform duration-200 shrink-0 ${marketplaceOpen ? 'rotate-180 text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+                    </button>
+
+                    {/* Submenu: Message and M. Listing */}
+                    {marketplaceOpen && (
+                        <div className="flex flex-col gap-1 pl-4 pr-1 py-1 ml-3.5 border-l-2 border-slate-100 dark:border-slate-800 transition-all">
+                            {/* 1. Message */}
+                            <button
+                                onClick={() => navigateTo('messages', 'marketplace')}
+                                className={`w-full h-8 flex items-center gap-2 rounded-lg px-2.5 text-left transition-all text-xs font-medium cursor-pointer border-none
+                                    ${(activeView === 'messages' && activeType === 'marketplace')
+                                        ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400 font-bold shadow-2xs'
+                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-200'
+                                    }`}
+                            >
+                                <MessageCircle size={13} className="shrink-0" />
+                                <span className="truncate">Message</span>
+                            </button>
+
+                            {/* 2. M. Listing */}
+                            <button
+                                onClick={() => navigateTo('marketplace-listing')}
+                                className={`w-full h-8 flex items-center gap-2 rounded-lg px-2.5 text-left transition-all text-xs font-medium cursor-pointer border-none
+                                    ${activeView === 'marketplace-listing'
+                                        ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400 font-bold shadow-2xs'
+                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-200'
+                                    }`}
+                                title="Marketplace Listing"
+                            >
+                                <Tag size={13} className="shrink-0" />
+                                <span className="truncate">M. Listing</span>
+                            </button>
+                        </div>
+                    )}
+                </div>
+
                 <NavButton label="Manage Post" icon={<Rss size={18} />}           active={activeView === 'manage-post'}                                  onClick={() => navigateTo('manage-post')} />
             </div>
 

@@ -24,6 +24,7 @@ const ads_management_module_1 = require("./ads-management/ads-management.module"
 const settlements_module_1 = require("./settlements/settlements.module");
 const rider_inventory_module_1 = require("./rider-inventory/rider-inventory.module");
 const publishing_module_1 = require("./publishing/publishing.module");
+const marketplace_module_1 = require("./marketplace/marketplace.module");
 const app_service_1 = require("./app.service");
 let AppModule = class AppModule {
 };
@@ -47,6 +48,7 @@ exports.AppModule = AppModule = __decorate([
             settlements_module_1.SettlementsModule,
             rider_inventory_module_1.RiderInventoryModule,
             publishing_module_1.PublishingModule,
+            marketplace_module_1.MarketplaceModule,
         ],
         controllers: [
             app_controller_1.AppController,
