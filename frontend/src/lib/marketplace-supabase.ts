@@ -21,6 +21,11 @@ export interface MarketplaceLocation {
     name: string;
 }
 
+export interface ImageFolderSetting {
+    folder_path: string;
+    auto_clean: boolean;
+}
+
 export interface ProductItem {
     id: string;
     description: string;
@@ -172,6 +177,42 @@ export async function deleteMarketplaceLocation(id: string): Promise<boolean> {
 
     if (error) {
         console.error('[Marketplace Supabase] Delete location error:', error);
+        throw new Error(error.message);
+    }
+    return true;
+}
+
+export async function fetchImageFolderSetting(): Promise<ImageFolderSetting> {
+    try {
+        const { data, error } = await marketplaceSupabase
+            .from('settings')
+            .select('value')
+            .eq('key', 'MARKETPLACE_IMAGE_FOLDER')
+            .maybeSingle();
+
+        if (data && data.value) {
+            return JSON.parse(data.value);
+        }
+    } catch (e) {
+        console.error('[Marketplace Supabase] Error loading image folder setting:', e);
+    }
+    return {
+        folder_path: 'C:\\Users\\Bagmati Traders\\Downloads\\Marketplace_Images',
+        auto_clean: true
+    };
+}
+
+export async function saveImageFolderSetting(setting: ImageFolderSetting): Promise<boolean> {
+    const { error } = await marketplaceSupabase
+        .from('settings')
+        .upsert({
+            key: 'MARKETPLACE_IMAGE_FOLDER',
+            value: JSON.stringify(setting),
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'key' });
+
+    if (error) {
+        console.error('[Marketplace Supabase] Save image folder error:', error);
         throw new Error(error.message);
     }
     return true;

@@ -5,7 +5,8 @@ import {
     Store, Upload, Download, Plus, Settings as SettingsIcon, FileSpreadsheet,
     CheckCircle2, Clock, Trash2, Eye, Edit3, X, Check, Copy, ChevronRight,
     MapPin, Tag, Sparkles, AlertCircle, Search, Filter, Layers, ExternalLink,
-    CheckSquare, Square, RefreshCw, AlertTriangle, ShieldCheck, ArrowUpDown
+    CheckSquare, Square, RefreshCw, AlertTriangle, ShieldCheck, ArrowUpDown,
+    Folder, Play, MonitorPlay, CheckCheck, Info
 } from 'lucide-react';
 import * as xlsx from 'xlsx';
 import {
@@ -21,10 +22,13 @@ import {
     saveMarketplaceProduct,
     deleteMarketplaceProduct,
     batchUpdateProductStatus,
+    fetchImageFolderSetting,
+    saveImageFolderSetting,
     MarketplaceProfile,
     MarketplaceCategory,
     MarketplaceLocation,
-    ProductItem
+    ProductItem,
+    ImageFolderSetting
 } from '@/lib/marketplace-supabase';
 
 export default function MarketplaceListingView() {
@@ -36,6 +40,15 @@ export default function MarketplaceListingView() {
     const [locations, setLocations] = useState<MarketplaceLocation[]>([]);
     const [products, setProducts] = useState<ProductItem[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // Image Folder Settings
+    const [imageFolderSetting, setImageFolderSetting] = useState<ImageFolderSetting>({
+        folder_path: 'C:\\Users\\Bagmati Traders\\Downloads\\Marketplace_Images',
+        auto_clean: true
+    });
+
+    // Companion Connection Status
+    const [companionOnline, setCompanionOnline] = useState<boolean | null>(null);
 
     // Filter & Search State
     const [searchQuery, setSearchQuery] = useState('');
@@ -54,27 +67,44 @@ export default function MarketplaceListingView() {
     const [showExportModal, setShowExportModal] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
     const [showMarketplaceAddModal, setShowMarketplaceAddModal] = useState(false);
+    const [showBulkListingModal, setShowBulkListingModal] = useState(false);
 
     // Settings Modal active tab
-    const [settingsTab, setSettingsTab] = useState<'profile' | 'category' | 'location'>('profile');
+    const [settingsTab, setSettingsTab] = useState<'profile' | 'category' | 'location' | 'imageFolder'>('profile');
 
     /* ─── Initial Load (Direct from Supabase) ─── */
     useEffect(() => {
         loadAllData();
+        checkCompanion();
     }, []);
+
+    const checkCompanion = async () => {
+        try {
+            const res = await fetch('http://localhost:3000/api/status', { method: 'GET' });
+            if (res.ok) {
+                setCompanionOnline(true);
+            } else {
+                setCompanionOnline(false);
+            }
+        } catch {
+            setCompanionOnline(false);
+        }
+    };
 
     const loadAllData = async () => {
         setLoading(true);
         try {
-            const [settings, prods] = await Promise.all([
+            const [settings, prods, folderSet] = await Promise.all([
                 fetchMarketplaceSettings(),
-                fetchMarketplaceProducts()
+                fetchMarketplaceProducts(),
+                fetchImageFolderSetting()
             ]);
 
             if (settings.profiles?.length) setProfiles(settings.profiles);
             if (settings.categories?.length) setCategories(settings.categories);
             if (settings.locations?.length) setLocations(settings.locations);
             if (Array.isArray(prods)) setProducts(prods);
+            if (folderSet) setImageFolderSetting(folderSet);
         } catch (e) {
             console.error('Failed to load marketplace data:', e);
         } finally {
@@ -148,14 +178,50 @@ export default function MarketplaceListingView() {
                                     {products.length} Products
                                 </span>
                             </h1>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                Manage, customize, export, and automate product listings for Facebook Marketplace
-                            </p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    Manage, customize, export, and automate product listings for Facebook Marketplace
+                                </p>
+                                <span 
+                                    onClick={checkCompanion}
+                                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.2 rounded-full cursor-pointer transition-colors ${
+                                        companionOnline === true
+                                            ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200'
+                                            : companionOnline === false
+                                            ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200'
+                                            : 'bg-slate-100 text-slate-500'
+                                    }`}
+                                    title="Click to recheck local automation companion status"
+                                >
+                                    <span className={`w-1.5 h-1.5 rounded-full ${companionOnline ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                                    {companionOnline ? 'Helper Online (3000)' : 'Helper Offline'}
+                                </span>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Header Action Buttons: Import, Export, Add List, Settings */}
-                    <div className="flex items-center gap-2.5 flex-wrap">
+                    {/* Header Action Buttons: Bulk Listing, Import, Export, Add List, Settings */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {/* Direct Bulk Listing Button */}
+                        <button
+                            onClick={() => {
+                                if (selectedProductIds.size === 0) {
+                                    alert('Please select at least one product using the checkboxes below to launch bulk listing.');
+                                    return;
+                                }
+                                setShowBulkListingModal(true);
+                            }}
+                            className={`inline-flex items-center gap-1.5 h-9 px-4 rounded-xl text-[13px] font-bold transition-all border-none cursor-pointer active:scale-95 shadow-sm ${
+                                selectedProductIds.size > 0
+                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/25 ring-2 ring-emerald-500/30'
+                                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 hover:bg-emerald-100'
+                            }`}
+                            title="Directly launch selected products to Facebook Marketplace"
+                        >
+                            <Play size={14} className="fill-current" />
+                            <span>Bulk Listing {selectedProductIds.size > 0 ? `(${selectedProductIds.size})` : ''}</span>
+                        </button>
+
                         {/* Import Button */}
                         <button
                             onClick={() => setShowImportModal(true)}
@@ -189,7 +255,7 @@ export default function MarketplaceListingView() {
                         <button
                             onClick={() => setShowSettingsModal(true)}
                             className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl text-[13px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border border-indigo-200/80 dark:border-indigo-800/80 transition-all cursor-pointer active:scale-95"
-                            title="Marketplace Settings (Profiles, Categories, Locations)"
+                            title="Marketplace Settings (Profiles, Categories, Locations, Image Folder)"
                         >
                             <SettingsIcon size={14} /> Settings
                         </button>
@@ -455,24 +521,32 @@ export default function MarketplaceListingView() {
                 </div>
             </div>
 
-            {/* ─── 4. FLOATING BOTTOM BAR: "MARKETPLACE ADD" ─── */}
+            {/* ─── 4. FLOATING BOTTOM BAR: "MARKETPLACE ADD" & "BULK LISTING" ─── */}
             {selectedProductIds.size > 0 && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 backdrop-blur-md text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-200">
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 backdrop-blur-md text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-200">
                     <div className="flex items-center gap-2 text-xs font-semibold">
                         <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
                             {selectedProductIds.size}
                         </span>
-                        <span>items selected</span>
+                        <span>selected</span>
                     </div>
 
                     <div className="h-4 w-px bg-slate-700" />
 
-                    {/* Button Name: "Marketplace Add" */}
+                    {/* Direct Launch Bulk Listing Button */}
+                    <button
+                        onClick={() => setShowBulkListingModal(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white transition-all shadow-md shadow-emerald-600/30 border-none cursor-pointer"
+                    >
+                        <Play size={13} className="fill-white" /> Launch Bulk Listing
+                    </button>
+
+                    {/* Button Name: "Marketplace Add" (Status Mark) */}
                     <button
                         onClick={() => setShowMarketplaceAddModal(true)}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white transition-all shadow-md shadow-indigo-600/30 border-none cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white transition-all shadow-md shadow-indigo-600/30 border-none cursor-pointer"
                     >
-                        <CheckCircle2 size={14} /> Marketplace Add
+                        <CheckCircle2 size={13} /> Mark Complete
                     </button>
 
                     <button
@@ -490,11 +564,13 @@ export default function MarketplaceListingView() {
                     profiles={profiles}
                     categories={categories}
                     locations={locations}
+                    imageFolderSetting={imageFolderSetting}
                     activeTab={settingsTab}
                     setActiveTab={setSettingsTab}
                     onProfilesChanged={(updated) => setProfiles(updated)}
                     onCategoriesChanged={(updated) => setCategories(updated)}
                     onLocationsChanged={(updated) => setLocations(updated)}
+                    onImageFolderChanged={(updated) => setImageFolderSetting(updated)}
                     onClose={() => setShowSettingsModal(false)}
                 />
             )}
@@ -611,7 +687,41 @@ export default function MarketplaceListingView() {
                 />
             )}
 
-            {/* ─── 10. EXPORT MODAL ─── */}
+            {/* ─── 10. LAUNCH BULK LISTING MODAL ─── */}
+            {showBulkListingModal && (
+                <LaunchBulkListingModal
+                    selectedProducts={products.filter(p => selectedProductIds.has(p.id))}
+                    profiles={profiles}
+                    imageFolderSetting={imageFolderSetting}
+                    companionOnline={companionOnline}
+                    onLaunched={async (targetProfile) => {
+                        // Mark selected products as completed
+                        await batchUpdateProductStatus(
+                            Array.from(selectedProductIds),
+                            targetProfile,
+                            'completed',
+                            profiles
+                        );
+                        setProducts(prev => prev.map(p => {
+                            if (selectedProductIds.has(p.id)) {
+                                const nextMap = { ...p.status_map };
+                                if (targetProfile === 'all') {
+                                    profiles.forEach(prof => { nextMap[prof.name] = 'completed'; });
+                                } else {
+                                    nextMap[targetProfile] = 'completed';
+                                }
+                                return { ...p, status_map: nextMap };
+                            }
+                            return p;
+                        }));
+                        setSelectedProductIds(new Set());
+                        setShowBulkListingModal(false);
+                    }}
+                    onClose={() => setShowBulkListingModal(false)}
+                />
+            )}
+
+            {/* ─── 11. EXPORT MODAL ─── */}
             {showExportModal && (
                 <ExportModal
                     profiles={profiles}
@@ -620,7 +730,7 @@ export default function MarketplaceListingView() {
                 />
             )}
 
-            {/* ─── 11. IMPORT MODAL ─── */}
+            {/* ─── 12. IMPORT MODAL ─── */}
             {showImportModal && (
                 <ImportModal
                     profiles={profiles}
@@ -639,32 +749,40 @@ export default function MarketplaceListingView() {
 
 /* ─────────────────────────────────────────────────────────────────────────────
    SETTINGS MODAL (Two-Column Layout: Left Sidebar + Right Details)
-   Directly saves to Supabase table marketplace_profiles, marketplace_categories, marketplace_locations
+   Includes "Image Folder" Tab
    ───────────────────────────────────────────────────────────────────────────── */
 function SettingsModal({
     profiles,
     categories,
     locations,
+    imageFolderSetting,
     activeTab,
     setActiveTab,
     onProfilesChanged,
     onCategoriesChanged,
     onLocationsChanged,
+    onImageFolderChanged,
     onClose
 }: {
     profiles: MarketplaceProfile[];
     categories: MarketplaceCategory[];
     locations: MarketplaceLocation[];
-    activeTab: 'profile' | 'category' | 'location';
-    setActiveTab: (tab: 'profile' | 'category' | 'location') => void;
+    imageFolderSetting: ImageFolderSetting;
+    activeTab: 'profile' | 'category' | 'location' | 'imageFolder';
+    setActiveTab: (tab: 'profile' | 'category' | 'location' | 'imageFolder') => void;
     onProfilesChanged: (profiles: MarketplaceProfile[]) => void;
     onCategoriesChanged: (cats: MarketplaceCategory[]) => void;
     onLocationsChanged: (locs: MarketplaceLocation[]) => void;
+    onImageFolderChanged: (setting: ImageFolderSetting) => void;
     onClose: () => void;
 }) {
     const [localProfiles, setLocalProfiles] = useState<MarketplaceProfile[]>(profiles);
     const [localCategories, setLocalCategories] = useState<MarketplaceCategory[]>(categories);
     const [localLocations, setLocalLocations] = useState<MarketplaceLocation[]>(locations);
+
+    // Image folder local state
+    const [folderPath, setFolderPath] = useState(imageFolderSetting.folder_path || 'C:\\Users\\Bagmati Traders\\Downloads\\Marketplace_Images');
+    const [autoClean, setAutoClean] = useState(imageFolderSetting.auto_clean ?? true);
 
     const [newProfileName, setNewProfileName] = useState('');
     const [showAddProfileInput, setShowAddProfileInput] = useState(false);
@@ -820,6 +938,25 @@ function SettingsModal({
         }
     };
 
+    // Image Folder Action - Direct to Supabase
+    const handleSaveImageFolder = async () => {
+        if (!folderPath.trim()) return;
+        setSaving(true);
+        try {
+            const setting: ImageFolderSetting = {
+                folder_path: folderPath.trim(),
+                auto_clean: autoClean
+            };
+            await saveImageFolderSetting(setting);
+            onImageFolderChanged(setting);
+            triggerSaveFeedback('Image folder configuration saved!');
+        } catch (e: any) {
+            alert(`Error saving image folder: ${e.message}`);
+        } finally {
+            setSaving(false);
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs animate-in fade-in duration-200">
             <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-4xl w-full h-[640px] shadow-2xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden">
@@ -834,7 +971,7 @@ function SettingsModal({
                                 Marketplace Settings
                             </h2>
                             <p className="text-[11px] text-slate-400">
-                                Configure profiles, last descriptions, categories, and delivery locations
+                                Configure profiles, last descriptions, categories, delivery locations, and image download folder
                             </p>
                         </div>
                     </div>
@@ -900,6 +1037,23 @@ function SettingsModal({
                             </span>
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
                                 {localLocations.length}
+                            </span>
+                        </button>
+
+                        {/* 4th Tab: Image Folder */}
+                        <button
+                            onClick={() => setActiveTab('imageFolder')}
+                            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold text-left transition-all border-none cursor-pointer ${
+                                activeTab === 'imageFolder'
+                                    ? 'bg-white dark:bg-slate-750 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                            }`}
+                        >
+                            <span className="flex items-center gap-2">
+                                <Folder size={15} /> Image Folder
+                            </span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600">
+                                Active
                             </span>
                         </button>
                     </div>
@@ -1076,6 +1230,92 @@ function SettingsModal({
                                             </button>
                                         </div>
                                     ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* TAB 4: IMAGE FOLDER (NEW!) */}
+                        {activeTab === 'imageFolder' && (
+                            <div className="space-y-6 max-w-2xl">
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                                        <Folder size={17} className="text-indigo-600" /> Image Download Folder Settings
+                                    </h3>
+                                    <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+                                        When you launch listings from the webapp, images will be downloaded into this folder in <strong>100% full original quality</strong> before being uploaded to Facebook Marketplace.
+                                    </p>
+                                </div>
+
+                                <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/40 space-y-4">
+                                    {/* Folder Path Field */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                                            Local Computer Folder Path:
+                                        </label>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="text"
+                                                value={folderPath}
+                                                onChange={(e) => setFolderPath(e.target.value)}
+                                                placeholder="e.g. C:\Users\Bagmati Traders\Downloads\Marketplace_Images"
+                                                className="flex-1 px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-mono focus:outline-hidden focus:border-indigo-500"
+                                            />
+                                        </div>
+                                        <p className="text-[11px] text-slate-400">
+                                            You can specify any local folder on your computer. If the folder does not exist, the helper will create it automatically.
+                                        </p>
+                                    </div>
+
+                                    {/* Retention / Auto-Clean Options */}
+                                    <div className="pt-3 border-t border-slate-200 dark:border-slate-700 space-y-2.5">
+                                        <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
+                                            Temporary File Clean-up Mode:
+                                        </label>
+
+                                        <label
+                                            onClick={() => setAutoClean(true)}
+                                            className={`flex items-start gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                                                autoClean
+                                                    ? 'bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-500 text-indigo-700 dark:text-indigo-300'
+                                                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                                            }`}
+                                        >
+                                            <input type="radio" checked={autoClean} onChange={() => setAutoClean(true)} className="mt-0.5" />
+                                            <div>
+                                                <strong className="block font-semibold">Auto-delete temporary images after upload (Recommended)</strong>
+                                                <span className="text-[11px] text-slate-400">
+                                                    Keeps your storage clean by automatically removing downloaded images once they are uploaded to Facebook.
+                                                </span>
+                                            </div>
+                                        </label>
+
+                                        <label
+                                            onClick={() => setAutoClean(false)}
+                                            className={`flex items-start gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                                                !autoClean
+                                                    ? 'bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-500 text-indigo-700 dark:text-indigo-300'
+                                                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                                            }`}
+                                        >
+                                            <input type="radio" checked={!autoClean} onChange={() => setAutoClean(false)} className="mt-0.5" />
+                                            <div>
+                                                <strong className="block font-semibold">Keep downloaded images in folder</strong>
+                                                <span className="text-[11px] text-slate-400">
+                                                    Retains all downloaded images in this directory so you have a local photo archive on your computer.
+                                                </span>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end">
+                                    <button
+                                        disabled={saving}
+                                        onClick={handleSaveImageFolder}
+                                        className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-500/20 active:scale-95 transition-all border-none cursor-pointer disabled:opacity-50"
+                                    >
+                                        {saving ? 'Saving...' : 'Save Folder Settings'}
+                                    </button>
                                 </div>
                             </div>
                         )}
@@ -1547,6 +1787,244 @@ function AddListModal({
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
+    );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   LAUNCH BULK LISTING MODAL (Direct Playwright execution)
+   ───────────────────────────────────────────────────────────────────────────── */
+function LaunchBulkListingModal({
+    selectedProducts,
+    profiles,
+    imageFolderSetting,
+    companionOnline,
+    onLaunched,
+    onClose
+}: {
+    selectedProducts: ProductItem[];
+    profiles: MarketplaceProfile[];
+    imageFolderSetting: ImageFolderSetting;
+    companionOnline: boolean | null;
+    onLaunched: (profileName: string) => Promise<void>;
+    onClose: () => void;
+}) {
+    const [targetProfile, setTargetProfile] = useState(profiles[0]?.name || 'Default');
+    const [batchSize, setBatchSize] = useState<number>(3);
+    const [publishMode, setPublishMode] = useState<'manual' | 'auto'>('manual');
+    const [runBackground, setRunBackground] = useState<boolean>(false);
+    const [isLaunching, setIsLaunching] = useState(false);
+    const [launchError, setLaunchError] = useState('');
+
+    const handleLaunch = async () => {
+        setIsLaunching(true);
+        setLaunchError('');
+
+        // Prepare listings mapped to the selected profile's title, price, and appended last description
+        const mappedListings = selectedProducts.map((p, idx) => {
+            const pData = p.profile_data?.[targetProfile] || Object.values(p.profile_data || {})[0] || {};
+            const title = pData.title || p.description?.slice(0, 30) || 'Untitled Item';
+            const price = pData.price || 0;
+            const description = pData.final_description || p.description || '';
+
+            return {
+                id: idx + 1,
+                productId: p.id,
+                title,
+                price,
+                category: p.category || 'General',
+                condition: p.condition || 'New',
+                location: p.location || 'Kathmandu',
+                description,
+                images: p.images || [],
+                image1: p.images?.[0] || '',
+                image2: p.images?.[1] || '',
+                image3: p.images?.[2] || '',
+                image4: p.images?.[3] || '',
+            };
+        });
+
+        try {
+            // Send to local companion running on port 3000
+            const res = await fetch('http://localhost:3000/api/launch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    listings: mappedListings.slice(0, batchSize),
+                    publishMode,
+                    runBackground,
+                    imageFolder: imageFolderSetting.folder_path,
+                    autoClean: imageFolderSetting.auto_clean
+                })
+            });
+
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || 'Failed to connect to local Marketplace Automation companion.');
+            }
+
+            // Successfully dispatched!
+            await onLaunched(targetProfile);
+        } catch (err: any) {
+            console.error('Launch bulk listing error:', err);
+            setLaunchError(
+                err.message || 
+                'Local Automation companion not running on port 3000. Open a terminal in "marketplace automation" and run "node server.js".'
+            );
+            setIsLaunching(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700 space-y-5">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
+                            <Play size={20} className="fill-white ml-0.5" />
+                        </div>
+                        <div>
+                            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
+                                Launch Bulk Marketplace Listing
+                            </h3>
+                            <p className="text-xs text-slate-400">
+                                {selectedProducts.length} product(s) selected for direct publishing
+                            </p>
+                        </div>
+                    </div>
+
+                    <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl transition-all border-none bg-transparent cursor-pointer">
+                        <X size={18} />
+                    </button>
+                </div>
+
+                {launchError && (
+                    <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 space-y-1">
+                        <div className="font-bold flex items-center gap-1.5">
+                            <AlertCircle size={14} className="text-amber-600 shrink-0" />
+                            <span>Automation Companion Status</span>
+                        </div>
+                        <p className="text-[11px] leading-relaxed">
+                            {launchError}
+                        </p>
+                    </div>
+                )}
+
+                <div className="space-y-4">
+                    {/* Choose Marketplace Profile */}
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between">
+                            <span>Marketplace Profile:</span>
+                            <span className="text-[11px] text-slate-400 font-normal">Uses this profile's title, price & last description</span>
+                        </label>
+                        <select
+                            value={targetProfile}
+                            onChange={(e) => setTargetProfile(e.target.value)}
+                            className="w-full p-2.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-semibold focus:outline-hidden"
+                        >
+                            {profiles.map(p => (
+                                <option key={p.id} value={p.name}>{p.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Batch Size (Tabs to open) */}
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                            Batch Size (Tabs per launch):
+                        </label>
+                        <div className="grid grid-cols-4 gap-2">
+                            {[1, 3, 5, 10].map(size => (
+                                <button
+                                    key={size}
+                                    type="button"
+                                    onClick={() => setBatchSize(size)}
+                                    className={`py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                                        batchSize === size
+                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-500 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                            : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700'
+                                    }`}
+                                >
+                                    {size === 1 ? '1 (Login/Test)' : `${size} Tabs`}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Publishing Mode: Manual Review vs Auto Publish */}
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                            Execution Mode:
+                        </label>
+                        <div className="grid grid-cols-2 gap-2.5">
+                            <label
+                                onClick={() => setPublishMode('manual')}
+                                className={`p-3 rounded-2xl border text-xs cursor-pointer transition-all ${
+                                    publishMode === 'manual'
+                                        ? 'bg-indigo-50/60 border-indigo-500 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300'
+                                        : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                                }`}
+                            >
+                                <div className="font-bold flex items-center gap-1.5">
+                                    <Eye size={13} /> Manual Review
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-1 leading-snug">
+                                    Fills all fields and leaves tabs open so you can review and click Publish.
+                                </p>
+                            </label>
+
+                            <label
+                                onClick={() => setPublishMode('auto')}
+                                className={`p-3 rounded-2xl border text-xs cursor-pointer transition-all ${
+                                    publishMode === 'auto'
+                                        ? 'bg-indigo-50/60 border-indigo-500 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300'
+                                        : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                                }`}
+                            >
+                                <div className="font-bold flex items-center gap-1.5">
+                                    <Sparkles size={13} /> Auto Publish
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-1 leading-snug">
+                                    Fills fields, clicks "Next" and clicks "Publish" automatically.
+                                </p>
+                            </label>
+                        </div>
+                    </div>
+
+                    {/* Run in Background Checkbox */}
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700">
+                        <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-700 dark:text-slate-200">
+                            <input
+                                type="checkbox"
+                                checked={runBackground}
+                                onChange={(e) => setRunBackground(e.target.checked)}
+                                className="w-4 h-4 rounded text-indigo-600 cursor-pointer"
+                            />
+                            <span>Run in background (Headless Chrome mode)</span>
+                        </label>
+                    </div>
+
+                    {/* Image Folder Summary note */}
+                    <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                        <Folder size={13} className="text-indigo-500 shrink-0" />
+                        <span className="truncate">Images will download to: <strong className="font-mono text-slate-600 dark:text-slate-300">{imageFolderSetting.folder_path}</strong></span>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-700">
+                    <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 border-none bg-transparent cursor-pointer">
+                        Cancel
+                    </button>
+                    <button
+                        disabled={isLaunching}
+                        onClick={handleLaunch}
+                        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-500/20 active:scale-95 transition-all border-none cursor-pointer disabled:opacity-50"
+                    >
+                        {isLaunching ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} className="fill-white" />}
+                        {isLaunching ? 'Launching Chrome...' : `Launch Batch (${Math.min(batchSize, selectedProducts.length)})`}
+                    </button>
+                </div>
             </div>
         </div>
     );
