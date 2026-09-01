@@ -25,7 +25,8 @@ import {
     Eye,
     Edit3,
     Trash2,
-    Send
+    Send,
+    CheckCircle2
 } from 'lucide-react';
 import {
     getProducts,
@@ -38,6 +39,7 @@ import {
     toggleProductStatus,
     Product
 } from '@/services/inv-product-service';
+import { fetchListedInventoryIds } from '@/lib/marketplace-supabase';
 import { AddProductModal } from '@/components/inv-merge/AddProductModal';
 import { ViewProductModal } from '@/components/inv-merge/ViewProductModal';
 import { EditProductModal } from '@/components/inv-merge/EditProductModal';
@@ -131,17 +133,22 @@ export default function ProductListView() {
     const [activeMoreMenuId, setActiveMoreMenuId] = useState<string | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [updatingSyncId, setUpdatingSyncId] = useState<string | null>(null);
+    const [listedMarketplaceIds, setListedMarketplaceIds] = useState<Set<string>>(new Set());
 
     const loadProducts = useCallback(async () => {
         setIsLoading(true);
         setError(null);
         try {
-            const data = await getProducts({
-                page,
-                limit: 50,
-                search,
-                syncFilter,
-            });
+            const [data, listedIds] = await Promise.all([
+                getProducts({
+                    page,
+                    limit: 50,
+                    search,
+                    syncFilter,
+                }),
+                fetchListedInventoryIds()
+            ]);
+            setListedMarketplaceIds(listedIds);
             const grouped = groupProductsByVariation(data.products);
             setProducts(grouped);
             setTotalCount(data.totalCount);
@@ -531,6 +538,7 @@ export default function ProductListView() {
                                     <th className="p-3">STATUS</th>
                                     <th className="p-3">PRODUCT ID</th>
                                     <th className="p-3">WEBSITE</th>
+                                    <th className="p-3">MARKETPLACE</th>
                                     <th className="p-3 text-center">ACTIONS</th>
                                 </tr>
                             </thead>
@@ -547,13 +555,14 @@ export default function ProductListView() {
                                             <td className="p-3"><div className="w-16 h-5 bg-slate-200 dark:bg-slate-700 rounded-full" /></td>
                                             <td className="p-3"><div className="w-16 h-3 bg-slate-200 dark:bg-slate-700 rounded" /></td>
                                             <td className="p-3"><div className="w-16 h-5 bg-slate-200 dark:bg-slate-700 rounded-full" /></td>
+                                            <td className="p-3"><div className="w-16 h-5 bg-slate-200 dark:bg-slate-700 rounded-full" /></td>
                                             <td className="p-3"><div className="w-16 h-6 bg-slate-200 dark:bg-slate-700 rounded-lg mx-auto" /></td>
                                         </tr>
                                     ))
                                 ) : products.length === 0 ? (
                                     /* Empty State */
                                     <tr>
-                                        <td colSpan={9} className="py-16 text-center text-slate-400 dark:text-slate-500">
+                                        <td colSpan={10} className="py-16 text-center text-slate-400 dark:text-slate-500">
                                             <Package size={40} className="mx-auto mb-2 opacity-30" />
                                             <p className="font-semibold text-sm text-slate-700 dark:text-slate-300">
                                                 No products found
@@ -700,6 +709,25 @@ export default function ProductListView() {
                                                         <option value="Done">Done</option>
                                                         <option value="Pending">Pending</option>
                                                     </select>
+                                                </td>
+
+                                                {/* Marketplace Column */}
+                                                <td className="p-3 whitespace-nowrap">
+                                                    {listedMarketplaceIds.has(String(product.id)) || (product.product_id && listedMarketplaceIds.has(String(product.product_id))) ? (
+                                                        <span 
+                                                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800" 
+                                                            title="Listed in Marketplace Listing"
+                                                        >
+                                                            <CheckCircle2 size={11} /> Listed
+                                                        </span>
+                                                    ) : (
+                                                        <span 
+                                                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700" 
+                                                            title="Not yet in Marketplace Listing"
+                                                        >
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Pending
+                                                        </span>
+                                                    )}
                                                 </td>
 
                                                 {/* Actions */}

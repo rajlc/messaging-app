@@ -73,9 +73,12 @@ ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS location TEXT DEFAULT 
 ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS images TEXT[] DEFAULT '{}';
 ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS profile_data JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS status_map JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS inventory_id TEXT;
 ALTER TABLE marketplace_products ALTER COLUMN product_name DROP NOT NULL;
 ALTER TABLE marketplace_products ALTER COLUMN price DROP NOT NULL;
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_marketplace_products_category ON marketplace_products(category);
 CREATE INDEX IF NOT EXISTS idx_marketplace_products_created_at ON marketplace_products(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_marketplace_products_inventory_id ON marketplace_products(inventory_id);
+

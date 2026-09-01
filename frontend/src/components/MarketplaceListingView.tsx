@@ -6,7 +6,8 @@ import {
     CheckCircle2, Clock, Trash2, Eye, Edit3, X, Check, Copy, ChevronRight,
     MapPin, Tag, Sparkles, AlertCircle, Search, Filter, Layers, ExternalLink,
     CheckSquare, Square, RefreshCw, AlertTriangle, ShieldCheck, ArrowUpDown,
-    Folder, Play, MonitorPlay, CheckCheck, Info
+    Folder, Play, MonitorPlay, CheckCheck, Info,
+    Package, Link2, Unlink
 } from 'lucide-react';
 import * as xlsx from 'xlsx';
 import {
@@ -24,11 +25,14 @@ import {
     batchUpdateProductStatus,
     fetchImageFolderSetting,
     saveImageFolderSetting,
+    searchInventoryProducts,
+    fetchPendingInventoryProducts,
     MarketplaceProfile,
     MarketplaceCategory,
     MarketplaceLocation,
     ProductItem,
-    ImageFolderSetting
+    ImageFolderSetting,
+    InventoryProductRef
 } from '@/lib/marketplace-supabase';
 
 export default function MarketplaceListingView() {
@@ -410,6 +414,13 @@ export default function MarketplaceListingView() {
                                                 {/* Column 1: Product Name in different profiles */}
                                                 <td className="p-3.5">
                                                     <div className="space-y-1.5">
+                                                        {product.inventory_id && (
+                                                            <div className="mb-1">
+                                                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60" title={`Linked to Inventory #${product.inventory_id}`}>
+                                                                    <Package size={10} /> #{product.inventory_id}
+                                                                </span>
+                                                            </div>
+                                                        )}
                                                         {profiles.map(prof => {
                                                             const pData = product.profile_data?.[prof.name] || {};
                                                             return (
@@ -1456,6 +1467,74 @@ function AddListModal({
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
 
+    // Inventory Link States
+    const [inventoryId, setInventoryId] = useState<string | null>(product?.inventory_id || null);
+    const [selectedInventoryProduct, setSelectedInventoryProduct] = useState<InventoryProductRef | null>(null);
+    const [invSearchQuery, setInvSearchQuery] = useState('');
+    const [invSearchResults, setInvSearchResults] = useState<InventoryProductRef[]>([]);
+    const [isSearchingInv, setIsSearchingInv] = useState(false);
+    const [showInvDropdown, setShowInvDropdown] = useState(false);
+
+    useEffect(() => {
+        if (!invSearchQuery.trim() || invSearchQuery.trim().length < 2) {
+            setInvSearchResults([]);
+            return;
+        }
+        const timer = setTimeout(async () => {
+            setIsSearchingInv(true);
+            const results = await searchInventoryProducts(invSearchQuery);
+            setInvSearchResults(results);
+            setIsSearchingInv(false);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [invSearchQuery]);
+
+    const handleSelectInventoryProduct = (invProd: InventoryProductRef) => {
+        setSelectedInventoryProduct(invProd);
+        const refId = String(invProd.product_id || invProd.id);
+        setInventoryId(refId);
+        setShowInvDropdown(false);
+        setInvSearchQuery('');
+
+        // Pre-fill profile rows with product name and price
+        setProfileRows(prev => {
+            const next = { ...prev };
+            for (const p of profiles) {
+                next[p.name] = {
+                    title: invProd.product_name || '',
+                    price: invProd.special_price || invProd.regular_price || ''
+                };
+            }
+            return next;
+        });
+
+        // Pre-fill category
+        if (invProd.marketplace_category) {
+            setCategory(invProd.marketplace_category);
+        } else if (invProd.category_name) {
+            const matched = categories.find(c => c.name.toLowerCase() === invProd.category_name?.toLowerCase());
+            if (matched) setCategory(matched.name);
+        }
+
+        // Pre-fill images
+        const imgs: string[] = [];
+        if (invProd.image_url) imgs.push(invProd.image_url);
+        if (Array.isArray(invProd.other_images)) {
+            imgs.push(...invProd.other_images.filter(Boolean));
+        }
+        if (imgs.length >= 2) {
+            setImageUrls(imgs);
+        } else if (imgs.length === 1) {
+            setImageUrls([imgs[0], '']);
+        }
+
+        // Pre-fill description
+        if (invProd.description) {
+            const cleanDesc = invProd.description.replace(/<[^>]*>?/gm, '').trim();
+            if (cleanDesc) setBaseDescription(cleanDesc);
+        }
+    };
+
     // "Copy Above" logic: copy title & price from the profile above it
     const handleCopyAbove = (currentIndex: number) => {
         if (currentIndex === 0) return;
@@ -1528,6 +1607,7 @@ function AddListModal({
 
             const payload: any = {
                 id: product?.id,
+                inventory_id: inventoryId,
                 description: baseDescription.trim(),
                 category,
                 condition: 'New',
@@ -1577,6 +1657,98 @@ function AddListModal({
                             <span>{error}</span>
                         </div>
                     )}
+
+                    {/* Section 0: Link to Inventory Product */}
+                    <div className="p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+                                <Package size={14} /> Link to Inventory Product (Optional)
+                            </label>
+                            {inventoryId && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setInventoryId(null);
+                                        setSelectedInventoryProduct(null);
+                                    }}
+                                    className="text-[11px] font-bold text-slate-400 hover:text-red-500 flex items-center gap-1 border-none bg-transparent cursor-pointer transition-colors"
+                                >
+                                    <Unlink size={12} /> Unlink
+                                </button>
+                            )}
+                        </div>
+
+                        {inventoryId ? (
+                            <div className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 shadow-xs">
+                                <div className="flex items-center gap-2.5 overflow-hidden">
+                                    <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-mono shrink-0">
+                                        #{inventoryId}
+                                    </span>
+                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                                        {selectedInventoryProduct?.product_name || product?.profile_data?.[profiles[0]?.name]?.title || 'Linked Inventory Item'}
+                                    </span>
+                                </div>
+                                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 shrink-0 ml-2">
+                                    <CheckCircle2 size={13} /> Active Link
+                                </span>
+                            </div>
+                        ) : (
+                            <div className="relative">
+                                <div className="relative">
+                                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        value={invSearchQuery}
+                                        onFocus={() => setShowInvDropdown(true)}
+                                        onChange={(e) => {
+                                            setInvSearchQuery(e.target.value);
+                                            setShowInvDropdown(true);
+                                        }}
+                                        placeholder="Search inventory products by name or #ID to auto-fill details..."
+                                        className="w-full pl-9 pr-8 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:border-indigo-500"
+                                    />
+                                    {isSearchingInv && (
+                                        <RefreshCw size={13} className="animate-spin text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                                    )}
+                                </div>
+
+                                {/* Dropdown results */}
+                                {showInvDropdown && invSearchResults.length > 0 && (
+                                    <div className="absolute top-full left-0 right-0 mt-1.5 max-h-56 overflow-y-auto bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 z-50 divide-y divide-slate-100 dark:divide-slate-700/60">
+                                        {invSearchResults.map(item => (
+                                            <div
+                                                key={item.id}
+                                                onClick={() => handleSelectInventoryProduct(item)}
+                                                className="p-2.5 flex items-center justify-between gap-3 hover:bg-indigo-50/60 dark:hover:bg-slate-700/60 cursor-pointer transition-colors"
+                                            >
+                                                <div className="flex items-center gap-2.5 overflow-hidden">
+                                                    {item.image_url ? (
+                                                        <img src={item.image_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
+                                                    ) : (
+                                                        <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
+                                                            <Package size={14} className="text-slate-400" />
+                                                        </div>
+                                                    )}
+                                                    <div className="truncate">
+                                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                                                            {item.product_name}
+                                                        </p>
+                                                        <p className="text-[10px] text-slate-400 font-mono">
+                                                            #{item.product_id} • {item.category_name || item.marketplace_category || 'General'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex-shrink-0">
+                                                    Rs. {item.special_price || item.regular_price || 0}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
 
                     {/* Section 1: Product Name & Price per Profile */}
                     <div className="space-y-3">
@@ -2369,50 +2541,93 @@ function ImportModal({
 }) {
     const [file, setFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
+    const [downloadingTemplate, setDownloadingTemplate] = useState(false);
     const [result, setResult] = useState<{ importedCount: number; errors: string[] } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Dynamic 3-Sheet Template Generator
-    const handleDownloadTemplate = () => {
-        const wb = xlsx.utils.book_new();
+    // Dynamic 3-Sheet Template Generator (Pre-populated with pending inventory products)
+    const handleDownloadTemplate = async () => {
+        setDownloadingTemplate(true);
+        try {
+            const wb = xlsx.utils.book_new();
 
-        // 1. Sheet 1: Listings Template
-        const headers: string[] = [];
-        for (const prof of profiles) {
-            headers.push(`Product Name (${prof.name})`);
-            headers.push(`Price (${prof.name})`);
+            // 1. Sheet 1: Listings Template
+            const headers: string[] = ['Inventory ID', 'Product Name'];
+            for (const prof of profiles) {
+                headers.push(`Product Name (${prof.name})`);
+                headers.push(`Price (${prof.name})`);
+            }
+            headers.push('Category', 'Condition', 'Location', 'Description', 'Image 1', 'Image 2', 'Image 3', 'Image 4');
+
+            // Fetch pending inventory items from the inventory database!
+            let dataRows: Record<string, any>[] = [];
+            try {
+                const pendingItems = await fetchPendingInventoryProducts();
+                if (pendingItems && pendingItems.length > 0) {
+                    dataRows = pendingItems.map(item => {
+                        const row: Record<string, any> = {
+                            'Inventory ID': item.product_id || item.id,
+                            'Product Name': item.product_name,
+                        };
+                        for (const prof of profiles) {
+                            row[`Product Name (${prof.name})`] = item.product_name;
+                            row[`Price (${prof.name})`] = item.special_price || item.regular_price || 0;
+                        }
+                        row['Category'] = item.marketplace_category || item.category_name || categories[0]?.name || 'Electronics';
+                        row['Condition'] = 'New';
+                        row['Location'] = locations[0]?.name || 'Kathmandu';
+                        row['Description'] = (item.description || '').replace(/<[^>]*>?/gm, '').trim();
+                        row['Image 1'] = item.image_url || '';
+                        row['Image 2'] = item.other_images?.[0] || '';
+                        row['Image 3'] = item.other_images?.[1] || '';
+                        row['Image 4'] = item.other_images?.[2] || '';
+                        return row;
+                    });
+                }
+            } catch (err) {
+                console.warn('Could not fetch pending inventory products for template:', err);
+            }
+
+            if (dataRows.length === 0) {
+                // Fallback sample row
+                const sampleRow: Record<string, any> = {
+                    'Inventory ID': 1001,
+                    'Product Name': 'Sample Product Title',
+                };
+                for (const prof of profiles) {
+                    sampleRow[`Product Name (${prof.name})`] = `Sample Item - ${prof.name}`;
+                    sampleRow[`Price (${prof.name})`] = 1200;
+                }
+                sampleRow['Category'] = categories[0]?.name || 'Electronics';
+                sampleRow['Condition'] = 'New';
+                sampleRow['Location'] = locations[0]?.name || 'Kathmandu';
+                sampleRow['Description'] = 'High quality brand new product with warranty.';
+                sampleRow['Image 1'] = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e';
+                sampleRow['Image 2'] = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30';
+                sampleRow['Image 3'] = '';
+                sampleRow['Image 4'] = '';
+                dataRows = [sampleRow];
+            }
+
+            const wsListings = xlsx.utils.json_to_sheet(dataRows, { header: headers });
+            xlsx.utils.book_append_sheet(wb, wsListings, 'Listings');
+
+            // 2. Sheet 2: Categories
+            const catRows = categories.map(c => ({ 'Category Name': c.name }));
+            const wsCats = xlsx.utils.json_to_sheet(catRows);
+            xlsx.utils.book_append_sheet(wb, wsCats, 'Categories');
+
+            // 3. Sheet 3: Locations
+            const locRows = locations.map(l => ({ 'Location Name': l.name }));
+            const wsLocs = xlsx.utils.json_to_sheet(locRows);
+            xlsx.utils.book_append_sheet(wb, wsLocs, 'Locations');
+
+            xlsx.writeFile(wb, 'Marketplace_Listing_Template.xlsx');
+        } catch (e) {
+            console.error('Error generating template:', e);
+        } finally {
+            setDownloadingTemplate(false);
         }
-        headers.push('Category', 'Condition', 'Location', 'Description', 'Image 1', 'Image 2', 'Image 3', 'Image 4');
-
-        // Sample row
-        const sampleRow: Record<string, any> = {};
-        for (const prof of profiles) {
-            sampleRow[`Product Name (${prof.name})`] = `Sample Item - ${prof.name}`;
-            sampleRow[`Price (${prof.name})`] = 1200;
-        }
-        sampleRow['Category'] = categories[0]?.name || 'Electronics';
-        sampleRow['Condition'] = 'New';
-        sampleRow['Location'] = locations[0]?.name || 'Kathmandu';
-        sampleRow['Description'] = 'High quality brand new product with warranty. Fast delivery all over Nepal.';
-        sampleRow['Image 1'] = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e';
-        sampleRow['Image 2'] = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30';
-        sampleRow['Image 3'] = '';
-        sampleRow['Image 4'] = '';
-
-        const wsListings = xlsx.utils.json_to_sheet([sampleRow], { header: headers });
-        xlsx.utils.book_append_sheet(wb, wsListings, 'Listings');
-
-        // 2. Sheet 2: Categories
-        const catRows = categories.map(c => ({ 'Category Name': c.name }));
-        const wsCats = xlsx.utils.json_to_sheet(catRows);
-        xlsx.utils.book_append_sheet(wb, wsCats, 'Categories');
-
-        // 3. Sheet 3: Locations
-        const locRows = locations.map(l => ({ 'Location Name': l.name }));
-        const wsLocs = xlsx.utils.json_to_sheet(locRows);
-        xlsx.utils.book_append_sheet(wb, wsLocs, 'Locations');
-
-        xlsx.writeFile(wb, 'Marketplace_Listing_Template.xlsx');
     };
 
     const handleUpload = async () => {
@@ -2450,6 +2665,7 @@ function ImportModal({
                 const row = rawRows[i];
                 const rowNum = i + 2;
 
+                const invId = findCol(row, ['inventory id', 'inventory_id', 'inv id', 'product id', 'product_id', 'id']);
                 const category = findCol(row, ['category', 'category name', 'cat']) || categories[0]?.name || 'General';
                 const condition = findCol(row, ['condition', 'item condition']) || 'New';
                 const location = findCol(row, ['location', 'city', 'area']) || 'Kathmandu';
@@ -2515,6 +2731,7 @@ function ImportModal({
                 }
 
                 await saveMarketplaceProduct({
+                    inventory_id: invId ? String(invId) : null,
                     description: baseDescription,
                     category: String(category).trim(),
                     condition: String(condition).trim() || 'New',
@@ -2572,15 +2789,22 @@ function ImportModal({
                             Download Excel Sample Template
                         </h4>
                         <p className="text-[11px] text-slate-400 mt-0.5">
-                            Contains 3 sheets: Sheet 1 (Listings), Sheet 2 (Categories), Sheet 3 (Locations)
+                            Pre-populated with pending items from your Inventory (ID, Name, Price, Images)
                         </p>
                     </div>
 
                     <button
+                        type="button"
                         onClick={handleDownloadTemplate}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
+                        disabled={downloadingTemplate}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs disabled:opacity-50"
                     >
-                        <Download size={13} /> Template (.xlsx)
+                        {downloadingTemplate ? (
+                            <RefreshCw size={13} className="animate-spin" />
+                        ) : (
+                            <Download size={13} />
+                        )}
+                        {downloadingTemplate ? 'Preparing...' : 'Template (.xlsx)'}
                     </button>
                 </div>
 
