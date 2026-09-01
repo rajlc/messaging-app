@@ -166,11 +166,52 @@ export default function MarketplaceListingView() {
         }
     };
 
+    /* ─── Export to Excel ─── */
+    const handleExportExcel = () => {
+        if (products.length === 0) {
+            alert('No products available to export.');
+            return;
+        }
+
+        const wb = xlsx.utils.book_new();
+        const headers: string[] = ['Inventory ID', 'Product Name'];
+        for (const prof of profiles) {
+            headers.push(`Product Name (${prof.name})`);
+            headers.push(`Price (${prof.name})`);
+        }
+        headers.push('Category', 'Condition', 'Location', 'Description', 'Image 1', 'Image 2', 'Image 3', 'Image 4');
+
+        const rows = products.map(p => {
+            const firstProfName = profiles[0]?.name || 'Default';
+            const row: Record<string, any> = {
+                'Inventory ID': p.inventory_id || '',
+                'Product Name': p.profile_data?.[firstProfName]?.title || 'Untitled',
+            };
+            for (const prof of profiles) {
+                row[`Product Name (${prof.name})`] = p.profile_data?.[prof.name]?.title || '';
+                row[`Price (${prof.name})`] = p.profile_data?.[prof.name]?.price || 0;
+            }
+            row['Category'] = p.category;
+            row['Condition'] = p.condition;
+            row['Location'] = p.location;
+            row['Description'] = p.description;
+            row['Image 1'] = p.images?.[0] || '';
+            row['Image 2'] = p.images?.[1] || '';
+            row['Image 3'] = p.images?.[2] || '';
+            row['Image 4'] = p.images?.[3] || '';
+            return row;
+        });
+
+        const ws = xlsx.utils.json_to_sheet(rows, { header: headers });
+        xlsx.utils.book_append_sheet(wb, ws, 'Marketplace Listings');
+        xlsx.writeFile(wb, `Marketplace_Listings_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    };
+
     return (
         <div className="flex-1 h-screen overflow-y-auto bg-slate-50 dark:bg-slate-900 p-4 md:p-6 pb-24">
-            <div className="max-w-7xl mx-auto space-y-5">
+            <div className="w-full space-y-4">
                 {/* ─── 1. TOP HEADER ─── */}
-                <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="bg-white dark:bg-slate-800 p-4 lg:p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4">
                     <div className="flex items-center gap-3.5">
                         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 flex-shrink-0">
                             <Store size={26} />
@@ -182,31 +223,38 @@ export default function MarketplaceListingView() {
                                     {products.length} Products
                                 </span>
                             </h1>
-                            <div className="flex items-center gap-2 mt-0.5">
-                                <p className="text-xs text-slate-500 dark:text-slate-400">
-                                    Manage, customize, export, and automate product listings for Facebook Marketplace
-                                </p>
-                                <span 
-                                    onClick={checkCompanion}
-                                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.2 rounded-full cursor-pointer transition-colors ${
-                                        companionOnline === true
-                                            ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200'
-                                            : companionOnline === false
-                                            ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200'
-                                            : 'bg-slate-100 text-slate-500'
-                                    }`}
-                                    title="Click to recheck local automation companion status"
-                                >
-                                    <span className={`w-1.5 h-1.5 rounded-full ${companionOnline ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                                    {companionOnline ? 'Helper Online (3000)' : 'Helper Offline'}
-                                </span>
-                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                Manage, customize, export, and automate product listings for Facebook Marketplace
+                            </p>
                         </div>
                     </div>
 
-                    {/* Header Action Buttons: Bulk Listing, Import, Export, Add List, Settings */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                        {/* Direct Bulk Listing Button */}
+                    {/* Action Columns: 1. Helper Online | 2. Bulk Listing | 3. Import/Export | 4. Add List/Settings */}
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        {/* Column 1: Helper Status Indicator */}
+                        <div
+                            onClick={checkCompanion}
+                            className={`inline-flex items-center justify-center gap-2 h-[68px] px-3.5 rounded-xl text-xs font-bold cursor-pointer transition-all shadow-2xs select-none active:scale-95 ${
+                                companionOnline === true
+                                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800'
+                                    : companionOnline === false
+                                    ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800'
+                                    : 'bg-slate-100 text-slate-500 border border-slate-200'
+                            }`}
+                            title="Click to recheck local automation companion status"
+                        >
+                            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${companionOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                            <div className="flex flex-col text-left">
+                                <span className="text-[11px] font-extrabold leading-tight">
+                                    {companionOnline ? 'Helper Online' : 'Helper Offline'}
+                                </span>
+                                <span className="text-[10px] font-medium opacity-70">
+                                    {companionOnline ? 'Port 3000' : 'Disconnected'}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Column 2: Bulk Listing Button */}
                         <button
                             onClick={() => {
                                 if (selectedProductIds.size === 0) {
@@ -215,54 +263,60 @@ export default function MarketplaceListingView() {
                                 }
                                 setShowBulkListingModal(true);
                             }}
-                            className={`inline-flex items-center gap-1.5 h-9 px-4 rounded-xl text-[13px] font-bold transition-all border-none cursor-pointer active:scale-95 shadow-sm ${
+                            className={`inline-flex items-center justify-center gap-2 h-[68px] px-4 rounded-xl text-xs font-bold transition-all border-none cursor-pointer active:scale-95 shadow-sm ${
                                 selectedProductIds.size > 0
                                     ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/25 ring-2 ring-emerald-500/30'
-                                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 hover:bg-emerald-100'
+                                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200/80 dark:border-emerald-900/60'
                             }`}
                             title="Directly launch selected products to Facebook Marketplace"
                         >
-                            <Play size={14} className="fill-current" />
-                            <span>Bulk Listing {selectedProductIds.size > 0 ? `(${selectedProductIds.size})` : ''}</span>
+                            <Play size={15} className="fill-current shrink-0" />
+                            <div className="flex flex-col text-left">
+                                <span className="font-extrabold text-[12px] leading-tight">Bulk Listing</span>
+                                <span className="text-[10px] font-medium opacity-80">
+                                    {selectedProductIds.size > 0 ? `${selectedProductIds.size} Selected` : 'Select items'}
+                                </span>
+                            </div>
                         </button>
 
-                        {/* Import Button */}
-                        <button
-                            onClick={() => setShowImportModal(true)}
-                            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl text-[13px] font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700/80 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all border-none cursor-pointer active:scale-95"
-                            title="Import listings from Excel"
-                        >
-                            <Upload size={14} /> Import
-                        </button>
+                        {/* Column 3: Stacked Import & Export */}
+                        <div className="flex flex-col gap-1.5">
+                            <button
+                                onClick={() => setShowImportModal(true)}
+                                className="inline-flex items-center justify-center gap-1.5 h-[31px] px-3.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700/80 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all border-none cursor-pointer active:scale-95 shadow-2xs"
+                                title="Import listings from Excel"
+                            >
+                                <Upload size={13} /> Import
+                            </button>
+                            <button
+                                onClick={handleExportExcel}
+                                className="inline-flex items-center justify-center gap-1.5 h-[31px] px-3.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700/80 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all border-none cursor-pointer active:scale-95 shadow-2xs"
+                                title="Export current listings to Excel"
+                            >
+                                <Download size={13} /> Export
+                            </button>
+                        </div>
 
-                        {/* Export Button */}
-                        <button
-                            onClick={() => setShowExportModal(true)}
-                            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl text-[13px] font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700/80 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all border-none cursor-pointer active:scale-95"
-                            title="Export listings to Excel"
-                        >
-                            <Download size={14} /> Export
-                        </button>
-
-                        {/* Add List Button */}
-                        <button
-                            onClick={() => {
-                                setEditingProduct(null);
-                                setShowAddListModal(true);
-                            }}
-                            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-xl text-[13px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-500/25 transition-all border-none cursor-pointer active:scale-95"
-                        >
-                            <Plus size={16} /> Add List
-                        </button>
-
-                        {/* Settings Button */}
-                        <button
-                            onClick={() => setShowSettingsModal(true)}
-                            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl text-[13px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border border-indigo-200/80 dark:border-indigo-800/80 transition-all cursor-pointer active:scale-95"
-                            title="Marketplace Settings (Profiles, Categories, Locations, Image Folder)"
-                        >
-                            <SettingsIcon size={14} /> Settings
-                        </button>
+                        {/* Column 4: Stacked Add List & Settings */}
+                        <div className="flex flex-col gap-1.5">
+                            <button
+                                onClick={() => {
+                                    setEditingProduct(null);
+                                    setShowAddListModal(true);
+                                }}
+                                className="inline-flex items-center justify-center gap-1.5 h-[31px] px-3.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 transition-all shadow-sm shadow-indigo-500/25 border-none cursor-pointer"
+                                title="Create a new listing item"
+                            >
+                                <Plus size={14} /> Add List
+                            </button>
+                            <button
+                                onClick={() => setShowSettingsModal(true)}
+                                className="inline-flex items-center justify-center gap-1.5 h-[31px] px-3.5 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border border-indigo-200/80 dark:border-indigo-800/80 transition-all cursor-pointer active:scale-95 shadow-2xs"
+                                title="Marketplace Settings (Profiles, Categories, Locations, Image Folder)"
+                            >
+                                <SettingsIcon size={13} /> Settings
+                            </button>
+                        </div>
                     </div>
                 </div>
 
