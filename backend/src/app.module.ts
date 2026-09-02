@@ -26,6 +26,7 @@ import { SettlementsModule } from './settlements/settlements.module';
 import { RiderInventoryModule } from './rider-inventory/rider-inventory.module';
 import { PublishingModule } from './publishing/publishing.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
+import { KeepAliveModule } from './keep-alive/keep-alive.module';
 
 import { AppService } from './app.service';
 
@@ -48,6 +49,7 @@ import { AppService } from './app.service';
     RiderInventoryModule,
     PublishingModule,
     MarketplaceModule,
+    KeepAliveModule,
   ],
   controllers: [
     AppController,

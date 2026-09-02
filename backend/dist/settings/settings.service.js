@@ -114,7 +114,7 @@ let SettingsService = class SettingsService {
         const { data, error } = await supabase_service_1.supabaseService.getSupabaseClient()
             .from('marketplace_products')
             .select('*')
-            .order('product_name', { ascending: true });
+            .order('created_at', { ascending: false });
         if (error) {
             if (error.code === '42P01') {
                 console.warn('[Supabase] marketplace_products table does not exist in Supabase.');
@@ -122,7 +122,25 @@ let SettingsService = class SettingsService {
             }
             throw error;
         }
-        return data || [];
+        return (data || []).map((row) => {
+            let resolvedName = row.product_name || row.title;
+            let resolvedPrice = row.price;
+            if ((!resolvedName || resolvedPrice === null || resolvedPrice === undefined) && row.profile_data) {
+                const values = Object.values(row.profile_data);
+                const found = values.find((v) => typeof v === 'object' && v !== null && (v.title || v.price !== undefined));
+                if (found) {
+                    if (!resolvedName && found.title)
+                        resolvedName = found.title;
+                    if ((resolvedPrice === null || resolvedPrice === undefined) && found.price !== undefined)
+                        resolvedPrice = found.price;
+                }
+            }
+            return {
+                ...row,
+                product_name: resolvedName || 'Unnamed Product',
+                price: resolvedPrice !== null && resolvedPrice !== undefined ? resolvedPrice : 0,
+            };
+        });
     }
     async deleteMarketplaceProduct(id) {
         const { error } = await supabase_service_1.supabaseService.getSupabaseClient()

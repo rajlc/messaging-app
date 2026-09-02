@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useBackendKeepAlive } from '@/hooks/useBackendKeepAlive';
 import {
     Rss, Plus, Trash2, Edit3, Send, Clock, CheckCircle2, XCircle,
     AlertCircle, Facebook, Instagram, ImagePlus,
@@ -1178,6 +1179,13 @@ export default function ManagePostView() {
     const [filterPageId, setFilterPageId] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [syncing, setSyncing] = useState(false);
+
+    // ── Keep Render backend awake & pre-warm before scheduled posts fire ──
+    const scheduledTimes = useMemo(
+        () => posts.filter(p => p.status === 'scheduled' && p.scheduled_at).map(p => p.scheduled_at!),
+        [posts],
+    );
+    useBackendKeepAlive(scheduledTimes);
 
     const handlePlatformChange = (p: Platform | 'all') => {
         setFilterPlatform(p);

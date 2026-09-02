@@ -54,7 +54,7 @@ export default function AIAgentSettings() {
     const [isSavingPostConfig, setIsSavingPostConfig] = useState(false);
 
     // Catalog State
-    const [catalogProducts, setCatalogProducts] = useState<{ id: string; product_name: string; price: number }[]>([]);
+    const [catalogProducts, setCatalogProducts] = useState<{ id: string; product_name?: string | null; title?: string | null; price?: number | null; profile_data?: any }[]>([]);
     const [catalogSearch, setCatalogSearch] = useState('');
     const [isCatalogLoading, setIsCatalogLoading] = useState(false);
     const [uploadingFile, setUploadingFile] = useState(false);
@@ -720,9 +720,31 @@ export default function AIAgentSettings() {
                                     </p>
                                 </div>
                             ) : (() => {
-                                const filtered = catalogProducts.filter(p =>
-                                    p.product_name.toLowerCase().includes(catalogSearch.toLowerCase())
-                                );
+                                const searchLower = (catalogSearch || '').toLowerCase().trim();
+                                const getProductName = (p: any): string => {
+                                    if (p?.product_name && typeof p.product_name === 'string') return p.product_name;
+                                    if (p?.title && typeof p.title === 'string') return p.title;
+                                    if (p?.profile_data && typeof p.profile_data === 'object') {
+                                        const values = Object.values(p.profile_data);
+                                        const found = values.find((v: any) => typeof v === 'object' && v !== null && v?.title) as any;
+                                        if (found?.title) return String(found.title);
+                                    }
+                                    return 'Unnamed Product';
+                                };
+                                const getProductPrice = (p: any): number => {
+                                    if (p?.price !== null && p?.price !== undefined && !isNaN(Number(p.price))) return Number(p.price);
+                                    if (p?.profile_data && typeof p.profile_data === 'object') {
+                                        const values = Object.values(p.profile_data);
+                                        const found = values.find((v: any) => typeof v === 'object' && v !== null && v?.price !== undefined) as any;
+                                        if (found && !isNaN(Number(found.price))) return Number(found.price);
+                                    }
+                                    return 0;
+                                };
+
+                                const filtered = catalogProducts.filter(p => {
+                                    const name = getProductName(p);
+                                    return name.toLowerCase().includes(searchLower);
+                                });
                                 if (filtered.length === 0) {
                                     return (
                                         <div className="text-center py-8 text-slate-400 text-xs font-medium">
@@ -734,10 +756,10 @@ export default function AIAgentSettings() {
                                     <div key={product.id} className="flex justify-between items-center bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/80 px-5 py-3 rounded-xl border border-slate-200/50 dark:border-slate-700/30 transition-all group">
                                         <div className="flex-1 min-w-0 pr-4">
                                             <h5 className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">
-                                                {product.product_name}
+                                                {getProductName(product)}
                                             </h5>
                                             <span className="text-[10px] font-black text-indigo-500 dark:text-indigo-400 uppercase tracking-wider">
-                                                Rs {product.price}
+                                                Rs {getProductPrice(product)}
                                             </span>
                                         </div>
                                         <button

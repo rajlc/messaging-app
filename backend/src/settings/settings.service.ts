@@ -86,7 +86,7 @@ export class SettingsService {
         const { data, error } = await supabaseService.getSupabaseClient()
             .from('marketplace_products')
             .select('*')
-            .order('product_name', { ascending: true });
+            .order('created_at', { ascending: false });
 
         if (error) {
             // Handle table not existing gracefully
@@ -96,7 +96,26 @@ export class SettingsService {
             }
             throw error;
         }
-        return data || [];
+
+        return (data || []).map((row: any) => {
+            let resolvedName = row.product_name || row.title;
+            let resolvedPrice = row.price;
+
+            if ((!resolvedName || resolvedPrice === null || resolvedPrice === undefined) && row.profile_data) {
+                const values = Object.values(row.profile_data);
+                const found = values.find((v: any) => typeof v === 'object' && v !== null && (v.title || v.price !== undefined)) as any;
+                if (found) {
+                    if (!resolvedName && found.title) resolvedName = found.title;
+                    if ((resolvedPrice === null || resolvedPrice === undefined) && found.price !== undefined) resolvedPrice = found.price;
+                }
+            }
+
+            return {
+                ...row,
+                product_name: resolvedName || 'Unnamed Product',
+                price: resolvedPrice !== null && resolvedPrice !== undefined ? resolvedPrice : 0,
+            };
+        });
     }
 
     async deleteMarketplaceProduct(id: string) {
