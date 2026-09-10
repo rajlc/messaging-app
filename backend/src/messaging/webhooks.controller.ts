@@ -171,6 +171,19 @@ export class WebhooksController {
                                         return;
                                     }
 
+                                    // 1. Broadcast the incoming message (customer message or echo) to frontend IMMEDIATELY so it appears first in live chat
+                                    this.messagingGateway.broadcastIncomingMessage('facebook', {
+                                        ...savedMessage,
+                                        isOwnMessage: isEcho, // If it's an echo, it's our own message (agent)
+                                        senderId: isEcho ? pageId : customerId,
+                                        recipientId: isEcho ? customerId : pageId,
+                                        conversationId: conversation.id,
+                                        customerName: customerName,
+                                        customerProfilePic: userProfile?.profile_pic,
+                                        referralSource: referralSource,
+                                        referralPostId: referralEntryId,
+                                    });
+
                                     // If this is a regular message from a customer, handle AutoReply and AI
                                     if (!isFromPage) {
                                         // --- AUTO-REPLY LOGIC ---
@@ -293,19 +306,6 @@ export class WebhooksController {
                                             console.error('[AI] Error:', aiError.message);
                                         }
                                     }
-
-                                    // Broadcast the original customer message or agent echo to frontend (EXACTLY ONCE)
-                                    this.messagingGateway.broadcastIncomingMessage('facebook', {
-                                        ...savedMessage,
-                                        isOwnMessage: isEcho, // If it's an echo, it's our own message (agent)
-                                        senderId: isEcho ? pageId : customerId,
-                                        recipientId: isEcho ? customerId : pageId,
-                                        conversationId: conversation.id,
-                                        customerName: customerName,
-                                        customerProfilePic: userProfile?.profile_pic,
-                                        referralSource: referralSource,
-                                        referralPostId: referralEntryId,
-                                    });
 
                                     // Run conversation intelligence / triage asynchronously
                                     this.conversationTriageService.analyzeConversation(conversation.id)

@@ -623,12 +623,14 @@ function UnifiedInboxContent() {
             (m.tempId && message.tempId && m.tempId === message.tempId) ||
             (m.text === message.text && m.sender === senderRole && Math.abs(new Date(m.timestamp).getTime() - newMessage.timestamp.getTime()) < 3000)
           );
+          let updatedList: Message[];
           if (existingIndex >= 0) {
-            const updated = [...prev];
-            updated[existingIndex] = { ...updated[existingIndex], ...newMessage };
-            return updated;
+            updatedList = [...prev];
+            updatedList[existingIndex] = { ...updatedList[existingIndex], ...newMessage };
+          } else {
+            updatedList = [...prev, newMessage];
           }
-          return [...prev, newMessage];
+          return updatedList.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
         });
       }
 
@@ -639,14 +641,16 @@ function UnifiedInboxContent() {
         );
 
         const shouldIncrementUnread = senderRole === 'customer' && !isMatch;
+        const msgDate = new Date(message.timestamp || message.created_at || Date.now());
 
         if (existingConvIndex >= 0) {
           const newConvs = [...prev];
           const c = newConvs[existingConvIndex];
+          const isNewer = !c.timestamp || msgDate.getTime() >= new Date(c.timestamp).getTime();
           newConvs[existingConvIndex] = {
             ...c,
-            lastMessage: message.text,
-            timestamp: new Date(),
+            lastMessage: isNewer ? message.text : c.lastMessage,
+            timestamp: isNewer ? msgDate : new Date(c.timestamp),
             unreadCount: shouldIncrementUnread ? c.unreadCount + 1 : 0,
             hasPhoneNumber: c.hasPhoneNumber || (senderRole === 'customer' && hasPhoneNumber(message.text)),
             productName: c.productName || message.productName,
@@ -664,7 +668,7 @@ function UnifiedInboxContent() {
               customerId: conversationId,
               customerName: message.customerName || conversationId,
               lastMessage: message.text,
-              timestamp: new Date(),
+              timestamp: msgDate,
               unreadCount: shouldIncrementUnread ? 1 : 0,
               messages: [newMessage],
               pageName: connectedPages.find(p => p.page_id === message.pageId)?.page_name,
