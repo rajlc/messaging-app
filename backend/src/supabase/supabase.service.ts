@@ -452,6 +452,30 @@ export class SupabaseService {
             throw error;
         }
 
+        // Merge page-level ecommerce AI settings if stored in settings table
+        try {
+            const { data: settings } = await this.getClient()
+                .from('settings')
+                .select('key, value')
+                .like('key', 'page_ecommerce_ai_%');
+
+            if (settings && settings.length > 0 && Array.isArray(data)) {
+                const map = new Map<string, boolean>();
+                settings.forEach(s => {
+                    const pageKey = s.key.replace('page_ecommerce_ai_', '');
+                    map.set(pageKey, s.value === 'true');
+                });
+
+                data.forEach(p => {
+                    if (p.is_ecommerce_ai_enabled === undefined || p.is_ecommerce_ai_enabled === null) {
+                        p.is_ecommerce_ai_enabled = map.get(p.id) ?? map.get(p.page_id) ?? false;
+                    }
+                });
+            }
+        } catch {
+            // Ignore settings lookup failures
+        }
+
         return data;
     }
 
@@ -510,23 +534,52 @@ export class SupabaseService {
         cutoff_messages?: string;
         ai_max_message_count?: number;
         ai_cutoff_time_minutes?: number;
+        is_ecommerce_ai_enabled?: boolean;
     }) {
-        const { data: page, error } = await this.getClient()
+        // Persist ecommerce AI setting reliably in settings table
+        if (data.is_ecommerce_ai_enabled !== undefined) {
+            try {
+                await this.getClient().from('settings').upsert([
+                    { key: `page_ecommerce_ai_${id}`, value: String(data.is_ecommerce_ai_enabled), updated_at: new Date().toISOString() }
+                ]);
+            } catch (err: any) {
+                console.warn('[Supabase] Could not persist page_ecommerce_ai setting:', err.message);
+            }
+        }
+
+        const updatePayload: any = {
+            ...data,
+            updated_at: new Date().toISOString()
+        };
+
+        // Try update with is_ecommerce_ai_enabled column; fallback if column does not exist yet on DB table
+        let res = await this.getClient()
             .from('pages')
-            .update({
-                ...data,
-                updated_at: new Date().toISOString()
-            })
+            .update(updatePayload)
             .eq('id', id)
             .select()
             .single();
 
-        if (error) {
-            console.error('Error updating page:', error);
-            throw error;
+        if (res.error && res.error.message?.includes('is_ecommerce_ai_enabled')) {
+            delete updatePayload.is_ecommerce_ai_enabled;
+            res = await this.getClient()
+                .from('pages')
+                .update(updatePayload)
+                .eq('id', id)
+                .select()
+                .single();
         }
 
-        return page;
+        if (res.error) {
+            console.error('Error updating page:', res.error);
+            throw res.error;
+        }
+
+        if (data.is_ecommerce_ai_enabled !== undefined && res.data) {
+            res.data.is_ecommerce_ai_enabled = data.is_ecommerce_ai_enabled;
+        }
+
+        return res.data;
     }
 
     // ─── Per-Customer AI Rate Limiting & Cut-off Methods ─────────────────────────
@@ -628,6 +681,25 @@ export class SupabaseService {
 
         if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
             console.error('Error fetching page by ID:', error);
+        }
+
+        if (data && (data.is_ecommerce_ai_enabled === undefined || data.is_ecommerce_ai_enabled === null)) {
+            try {
+                const { data: setting } = await this.getClient()
+                    .from('settings')
+                    .select('value')
+                    .or(`key.eq.page_ecommerce_ai_${data.id},key.eq.page_ecommerce_ai_${pageId}`)
+                    .limit(1)
+                    .maybeSingle();
+
+                if (setting) {
+                    data.is_ecommerce_ai_enabled = setting.value === 'true';
+                } else {
+                    data.is_ecommerce_ai_enabled = false;
+                }
+            } catch {
+                data.is_ecommerce_ai_enabled = false;
+            }
         }
 
         return data;

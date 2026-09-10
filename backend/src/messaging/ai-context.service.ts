@@ -1,11 +1,18 @@
 import { supabaseService } from '../supabase/supabase.service';
+import { EcommerceCatalogService } from './ecommerce-catalog.service';
+import { SettingsService } from '../settings/settings.service';
+
+const settingsService = new SettingsService();
+const ecommerceCatalogService = new EcommerceCatalogService(settingsService);
 
 /**
  * AI Context Service
- * Composes a 3-layer system prompt for every customer message:
- *   1. Post/Ad-level instructions (highest priority — if customer came via a post/ad)
- *   2. Page-level instructions (always included as base)
- *   3. Customer order context (auto-injected when customer has orders)
+ * Composes a multi-layer system prompt for every customer message:
+ *   1. Page-level instructions (always included as base)
+ *   2. Post/Ad-level instructions (highest priority — if customer came via a post/ad)
+ *   3. Live E-commerce Website Catalog (when page has "AI For Ecommerce" enabled)
+ *   4. Customer order context (auto-injected when customer has orders)
+ *   5. Conversation memory & continuity rules
  */
 export class AiContextService {
 
@@ -69,7 +76,7 @@ export class AiContextService {
 
     /**
      * Build the final composed system prompt for the AI.
-     * Priority: Post/Ad instructions → Page instructions → Order context + Memory rules
+     * Priority: Post/Ad instructions → Page instructions → Ecommerce Catalog (if enabled) → Order context + Memory rules
      */
     async buildSystemPrompt(params: {
         pagePrompt: string;
@@ -77,8 +84,9 @@ export class AiContextService {
         conversationId?: string;
         referralPostId?: string;
         customerMessage: string;
+        isEcommerceAiEnabled?: boolean;
     }): Promise<string> {
-        const { pagePrompt, customerId, conversationId, referralPostId, customerMessage } = params;
+        const { pagePrompt, customerId, conversationId, referralPostId, customerMessage, isEcommerceAiEnabled } = params;
 
         const sections: string[] = [];
 
@@ -109,7 +117,41 @@ export class AiContextService {
             }
         }
 
-        // ─── Layer 3: Customer order context (auto-injected from DB) ──────────────
+        // ─── Layer 3: Live E-commerce Website Catalog (when enabled for this page) ───
+        if (isEcommerceAiEnabled) {
+            try {
+                const { websiteUrl, products } = await ecommerceCatalogService.searchProducts(customerMessage);
+                if (products && products.length > 0) {
+                    sections.push('=== LIVE E-COMMERCE PRODUCT CATALOG (DATABASE VERIFIED) ===');
+                    sections.push(`Our Store Website: ${websiteUrl}`);
+                    sections.push('The following real-time products were matched from our website inventory for the customer inquiry:');
+                    sections.push('');
+
+                    products.forEach((prod, idx) => {
+                        sections.push(`Product ${idx + 1}:`);
+                        sections.push(`  - Name        : ${prod.name}`);
+                        sections.push(`  - Exact Price : Rs. ${prod.price.toLocaleString()}`);
+                        sections.push(`  - Website Link: ${prod.url}`);
+                        if (prod.category) sections.push(`  - Category    : ${prod.category}`);
+                        if (prod.description) sections.push(`  - Details/Spec: ${prod.description}`);
+                        sections.push('');
+                    });
+
+                    sections.push('=== STRICT E-COMMERCE INSTRUCTIONS ===');
+                    sections.push('1. EXACT PRICE GUARANTEE: Quote the exact price from the database above (e.g., "Rs. 1,200"). NEVER guess, estimate, or make up a price.');
+                    sections.push('2. MULTIPLE MATCHES HANDLING: If the customer asked about a general product (like "blender", "cctv", "toy") and multiple options are listed above, list all the available models with their names and prices, and politely ask the customer which specific model they would like.');
+                    sections.push('3. PRODUCT SPECS & INQUIRIES: When the customer asks about features, warranty, usage, or specifications, use the Details/Spec provided above to give an accurate, helpful answer.');
+                    sections.push('4. SEND PRODUCT LINK: Always provide the direct Website Link so the customer can view more photos, read full details, or order directly on our website.');
+                    sections.push('5. PRICE FIXED: If customer tries to bargain or ask for discounts, politely explain that prices are fixed and affordable.');
+                    sections.push('6. UNAVAILABLE PRODUCTS: If customer asks for an item not found in the catalog, politely say that this item is currently unavailable in our store.');
+                    sections.push('');
+                }
+            } catch (catalogErr: any) {
+                console.error('[AIContext] Error fetching ecommerce catalog:', catalogErr.message);
+            }
+        }
+
+        // ─── Layer 4: Customer order context (auto-injected from DB) ──────────────
         // Fetch orders using both customerId and conversationId
         try {
             const orders = await supabaseService.getOrdersByCustomerId(customerId, conversationId);

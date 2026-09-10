@@ -237,13 +237,14 @@ export class WebhooksController {
                                                     const allRecent = await supabaseService.getLastMessages(conversation.id, 30);
                                                     const history = savedMessage ? allRecent.filter(m => m.id !== savedMessage.id) : allRecent;
                                                     
-                                                    // Build 3-Layer System Prompt (Page + Post/Ad + Order context + Conversational Memory)
+                                                    // Build Multi-Layer System Prompt (Page + Post/Ad + Ecommerce Catalog + Order context + Memory)
                                                     const systemPrompt = await aiContextService.buildSystemPrompt({
                                                         pagePrompt: page.custom_prompt,
                                                         customerId: customerId,
                                                         conversationId: conversation.id,
                                                         referralPostId: referralEntryId || conversation.referral_post_id,
-                                                        customerMessage: text
+                                                        customerMessage: text,
+                                                        isEcommerceAiEnabled: Boolean(page.is_ecommerce_ai_enabled)
                                                     });
 
                                                     const replyText = await this.aiService.generateReply({

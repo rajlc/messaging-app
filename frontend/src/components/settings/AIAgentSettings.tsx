@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Bot, Save, Shield, RefreshCw, Zap, Check, AlertCircle, Edit2, X, Upload, Trash2, Search, FileText, Sparkles, Cpu, ShieldCheck } from 'lucide-react';
+import { Bot, Save, Shield, RefreshCw, Zap, Check, AlertCircle, Edit2, X, Upload, Trash2, Search, FileText, Sparkles, Cpu, ShieldCheck, ShoppingBag } from 'lucide-react';
 
 type Page = {
     id: string;
@@ -14,6 +14,7 @@ type Page = {
     cutoff_messages?: string;
     ai_max_message_count?: number;
     ai_cutoff_time_minutes?: number;
+    is_ecommerce_ai_enabled?: boolean;
 };
 
 export default function AIAgentSettings() {
@@ -42,6 +43,7 @@ export default function AIAgentSettings() {
     const [editTab, setEditTab] = useState<'page' | 'posts'>('page');
     const [editPrompt, setEditPrompt] = useState('');
     const [editAiEnabled, setEditAiEnabled] = useState(false);
+    const [editEcommerceAiEnabled, setEditEcommerceAiEnabled] = useState(false);
     const [editCutoffMessages, setEditCutoffMessages] = useState<string[]>([]);
     const [cutoffInput, setCutoffInput] = useState('');
     const [editMaxMessageCount, setEditMaxMessageCount] = useState(5);
@@ -327,6 +329,7 @@ export default function AIAgentSettings() {
         setEditTab('page');
         setEditPrompt(page.custom_prompt || '');
         setEditAiEnabled(page.is_ai_enabled || false);
+        setEditEcommerceAiEnabled(Boolean(page.is_ecommerce_ai_enabled));
         setEditCutoffMessages(page.cutoff_messages ? page.cutoff_messages.split(',').filter(m => m.trim()).map(m => m.trim()) : []);
         setEditMaxMessageCount(typeof page.ai_max_message_count === 'number' ? page.ai_max_message_count : 5);
         setEditCutoffTimeMinutes(typeof page.ai_cutoff_time_minutes === 'number' ? page.ai_cutoff_time_minutes : 60);
@@ -448,7 +451,8 @@ export default function AIAgentSettings() {
                     custom_prompt: editPrompt,
                     cutoff_messages: editCutoffMessages.join(','),
                     ai_max_message_count: editMaxMessageCount,
-                    ai_cutoff_time_minutes: editCutoffTimeMinutes
+                    ai_cutoff_time_minutes: editCutoffTimeMinutes,
+                    is_ecommerce_ai_enabled: editEcommerceAiEnabled
                 })
             });
 
@@ -462,7 +466,8 @@ export default function AIAgentSettings() {
                             custom_prompt: editPrompt,
                             cutoff_messages: editCutoffMessages.join(','),
                             ai_max_message_count: editMaxMessageCount,
-                            ai_cutoff_time_minutes: editCutoffTimeMinutes
+                            ai_cutoff_time_minutes: editCutoffTimeMinutes,
+                            is_ecommerce_ai_enabled: editEcommerceAiEnabled
                         }
                         : p
                 ));
@@ -697,12 +702,21 @@ export default function AIAgentSettings() {
                             <div key={page.id} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/50 rounded-2xl p-6 hover:shadow-lg transition-all group">
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <div className="flex items-center gap-3 mb-2">
+                                        <div className="flex items-center gap-2 mb-2 flex-wrap">
                                             <h4 className="font-black text-lg text-slate-900 dark:text-white">{page.page_name}</h4>
                                             {page.is_ai_enabled ? (
                                                 <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 text-[10px] font-black uppercase rounded-lg border border-emerald-200 dark:border-emerald-500/20">AI Active</span>
                                             ) : (
                                                 <span className="px-2.5 py-1 bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-500 text-[10px] font-black uppercase rounded-lg border border-slate-200 dark:border-slate-800">AI Paused</span>
+                                            )}
+                                            {page.is_ecommerce_ai_enabled ? (
+                                                <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400 text-[10px] font-black uppercase rounded-lg border border-indigo-200 dark:border-indigo-500/20 flex items-center gap-1">
+                                                    <ShoppingBag size={11} /> Ecommerce AI On
+                                                </span>
+                                            ) : (
+                                                <span className="px-2.5 py-1 bg-slate-100 text-slate-400 dark:bg-slate-900 dark:text-slate-500 text-[10px] font-black uppercase rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-1">
+                                                    <ShoppingBag size={11} /> Ecommerce AI Off
+                                                </span>
                                             )}
                                         </div>
                                         <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-4">ID: {page.page_id} • {page.platform}</p>
@@ -1038,7 +1052,7 @@ export default function AIAgentSettings() {
                         <div className="p-8 overflow-y-auto flex-1 custom-scrollbar">
                             {editTab === 'page' ? (
                                 <form onSubmit={handleSavePageConfig} className="space-y-8">
-                                    {/* Toggle */}
+                                    {/* Enable AI Responses Toggle */}
                                     <div className="flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-900 rounded-[1.5rem] border border-slate-100 dark:border-slate-700">
                                         <div>
                                             <h4 className="font-bold text-slate-900 dark:text-white">Enable AI Responses</h4>
@@ -1050,6 +1064,33 @@ export default function AIAgentSettings() {
                                                 className="sr-only peer"
                                                 checked={editAiEnabled}
                                                 onChange={(e) => setEditAiEnabled(e.target.checked)}
+                                            />
+                                            <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                        </label>
+                                    </div>
+
+                                    {/* AI For E-commerce Toggle */}
+                                    <div className="flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-900 rounded-[1.5rem] border border-slate-100 dark:border-slate-700">
+                                        <div>
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <ShoppingBag size={16} className="text-indigo-600 dark:text-indigo-400" />
+                                                <h4 className="font-bold text-slate-900 dark:text-white">AI For Ecommerce</h4>
+                                                {editEcommerceAiEnabled ? (
+                                                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 text-[9px] font-black uppercase rounded-md border border-emerald-200 dark:border-emerald-500/20">Active</span>
+                                                ) : (
+                                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-500 text-[9px] font-black uppercase rounded-md border border-slate-200 dark:border-slate-800">Disabled</span>
+                                                )}
+                                            </div>
+                                            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+                                                Allow AI to check products, live prices, descriptions, and send website product links from www.bagmati.shop for this page
+                                            </p>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                className="sr-only peer"
+                                                checked={editEcommerceAiEnabled}
+                                                onChange={(e) => setEditEcommerceAiEnabled(e.target.checked)}
                                             />
                                             <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                                         </label>

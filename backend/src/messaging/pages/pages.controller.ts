@@ -105,6 +105,7 @@ export class PagesController {
             cutoff_messages?: string;
             ai_max_message_count?: number;
             ai_cutoff_time_minutes?: number;
+            is_ecommerce_ai_enabled?: boolean;
         }
     ) {
         return await supabaseService.updatePage(id, body);

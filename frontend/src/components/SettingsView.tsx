@@ -1,12 +1,13 @@
 "use client";
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { Settings, MessageSquare, CreditCard, Users, Bell, Database, Package, Zap, Truck, Globe, Bot, ArrowLeft } from 'lucide-react';
+import { Settings, MessageSquare, CreditCard, Users, Bell, Database, Package, Zap, Truck, Globe, Bot, ArrowLeft, ShoppingBag } from 'lucide-react';
 import MessageTemplates from './settings/MessageTemplates';
 import QuickReplyTemplates from './settings/QuickReplyTemplates';
 import InventorySettings from './settings/InventorySettings';
 import InventoryProducts from './settings/InventoryProducts';
 import LogisticIntegration from './settings/LogisticIntegration';
+import EcommerceIntegration from './settings/EcommerceIntegration';
 import PagesSettings from './settings/PagesSettings';
 import StaffSettings from './settings/StaffSettings';
 import AIAgentSettings from './settings/AIAgentSettings';
@@ -162,6 +163,7 @@ export default function SettingsView() {
                             <div className="w-64 border-r border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 flex flex-col p-4 gap-2">
                                 {[
                                     { id: 'social', label: 'Social Media', icon: Globe },
+                                    { id: 'ecommerce', label: 'E-commerce Website', icon: ShoppingBag },
                                     { id: 'inventory', label: 'Inventory Integration', icon: Database },
                                     { id: 'logistics', label: 'Logistic Integration', icon: Truck }
                                 ].map((sub) => {
@@ -193,6 +195,7 @@ export default function SettingsView() {
                                     const sub = searchParams.get('sub') || 'social';
                                     switch (sub) {
                                         case 'social': return <PagesSettings />;
+                                        case 'ecommerce': return <EcommerceIntegration />;
                                         case 'inventory': return <InventorySettings />;
                                         case 'logistics': return <LogisticIntegration />;
                                         default: return <PagesSettings />;
