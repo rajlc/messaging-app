@@ -66,6 +66,19 @@ export class ConversationsController {
         let triage = await this.conversationTriageService.getConversationTriage(id);
         if (!triage) {
             triage = await this.conversationTriageService.analyzeConversation(id);
+        } else {
+            try {
+                const latestMsg = await supabaseService.getLastMessages(id, 1);
+                if (latestMsg && latestMsg.length > 0) {
+                    const lastMsgTime = new Date(latestMsg[0].created_at).getTime();
+                    const analyzedTime = triage.analyzed_at ? new Date(triage.analyzed_at).getTime() : 0;
+                    if (lastMsgTime > (analyzedTime + 1000)) {
+                        triage = await this.conversationTriageService.analyzeConversation(id);
+                    }
+                }
+            } catch {
+                // Return existing triage if refresh check fails
+            }
         }
         return { success: true, data: triage };
     }

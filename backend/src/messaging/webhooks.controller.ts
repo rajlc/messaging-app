@@ -233,23 +233,22 @@ export class WebhooksController {
                                                 const page = await supabaseService.getPageByFacebookId(pageId);
                                                 if (page && page.is_ai_enabled) {
                                                     // --- PER-CUSTOMER RATE-LIMIT & CUT-OFF CHECK ---
+                                                    let shouldGenerateAiReply = true;
                                                     const cutoffCheck = await supabaseService.checkAndUpdateAiCutoff(conversation.id, pageId);
                                                     if (cutoffCheck.isCutoff) {
-                                                        console.log(`[AI RateLimit] AI is currently cut off for customer ${customerId} (conversation ${conversation.id}) until ${cutoffCheck.cutoffUntil}. Skipping AI reply.`);
-                                                        return;
-                                                    }
-
-                                                    // --- CUT-OFF MESSAGES CHECK ---
-                                                    if (page.cutoff_messages) {
+                                                        console.log(`[AI RateLimit] AI is currently cut off for customer ${customerId} (conversation ${conversation.id}) until ${cutoffCheck.cutoffUntil}. Skipping AI reply, but updating triage.`);
+                                                        shouldGenerateAiReply = false;
+                                                    } else if (page.cutoff_messages) {
                                                         const cutoffList = page.cutoff_messages.split(',').map(m => m.trim().toLowerCase());
                                                         if (cutoffList.includes(text.trim().toLowerCase())) {
-                                                            console.log(`[AI] Cut-off message detected: "${text}". Skipping AI reply.`);
-                                                            return;
+                                                            console.log(`[AI] Cut-off message detected: "${text}". Skipping AI reply, but updating triage.`);
+                                                            shouldGenerateAiReply = false;
                                                         }
                                                     }
 
-                                                    console.log('[AI] processing...');
-                                                    const allRecent = await supabaseService.getLastMessages(conversation.id, 30);
+                                                    if (shouldGenerateAiReply) {
+                                                        console.log('[AI] processing...');
+                                                        const allRecent = await supabaseService.getLastMessages(conversation.id, 30);
                                                     const history = savedMessage ? allRecent.filter(m => m.id !== savedMessage.id) : allRecent;
                                                     
                                                     // Build Multi-Layer System Prompt (Page + Post/Ad + Ecommerce Catalog + Order context + Memory)
@@ -302,6 +301,7 @@ export class WebhooksController {
                                                     }
                                                 }
                                             }
+                                        }
                                         } catch (aiError) {
                                             console.error('[AI] Error:', aiError.message);
                                         }

@@ -153,5 +153,40 @@ export class SettingsController {
             return { success: false, error: e.message };
         }
     }
+
+    // ─── Messages Retention Endpoints ─────────────────────────────────────────────
+
+    @Get('messages-retention')
+    async getMessageRetentionSettings() {
+        try {
+            const data = await this.settingsService.getMessageRetentionSettings();
+            return { success: true, data };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    @Post('messages-retention')
+    async saveMessageRetentionSettings(@Body() body: { auto_delete_enabled: boolean; auto_delete_days: number }) {
+        try {
+            const data = await this.settingsService.saveMessageRetentionSettings(body);
+            return { success: true, data };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+
+    @Post('messages-retention/delete-before-date')
+    async deleteMessagesBeforeDate(@Body() body: { date: string }) {
+        try {
+            if (!body.date) {
+                return { success: false, error: 'Date is required' };
+            }
+            const result = await this.settingsService.cleanupMessagesBeforeDate(body.date);
+            return { success: true, data: result };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
 }
 

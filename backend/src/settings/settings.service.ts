@@ -220,5 +220,117 @@ export class SettingsService {
     async deletePostConfig(id: string) {
         return supabaseService.deletePostConfig(id);
     }
+
+    // ─── Messages Retention & Auto-Deletion ───────────────────────────────────────
+
+    async getMessageRetentionSettings() {
+        const [autoDeleteEnabled, autoDeleteDays, fixedCutoffDate, lastCleanupAt] = await Promise.all([
+            this.getSetting('msg_auto_delete_enabled'),
+            this.getSetting('msg_auto_delete_days'),
+            this.getSetting('msg_fixed_cutoff_date'),
+            this.getSetting('msg_last_cleanup_at')
+        ]);
+
+        const { count } = await supabaseService.getSupabaseClient()
+            .from('messages')
+            .select('*', { count: 'exact', head: true });
+
+        return {
+            auto_delete_enabled: autoDeleteEnabled === 'true',
+            auto_delete_days: autoDeleteDays ? parseInt(autoDeleteDays, 10) : 30,
+            fixed_cutoff_date: fixedCutoffDate || null,
+            last_cleanup_at: lastCleanupAt || null,
+            total_messages: count || 0
+        };
+    }
+
+    async saveMessageRetentionSettings(data: { auto_delete_enabled: boolean; auto_delete_days: number }) {
+        await Promise.all([
+            this.setSetting('msg_auto_delete_enabled', data.auto_delete_enabled ? 'true' : 'false'),
+            this.setSetting('msg_auto_delete_days', (data.auto_delete_days || 30).toString())
+        ]);
+
+        let cleanupResult: any = null;
+        if (data.auto_delete_enabled && data.auto_delete_days > 0) {
+            cleanupResult = await this.cleanupMessagesByDays(data.auto_delete_days);
+        }
+
+        const currentSettings = await this.getMessageRetentionSettings();
+        return {
+            ...currentSettings,
+            cleanupResult
+        };
+    }
+
+    async cleanupMessagesByDays(days: number) {
+        const cutoffMs = Date.now() - (days * 24 * 60 * 60 * 1000);
+        const cutoffIso = new Date(cutoffMs).toISOString();
+
+        console.log(`[Message Retention] Running rolling cleanup: deleting messages older than ${days} days (before ${cutoffIso})`);
+
+        // Find how many messages match before deleting
+        const { count: matchCount } = await supabaseService.getSupabaseClient()
+            .from('messages')
+            .select('*', { count: 'exact', head: true })
+            .lt('created_at', cutoffIso);
+
+        const { error } = await supabaseService.getSupabaseClient()
+            .from('messages')
+            .delete()
+            .lt('created_at', cutoffIso);
+
+        if (error) {
+            console.error('[Message Retention] Error deleting messages by days:', error);
+            throw error;
+        }
+
+        const nowIso = new Date().toISOString();
+        await this.setSetting('msg_last_cleanup_at', nowIso);
+
+        console.log(`[Message Retention] Successfully deleted ${matchCount || 0} messages before ${cutoffIso}`);
+        return {
+            success: true,
+            deletedCount: matchCount || 0,
+            cutoffIso,
+            executedAt: nowIso
+        };
+    }
+
+    async cleanupMessagesBeforeDate(dateStr: string) {
+        // e.g. dateStr = "2026-08-05" -> delete everything strictly before 2026-08-05T00:00:00.000Z
+        const cutoffIso = new Date(dateStr).toISOString();
+
+        console.log(`[Message Retention] Running fixed date cleanup: deleting messages before ${cutoffIso}`);
+
+        const { count: matchCount } = await supabaseService.getSupabaseClient()
+            .from('messages')
+            .select('*', { count: 'exact', head: true })
+            .lt('created_at', cutoffIso);
+
+        const { error } = await supabaseService.getSupabaseClient()
+            .from('messages')
+            .delete()
+            .lt('created_at', cutoffIso);
+
+        if (error) {
+            console.error('[Message Retention] Error deleting messages before date:', error);
+            throw error;
+        }
+
+        const nowIso = new Date().toISOString();
+        await Promise.all([
+            this.setSetting('msg_fixed_cutoff_date', dateStr),
+            this.setSetting('msg_last_cleanup_at', nowIso)
+        ]);
+
+        console.log(`[Message Retention] Successfully deleted ${matchCount || 0} messages before ${cutoffIso}`);
+        return {
+            success: true,
+            deletedCount: matchCount || 0,
+            cutoffIso,
+            cutoffDate: dateStr,
+            executedAt: nowIso
+        };
+    }
 }
 

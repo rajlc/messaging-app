@@ -116,12 +116,24 @@ export class ConversationTriageService {
             'fernu paryo', 'change gardinu', 'exchange', 'refund', 'return garnu', 'dhilo vayo',
             'dhila vayo', 'aayena', 'kaha pugyo'
         ];
+        const cancelKeywords = [
+            'cancel', 'cancelled', 'canceled', 'chahiyena', 'pardaina', 'cancel gardinu', 'napaathau', 'arkai saman'
+        ];
 
-        for (const msg of messages) {
+        // Process from newest to oldest to guarantee top priority for the latest messages
+        const reversed = [...messages].reverse();
+        let cancellationDetected = false;
+
+        for (const msg of reversed) {
             const text = msg.text || '';
             const lower = text.toLowerCase();
 
-            // Phone extraction with normalization and deduplication
+            // Detect if a cancellation occurred in recent messages
+            if (msg.sender === 'customer' && cancelKeywords.some(kw => lower.includes(kw))) {
+                cancellationDetected = true;
+            }
+
+            // Phone extraction
             const foundPhones = text.match(phoneRegex);
             if (foundPhones) {
                 for (const p of foundPhones) {
@@ -134,36 +146,44 @@ export class ConversationTriageService {
                 }
             }
 
-            // Price mentions extraction
+            // Delivery charge signals (prioritize latest)
+            if (!deliveryCharge) {
+                if (lower.includes('delivery charge') || lower.includes('delivery fee') || lower.includes('delivery chai')) {
+                    if (lower.includes('free') || lower.includes('pardaina') || lower.includes('lagdaina')) {
+                        deliveryCharge = 'Free Delivery';
+                    } else {
+                        const dcMatch = text.match(/(?:delivery|charge|fee)[^\d]*(\d{2,4})/i);
+                        if (dcMatch) {
+                            deliveryCharge = `Rs. ${dcMatch[1]}`;
+                        }
+                    }
+                } else if (lower.includes('free delivery') || lower.includes('free nai vayo') || lower.includes('free shipping')) {
+                    deliveryCharge = 'Free Delivery';
+                }
+            }
+
+            // Price mentions (latest first)
             let priceMatch: RegExpExecArray | null;
-            while ((priceMatch = priceRegex.exec(text)) !== null) {
+            const priceRegexLocal = /(?:Rs\.?|NPR|रु\.?)\s*([0-9,]+)/gi;
+            while ((priceMatch = priceRegexLocal.exec(text)) !== null) {
                 const formatted = `Rs. ${priceMatch[1]}`;
-                if (!detectedPrices.includes(formatted)) {
+                // Avoid treating delivery fee (e.g. Rs. 80, Rs. 100) as product price if it matches delivery charge
+                const isDeliveryAmount = deliveryCharge && deliveryCharge.includes(priceMatch[1]);
+                if (!isDeliveryAmount && !detectedPrices.includes(formatted)) {
                     detectedPrices.push(formatted);
                 }
             }
 
-            // Delivery charge signals
-            if (lower.includes('delivery charge') || lower.includes('delivery fee') || lower.includes('delivery chai')) {
-                if (lower.includes('free') || lower.includes('pardaina') || lower.includes('lagdaina')) {
-                    deliveryCharge = 'Free Delivery';
-                } else {
-                    const dcMatch = text.match(/(?:delivery|charge|fee)[^\d]*(\d{2,4})/i);
-                    if (dcMatch) {
-                        deliveryCharge = `Rs. ${dcMatch[1]}`;
-                    }
-                }
-            } else if (lower.includes('free delivery') || lower.includes('free nai vayo') || lower.includes('free shipping')) {
-                deliveryCharge = 'Free Delivery';
-            }
-
-            // Product highlight detection in markdown **Product** or common phrases
+            // Product highlight detection in markdown **Product** or explicit names
             const boldProductMatches = text.match(/\*\*([^*]+)\*\*/g);
             if (boldProductMatches) {
                 for (const bpm of boldProductMatches) {
                     const cleanName = bpm.replace(/\*\*/g, '').trim();
-                    if (cleanName.length > 2 && cleanName.length < 50 && !confirmedItems.includes(cleanName)) {
-                        confirmedItems.push(cleanName);
+                    if (cleanName.length > 2 && cleanName.length < 65 && !confirmedItems.includes(cleanName)) {
+                        // If an order cancellation was said after this product, don't treat it as active
+                        if (!cancellationDetected || confirmedItems.length === 0) {
+                            confirmedItems.push(cleanName);
+                        }
                     }
                 }
             }
@@ -226,9 +246,13 @@ export class ConversationTriageService {
             };
         }
 
-        // 1.5. Retrieve real customer phone number and delivery address from previous orders if available
+        // 1.5. Retrieve real customer phone number, address and structured order history
         const pastPhones: string[] = [];
         let pastAddress: string | null = null;
+        const activeUnshippedOrders: any[] = [];
+        const cancelledOrders: any[] = [];
+        const deliveredOrders: any[] = [];
+
         try {
             const { data: conv } = await supabaseService.getClient()
                 .from('conversations')
@@ -240,9 +264,9 @@ export class ConversationTriageService {
             const customerId = conv?.customer_id;
             let ordersQuery = supabaseService.getClient()
                 .from('orders')
-                .select('phone_number, alternative_phone, address, delivery_address, created_at')
+                .select('id, order_number, order_status, items, total_amount, phone_number, alternative_phone, address, delivery_address, created_at')
                 .order('created_at', { ascending: false })
-                .limit(5);
+                .limit(10);
 
             if (customerId && conversationId && customerId !== conversationId) {
                 ordersQuery = ordersQuery.or(`customer_id.eq.${customerId},conversation_id.eq.${conversationId}`);
@@ -256,6 +280,15 @@ export class ConversationTriageService {
             if (pastOrders && pastOrders.length > 0) {
                 const phoneRegex = /(?:98\d{8}|97\d{8}|01\d{7})/;
                 for (const ord of pastOrders) {
+                    const status = String(ord.order_status || '').toLowerCase().trim();
+                    if (['pending', 'packed', 'ready_to_ship', 'ready to ship', 'new', 'confirmed'].includes(status)) {
+                        activeUnshippedOrders.push(ord);
+                    } else if (['cancelled', 'canceled', 'rejected'].includes(status)) {
+                        cancelledOrders.push(ord);
+                    } else if (['delivered', 'completed', 'shipped'].includes(status)) {
+                        deliveredOrders.push(ord);
+                    }
+
                     const candidatePhones = [ord.phone_number, ord.alternative_phone];
                     for (const cp of candidatePhones) {
                         if (!cp) continue;
@@ -276,6 +309,24 @@ export class ConversationTriageService {
             this.logger.warn(`Could not fetch past customer orders for triage: ${dbErr.message}`);
         }
 
+        // Build structured order history context for intelligence prompt
+        let orderHistoryContext = '';
+        if (activeUnshippedOrders.length > 0) {
+            orderHistoryContext += `\n[OPEN / UNSHIPPED ORDERS IN STORE (Pending/Packed/Ready to Ship)]: ` +
+                activeUnshippedOrders.map(o => `Order #${o.order_number} (${o.order_status}) - Total: Rs. ${o.total_amount || 0} - Items: ${(o.items || []).map((it: any) => `${it.product_name || it.name} (x${it.qty || 1})`).join(', ')}`).join('\n') +
+                `\n(PRIORITY INSTRUCTION: This order is still in our store and NOT yet shipped. If customer wants to add another product, change address, or confirm delivery, PRIORITIZE this active open order!)`;
+        }
+        if (cancelledOrders.length > 0) {
+            orderHistoryContext += `\n[CANCELLED ORDERS - COMPLETELY IGNORE THESE PRODUCTS]: ` +
+                cancelledOrders.map(o => `Order #${o.order_number} (Cancelled): ${(o.items || []).map((it: any) => `${it.product_name || it.name}`).join(', ')}`).join('; ') +
+                `\n(CRITICAL: The items in cancelled orders are NOT what the customer is buying. NEVER put cancelled products into confirmed_products).`;
+        }
+        if (deliveredOrders.length > 0) {
+            orderHistoryContext += `\n[PAST DELIVERED ORDERS]: ` +
+                deliveredOrders.map(o => `Order #${o.order_number} (Delivered): ${(o.items || []).map((it: any) => `${it.product_name || it.name}`).join(', ')}`).join('; ') +
+                `\n(NOTE: Only refer to delivered orders if customer reports product damage/defect or asks for refund/exchange. If customer is asking for a new purchase, ignore delivered items and focus 100% on the new item requested).`;
+        }
+
         // 2. Extract deterministic local signals (Phone, Address, Damage keywords, Prices)
         const simplified = msgList.map(m => ({
             sender: m.sender || (m.isOwnMessage ? 'agent' : 'customer'),
@@ -290,7 +341,7 @@ export class ConversationTriageService {
         let triageResult: ConversationTriageResult | null = null;
         if (isChatSummaryEnabled) {
             try {
-                triageResult = await this.callAiSummarizer(simplified, localSignals, pastPhones, pastAddress);
+                triageResult = await this.callAiSummarizer(simplified, localSignals, pastPhones, pastAddress, orderHistoryContext);
             } catch (err: any) {
                 this.logger.warn(`AI Summarizer call failed, using fallback rules: ${err.message}`);
             }
@@ -304,6 +355,23 @@ export class ConversationTriageService {
             if (!isChatSummaryEnabled) {
                 triageResult.ai_action_summary = 'AI Chat Summary is paused in Global Settings to reduce token consumption. Customer phone, address, and order signals were extracted locally without AI cost.';
             }
+        }
+
+        // 4.5. If confirmed product detected, sync to conversation table so UI headers/lists update immediately
+        try {
+            const latestConfirmedName = triageResult?.order_analysis?.confirmed_products?.[0]?.name;
+            const latestPrice = triageResult?.order_analysis?.product_price || triageResult?.order_analysis?.ai_quoted_price;
+            if (latestConfirmedName && conversationId) {
+                await supabaseService.getClient()
+                    .from('conversations')
+                    .update({
+                        product_name: latestConfirmedName,
+                        product_price: latestPrice ? String(latestPrice) : undefined
+                    })
+                    .or(`id.eq.${conversationId},customer_id.eq.${conversationId}`);
+            }
+        } catch (syncErr: any) {
+            this.logger.warn(`Could not sync updated product_name to conversation: ${syncErr.message}`);
         }
 
         // 5. Cache result in settings table
@@ -323,18 +391,38 @@ export class ConversationTriageService {
         messages: Array<{ sender: string; text: string }>,
         localSignals: ReturnType<typeof this.extractLocalSignals>,
         pastPhones: string[] = [],
-        pastAddress: string | null = null
+        pastAddress: string | null = null,
+        orderHistoryContext: string = ''
     ): Promise<ConversationTriageResult | null> {
         const geminiKey = await this.settingsService.getSetting('gemini_api_key');
         const openaiKey = await this.settingsService.getSetting('openai_api_key');
 
-        const transcript = messages.slice(-15).map(m => `${m.sender.toUpperCase()}: ${m.text}`).join('\n');
-        const userPromptText = pastPhones.length > 0
-            ? `Transcript:\n${transcript}\n\nNote: Customer contact number on file from past orders: ${pastPhones.join(', ')}. If customer asks about or refers to their phone number being already available / on file, output the real number (${pastPhones[0]}) in "phone" instead of a placeholder phrase.`
-            : `Transcript:\n${transcript}`;
+        const transcript = messages.slice(-25).map(m => `${m.sender.toUpperCase()}: ${m.text}`).join('\n');
+        const userPromptText = `Transcript of recent messages (earlier to LATEST at bottom):\n${transcript}\n\n` +
+            (pastPhones.length > 0 ? `Customer Contact on file: ${pastPhones.join(', ')}\n` : '') +
+            (pastAddress ? `Customer Delivery Address on file: ${pastAddress}\n` : '') +
+            (orderHistoryContext ? `${orderHistoryContext}\n` : '') +
+            `\nREMINDER: Focus heavily on the LATEST messages at the bottom of the transcript. Determine what product the customer wants RIGHT NOW. Do not output cancelled or old order items.`;
 
         const systemPrompt = `You are an expert e-commerce CRM intelligence assistant for a Nepali online retail store.
 Analyze the customer chat transcript and output a JSON object classifying the conversation, summarizing the dialogue, and extracting all order/pricing details.
+
+=== STRICT RECENCY & PRODUCT PRIORITIZATION RULES (HIGHEST PRIORITY) ===
+1. LATEST PRODUCT INQUIRY WINS:
+   - Customers have continuous chat histories where older products were discussed or bought weeks/days ago.
+   - If earlier in the chat the customer inquired about or cancelled Product A (e.g., Electric Jug), and in the LATEST messages the customer is asking about or confirming Product B (e.g., "Drawing book 2 pc"), YOUR ENTIRE OUTPUT MUST FOCUS 100% ON PRODUCT B!
+   - "confirmed_products" MUST ONLY contain the latest product (Drawing book 2 pcs). NEVER output the old product.
+2. ORDER HISTORY CONTEXT RULES:
+   - "Pending", "Packed", or "Ready to Ship" orders: These are open unshipped orders. If the customer wants to add another product to their open order, prioritize this active order and note the addition.
+   - "Cancelled" orders: Completely SKIP and IGNORE. Never include cancelled products in "confirmed_products".
+   - "Delivered" orders: Only prioritize if the customer is reporting damage, defect, or asking for exchange/refund. If they want to buy something new, treat it as a fresh new purchase and ignore past delivered products.
+3. ACCURATE PRICING & SUMMARY:
+   - "confirmed_products": Specific product name(s) and quantity customer agreed to buy in the LATEST messages (e.g. Reusable Drawing Book for Kids, quantity: 2).
+   - "product_price": Price of the latest item(s) discussed (e.g. Rs. 380 or Rs. 760 for 2 pcs).
+   - "ai_quoted_price": The latest price quoted by AI/agent in chat.
+   - "delivery_charge": Current delivery charge quoted (e.g. Rs. 80, or Free Delivery).
+   - "ai_action_summary": 2-3 sentences strictly describing what was discussed in the LATEST messages, the new product requested/confirmed, and delivery status.
+   - "customer_current_intent": 1 sentence describing what the customer wants RIGHT NOW based on their latest messages.
 
 Return valid JSON with this EXACT structure:
 {
@@ -353,21 +441,21 @@ Return valid JSON with this EXACT structure:
     "address": "Extracted delivery location or full address, or null if not mentioned",
     "confirmed_products": [
       {
-        "name": "Specific product name(s) customer agreed to buy (e.g. Deep Tissue Massage Gun, CCTV Camera)",
+        "name": "Specific product name customer wants/confirmed in LATEST messages",
         "quantity": 1,
-        "price": "Price of this item, e.g. Rs. 1,549",
-        "notes": "Optional notes, e.g. merge with previous CCTV order"
+        "price": "Price of this item, e.g. Rs. 380",
+        "notes": "Optional notes, e.g. 2 pcs or merge with open order"
       }
     ],
-    "product_price": "Subtotal or itemized product prices, e.g. Rs. 1,499 (CCTV) + Rs. 1,549 (Massage Gun)",
-    "ai_quoted_price": "Total price quoted by our AI/agent in chat, e.g. Rs. 3,048",
-    "delivery_charge": "Delivery fee status or amount mentioned, e.g. 'Free Delivery (merged with previous order)' or 'Rs. 100' or 'Free'",
-    "total_amount": "Final grand total payable by customer, e.g. Rs. 3,048",
-    "order_notes": "Key logistics or customer instructions (e.g. deliver together to Balaju with previous order)"
+    "product_price": "Subtotal or item price from latest inquiry, e.g. Rs. 380",
+    "ai_quoted_price": "Total price quoted by AI/agent in chat, e.g. Rs. 460",
+    "delivery_charge": "Delivery fee status or amount mentioned, e.g. Rs. 80 or Free Delivery",
+    "total_amount": "Final grand total payable by customer, e.g. Rs. 460",
+    "order_notes": "Key logistics or customer instructions (e.g. deliver to Balaju)"
   },
-  "ai_action_summary": "Comprehensive 2-4 sentence summary of the chat: describe what the customer requested, what products were discussed, what prices or special terms (such as merging delivery) were offered by the AI/Agent, and the customer's response/confirmation.",
-  "customer_current_intent": "1 sentence summarizing what the customer currently wants or expects right now.",
-  "suggested_action": "1 concrete recommended action for human store staff (e.g. Confirm and pack combined order for Balaju dispatch, Call customer for exchange, Sourcing check)."
+  "ai_action_summary": "Comprehensive 2-3 sentence summary of the LATEST dialogue, current product, and delivery confirmation.",
+  "customer_current_intent": "1 sentence summarizing what the customer wants right now.",
+  "suggested_action": "1 concrete recommended action for human store staff (e.g. Confirm and pack Drawing Book order for Balaju dispatch)."
 }
 
 Classification Rules:
@@ -591,7 +679,7 @@ Classification Rules:
                 orderAnalysis.delivery_charge = localSignals.deliveryCharge;
             }
             if (!orderAnalysis.ai_quoted_price && localSignals.detectedPrices.length > 0) {
-                orderAnalysis.ai_quoted_price = localSignals.detectedPrices[localSignals.detectedPrices.length - 1];
+                orderAnalysis.ai_quoted_price = localSignals.detectedPrices[0];
             }
         }
 
@@ -661,9 +749,9 @@ Classification Rules:
                 ? localSignals.confirmedItems.map(item => ({ name: item, quantity: 1 }))
                 : undefined,
             product_price: localSignals.detectedPrices.length > 0 ? localSignals.detectedPrices[0] : undefined,
-            ai_quoted_price: localSignals.detectedPrices.length > 0 ? localSignals.detectedPrices[localSignals.detectedPrices.length - 1] : undefined,
+            ai_quoted_price: localSignals.detectedPrices.length > 0 ? localSignals.detectedPrices[0] : undefined,
             delivery_charge: localSignals.deliveryCharge || undefined,
-            total_amount: localSignals.detectedPrices.length > 0 ? localSignals.detectedPrices[localSignals.detectedPrices.length - 1] : undefined,
+            total_amount: localSignals.detectedPrices.length > 0 ? localSignals.detectedPrices[0] : undefined,
             order_notes: localSignals.orderKeywords.join(', ') || undefined
         };
 
@@ -692,7 +780,7 @@ Classification Rules:
                 urgency: 'medium',
                 important_points: points,
                 order_analysis: fallbackOrderAnalysis,
-                ai_action_summary: `Customer and AI discussed delivery details. Customer specified delivery address (${localSignals.addresses[0] || 'on file'}) and requested order dispatch${localSignals.detectedPrices.length > 0 ? ` at quoted price ${localSignals.detectedPrices[localSignals.detectedPrices.length - 1]}` : ''}.`,
+                ai_action_summary: `Customer and AI discussed delivery details. Customer specified delivery address (${localSignals.addresses[0] || 'on file'}) and requested order dispatch${localSignals.detectedPrices.length > 0 ? ` at quoted price ${localSignals.detectedPrices[0]}` : ''}.`,
                 customer_current_intent: 'Confirming order delivery and items.',
                 suggested_action: 'Create and confirm customer order.',
                 analyzed_at: new Date().toISOString()
