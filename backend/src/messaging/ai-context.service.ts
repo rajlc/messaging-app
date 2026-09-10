@@ -33,8 +33,8 @@ export class AiContextService {
         if (!orders || orders.length === 0) return '';
 
         const lines: string[] = [
-            '=== CUSTOMER ORDER HISTORY ===',
-            'The customer has the following order(s) in our system. Use this data to answer questions about their orders accurately.',
+            '=== CUSTOMER ORDER HISTORY (DATABASE) ===',
+            'The customer has the following recorded order(s) in our system database. Use this data to answer questions about their orders accurately.',
             ''
         ];
 
@@ -54,7 +54,10 @@ export class AiContextService {
             if (order.items && order.items.length > 0) {
                 lines.push(`  Items:`);
                 order.items.forEach((item: any) => {
-                    lines.push(`    - ${item.product_name} × ${item.qty} = Rs. ${item.total_amount?.toLocaleString() || 0}`);
+                    const name = item.product_name || item.name || item.title || 'Product';
+                    const qty = item.qty || item.quantity || 1;
+                    const price = item.total_amount || item.price || item.unit_price || 0;
+                    lines.push(`    - ${name} × ${qty} = Rs. ${Number(price).toLocaleString()}`);
                 });
             }
             lines.push('');
@@ -66,15 +69,16 @@ export class AiContextService {
 
     /**
      * Build the final composed system prompt for the AI.
-     * Priority: Post/Ad instructions → Page instructions → Order context
+     * Priority: Post/Ad instructions → Page instructions → Order context + Memory rules
      */
     async buildSystemPrompt(params: {
         pagePrompt: string;
         customerId: string;
+        conversationId?: string;
         referralPostId?: string;
         customerMessage: string;
     }): Promise<string> {
-        const { pagePrompt, customerId, referralPostId, customerMessage } = params;
+        const { pagePrompt, customerId, conversationId, referralPostId, customerMessage } = params;
 
         const sections: string[] = [];
 
@@ -105,17 +109,17 @@ export class AiContextService {
             }
         }
 
-        // ─── Layer 3: Customer order context (auto-injected) ─────────────────────
-        // Always fetch orders but only prominently highlight if message is order-related
+        // ─── Layer 3: Customer order context (auto-injected from DB) ──────────────
+        // Fetch orders using both customerId and conversationId
         try {
-            const orders = await supabaseService.getOrdersByCustomerId(customerId);
+            const orders = await supabaseService.getOrdersByCustomerId(customerId, conversationId);
             if (orders && orders.length > 0) {
                 const orderContext = this.formatOrderContext(orders);
                 sections.push(orderContext);
                 sections.push('');
 
                 if (this.isOrderRelated(customerMessage)) {
-                    sections.push('NOTE: The customer appears to be asking about their order. Please refer to the order history above to provide an accurate, specific answer about their order status, items, or delivery.');
+                    sections.push('NOTE: The customer is asking about their order. Refer directly to the CUSTOMER ORDER HISTORY above to give specific details regarding their order number, items, price, or delivery status.');
                     sections.push('');
                 }
             }
@@ -123,12 +127,25 @@ export class AiContextService {
             console.error('[AIContext] Error fetching customer orders:', err.message);
         }
 
+        // ─── Layer 4: Conversation Memory & Order Continuity Rules (CRITICAL) ─────
+        sections.push('=== CONVERSATION MEMORY & CONTINUITY RULES (CRITICAL) ===');
+        sections.push('1. READ PRIOR CHAT HISTORY: You have access to previous chat messages in this conversation. Always examine earlier user and agent messages carefully.');
+        sections.push('2. NEVER ASK FOR DETAILS ALREADY PROVIDED:');
+        sections.push('   - If the customer already provided their phone number, delivery address, city, or product choice earlier in this conversation, NEVER ask them for it again!');
+        sections.push('   - If the customer asks "what is my order?" or "mero saman k ho?", check the previous messages: find the product they asked for, their phone number, and address that was discussed.');
+        sections.push('3. ORDER STATUS & DELIVERY QUESTIONS:');
+        sections.push('   - If the order exists in the CUSTOMER ORDER HISTORY table above, quote the exact order number, items, and status.');
+        sections.push('   - If the order was just discussed and confirmed in the chat history, reassure the customer with the product name and details they agreed to (e.g. "Hajur, tapai ko [Product Name] ko order confirm bhayeko xa. Voli/2-3 din bhitra delivery hunecha.").');
+        sections.push('   - Never claim you do not know their order or product if they already mentioned or confirmed it earlier in the chat.');
+        sections.push('4. PRODUCT IN CONTEXT: Keep the conversation centered on the product the customer inquired about or came from, unless they specifically ask for another item.');
+        sections.push('');
+
         // ─── Final instruction ─────────────────────────────────────────────────────
         sections.push('=== RESPONSE GUIDELINES ===');
-        sections.push('- Always respond in the same language the customer used.');
-        sections.push('- Be concise, friendly, and helpful.');
+        sections.push('- Always respond in the same language the customer used (Nepali, Roman Nepali, or English).');
+        sections.push('- Be concise, polite, natural, and helpful.');
         sections.push('- Never reveal that you are an AI unless directly asked.');
-        sections.push('- If you do not know the answer, politely ask the customer to wait or contact us directly.');
+        sections.push('- If customer has placed an order or given details, confirm them warmly.');
 
         return sections.join('\n');
     }

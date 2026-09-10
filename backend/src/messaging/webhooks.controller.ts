@@ -234,13 +234,15 @@ export class WebhooksController {
                                                     }
 
                                                     console.log('[AI] processing...');
-                                                    const history = await supabaseService.getLastMessages(conversation.id, 5);
+                                                    const allRecent = await supabaseService.getLastMessages(conversation.id, 30);
+                                                    const history = savedMessage ? allRecent.filter(m => m.id !== savedMessage.id) : allRecent;
                                                     
-                                                    // Build 3-Layer System Prompt (Page + Post/Ad + Order context)
+                                                    // Build 3-Layer System Prompt (Page + Post/Ad + Order context + Conversational Memory)
                                                     const systemPrompt = await aiContextService.buildSystemPrompt({
                                                         pagePrompt: page.custom_prompt,
                                                         customerId: customerId,
-                                                        referralPostId: referralEntryId,
+                                                        conversationId: conversation.id,
+                                                        referralPostId: referralEntryId || conversation.referral_post_id,
                                                         customerMessage: text
                                                     });
 
@@ -666,24 +668,23 @@ export class WebhooksController {
             if (isAiMarketplaceEnabled === 'true' && isAiEnabled) {
                 console.log(`[Marketplace AI] Processing message for profile ${profileId}`);
 
-                // Get message history
-                const history = await supabaseService.getLastMessages(conversation.id, 5);
+                // Get message history (up to 30 messages)
+                const allRecent = await supabaseService.getLastMessages(conversation.id, 30);
+                const history = savedMessage ? allRecent.filter(m => m.id !== savedMessage.id) : allRecent;
 
                 // Get customer's orders to feed into AI context
                 let ordersContext = '';
                 try {
-                    const { data: customerOrders } = await supabaseService.getClient()
-                        .from('orders')
-                        .select('order_number, order_status, total_amount, courier_provider, tracking_number, created_at')
-                        .eq('customer_id', customerId)
-                        .order('created_at', { ascending: false });
-                    
+                    const customerOrders = await supabaseService.getOrdersByCustomerId(customerId, conversation.id);
                     if (customerOrders && customerOrders.length > 0) {
-                        ordersContext = "\n\nCustomer's Order History:\n" + customerOrders.map(o => 
-                            `- Order #${o.order_number}: Status=${o.order_status || 'New'}, Courier=${o.courier_provider || 'N/A'}, Tracking=${o.tracking_number || 'N/A'}, Amount=Rs ${o.total_amount}, Created=${o.created_at?.split('T')[0] || 'N/A'}`
-                        ).join('\n') + '\n';
+                        ordersContext = "\n\nCustomer's Order History:\n" + customerOrders.map(o => {
+                            const itemsStr = (o.items && o.items.length > 0)
+                                ? ` | Items: ` + o.items.map((it: any) => `${it.product_name || it.name} (x${it.qty || 1})`).join(', ')
+                                : '';
+                            return `- Order #${o.order_number}: Status=${o.order_status || 'New'}, Courier=${o.courier_provider || 'N/A'}, Tracking=${o.tracking_number || 'N/A'}, Amount=Rs ${o.total_amount || 0}, Created=${o.created_at?.split('T')[0] || 'N/A'}${itemsStr}`;
+                        }).join('\n') + '\n';
                     }
-                } catch (orderErr) {
+                } catch (orderErr: any) {
                     console.error('Failed to load customer orders for AI context:', orderErr.message);
                 }
 
@@ -748,7 +749,8 @@ export class WebhooksController {
                     productContext += '\n';
                 }
 
-                const systemPrompt = (customPrompt || 'You are a helpful Facebook Marketplace seller assistant.') + productContext + catalogContext + ordersContext;
+                const memoryGuideline = `\n\n=== CONVERSATION MEMORY RULES ===\n- Read prior messages in this conversation carefully before answering.\n- If the customer already provided their phone number, address, or product choice earlier, DO NOT ask them for it again.\n- If the customer asks "what is my order?" or about delivery status, check the order history and earlier messages to confirm their item and details.\n- Never claim you don't know what product they want if it was already discussed earlier in this chat.\n`;
+                const systemPrompt = (customPrompt || 'You are a helpful Facebook Marketplace seller assistant.') + productContext + catalogContext + ordersContext + memoryGuideline;
                 const replyText = await this.aiService.generateReply({
                     systemPrompt,
                     history,

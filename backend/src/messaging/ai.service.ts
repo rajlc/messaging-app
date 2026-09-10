@@ -5,6 +5,10 @@ import { SettingsService } from '../settings/settings.service';
 export interface AiChatMessage {
     sender: 'customer' | 'agent' | string;
     text: string;
+    imageUrl?: string;
+    image_url?: string;
+    fileType?: string;
+    file_type?: string;
 }
 
 @Injectable()
@@ -139,9 +143,16 @@ export class AiService {
         const rawTurns: Array<{ role: 'user' | 'model'; text: string }> = [];
 
         for (const msg of history) {
-            if (!msg.text || !msg.text.trim()) continue;
+            let msgText = msg.text?.trim() || '';
+            const imgUrl = msg.imageUrl || msg.image_url;
+            if (!msgText && imgUrl) {
+                msgText = '[Customer sent a product image/photo]';
+            } else if (imgUrl && !msgText.includes('[image]')) {
+                msgText = `${msgText} [Customer sent an image]`;
+            }
+            if (!msgText) continue;
             const role = msg.sender === 'customer' ? 'user' : 'model';
-            rawTurns.push({ role, text: msg.text.trim() });
+            rawTurns.push({ role, text: msgText });
         }
 
         if (userMessage && userMessage.trim()) {
@@ -193,10 +204,19 @@ export class AiService {
 
         const messages = [
             { role: 'system', content: systemPrompt },
-            ...history.map(msg => ({
-                role: msg.sender === 'customer' ? 'user' : 'assistant',
-                content: msg.text
-            })),
+            ...history.map(msg => {
+                let msgText = msg.text?.trim() || '';
+                const imgUrl = msg.imageUrl || msg.image_url;
+                if (!msgText && imgUrl) {
+                    msgText = '[Customer sent a product image/photo]';
+                } else if (imgUrl && !msgText.includes('[image]')) {
+                    msgText = `${msgText} [Customer sent an image]`;
+                }
+                return {
+                    role: msg.sender === 'customer' ? 'user' : 'assistant',
+                    content: msgText || '[Empty message]'
+                };
+            }),
             { role: 'user', content: userMessage }
         ];
 

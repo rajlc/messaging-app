@@ -854,12 +854,20 @@ export class SupabaseService {
     /**
      * Get the most recent order and its items for a customer (for AI order context)
      */
-    async getOrdersByCustomerId(customerId: string) {
+    async getOrdersByCustomerId(customerId: string, conversationId?: string) {
         try {
-            const { data: orders, error: ordersErr } = await this.getClient()
-                .from('orders')
-                .select('*')
-                .eq('customer_id', customerId)
+            let query = this.getClient().from('orders').select('*');
+            if (customerId && conversationId) {
+                query = query.or(`customer_id.eq.${customerId},conversation_id.eq.${conversationId}`);
+            } else if (customerId) {
+                query = query.eq('customer_id', customerId);
+            } else if (conversationId) {
+                query = query.eq('conversation_id', conversationId);
+            } else {
+                return [];
+            }
+
+            const { data: orders, error: ordersErr } = await query
                 .order('created_at', { ascending: false })
                 .limit(5);
 
@@ -871,10 +879,13 @@ export class SupabaseService {
                 .select('*')
                 .in('order_id', orderIds);
 
-            return orders.map(order => ({
-                ...order,
-                items: (items || []).filter(item => item.order_id === order.id)
-            }));
+            return orders.map(order => {
+                const dbItems = (items || []).filter(item => item.order_id === order.id);
+                return {
+                    ...order,
+                    items: dbItems.length > 0 ? dbItems : (Array.isArray(order.items) ? order.items : [])
+                };
+            });
         } catch (err: any) {
             console.error('[Supabase] Error fetching orders for AI context:', err.message);
             return [];
