@@ -488,6 +488,35 @@ export class SupabaseService {
         pageId: string;
         accessToken: string;
     }) {
+        // Check if page already exists by page_id
+        const { data: existing } = await this.getClient()
+            .from('pages')
+            .select('id')
+            .eq('page_id', data.pageId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (existing) {
+            const { data: updated, error: updateError } = await this.getClient()
+                .from('pages')
+                .update({
+                    platform: data.platform,
+                    page_name: data.pageName,
+                    access_token: data.accessToken,
+                    is_active: true
+                })
+                .eq('id', existing.id)
+                .select()
+                .single();
+
+            if (updateError) {
+                console.error('Error updating existing page:', updateError);
+                throw updateError;
+            }
+            return updated;
+        }
+
         const { data: page, error } = await this.getClient()
             .from('pages')
             .insert({
@@ -677,9 +706,11 @@ export class SupabaseService {
             .from('pages')
             .select('*')
             .eq('page_id', pageId)
-            .single();
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
+        if (error) {
             console.error('Error fetching page by ID:', error);
         }
 

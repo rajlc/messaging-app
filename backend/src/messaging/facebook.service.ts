@@ -22,16 +22,19 @@ export class FacebookService {
     }
 
     private async getPageAccessToken(pageId?: string): Promise<string> {
-        // If no specific page ID, try default
-        if (!pageId) return this.defaultPageAccessToken;
+        // 1. If pageId is provided, check DB first for the fresh token configured by user
+        if (pageId) {
+            const page = await supabaseService.getPageByFacebookId(pageId);
+            if (page && page.access_token && page.access_token !== 'none') {
+                return page.access_token;
+            }
+        }
 
-        // If it matches default env var, return that
-        if (pageId === this.defaultPageId) return this.defaultPageAccessToken;
-
-        // Otherwise loop up in DB
-        const page = await supabaseService.getPageByFacebookId(pageId);
-        if (page && page.access_token) {
-            return page.access_token;
+        // 2. Fall back to environment variable if pageId matches default or if no pageId provided
+        if (!pageId || pageId === this.defaultPageId) {
+            if (this.defaultPageAccessToken) {
+                return this.defaultPageAccessToken;
+            }
         }
 
         console.warn(`Could not find access token for page ${pageId}, falling back to default if available`);
