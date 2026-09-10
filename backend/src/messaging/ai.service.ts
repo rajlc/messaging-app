@@ -409,7 +409,7 @@ export class AiService {
                     timeout: 20000
                 });
                 resolvedBase64 = Buffer.from(imgRes.data).toString('base64');
-                resolvedMime = imgRes.headers['content-type'] || 'image/jpeg';
+                resolvedMime = (imgRes.headers['content-type'] as string) || 'image/jpeg';
             } catch (fetchErr: any) {
                 this.logger.warn(`[AI/Post] Failed to fetch image from URL: ${fetchErr.message}`);
             }
