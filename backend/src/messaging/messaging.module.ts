@@ -13,6 +13,8 @@ import { SettingsModule } from '../settings/settings.module';
 import { CommentsModule } from '../comments/comments.module';
 import { SocketModule } from '../socket/socket.module';
 import { AuthModule } from '../auth/auth.module';
+import { AiService } from './ai.service';
+import { AiController } from './ai.controller';
 
 @Module({
     imports: [
@@ -21,7 +23,7 @@ import { AuthModule } from '../auth/auth.module';
         forwardRef(() => SocketModule),
         AuthModule
     ],
-    providers: [FacebookService, AutoReplyService],
+    providers: [FacebookService, AutoReplyService, AiService],
     controllers: [
         ConversationsController,
         MessagesController,
@@ -30,8 +32,9 @@ import { AuthModule } from '../auth/auth.module';
         UploadController,
         AutoReplyController,
         PagesController,
-        TikTokAuthController
+        TikTokAuthController,
+        AiController
     ],
-    exports: [FacebookService, AutoReplyService]
+    exports: [FacebookService, AutoReplyService, AiService]
 })
 export class MessagingModule { }

@@ -11,6 +11,7 @@ import {
     Download, ExternalLink, Copy, Eye, Search, Repeat, ChevronDown
 } from 'lucide-react';
 import { ArrowLeft } from 'lucide-react';
+import AiPostGeneratorModal from '@/components/AiPostGeneratorModal';
 
 async function downloadMedia(url: string, defaultName?: string) {
     try {
@@ -904,6 +905,7 @@ function ComposerPanel({ pages, editPost, isReusing, onClose, onSaved }: {
     const [saving, setSaving] = useState(false);
     const [publishing, setPublishing] = useState(false);
     const [error, setError] = useState('');
+    const [showAiModal, setShowAiModal] = useState(false);
 
     const selectedPlatforms = [...new Set(selectedTargets.map(t => t.platform))];
 
@@ -1085,9 +1087,19 @@ function ComposerPanel({ pages, editPost, isReusing, onClose, onSaved }: {
 
                     {/* Content tabs */}
                     <div>
-                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3 flex items-center gap-2">
-                            <Sparkles size={10} /> Caption & Hashtags
-                        </p>
+                        <div className="flex items-center justify-between mb-3">
+                            <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 flex items-center gap-2">
+                                <Sparkles size={11} className="text-indigo-500" /> Caption & Hashtags
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => setShowAiModal(true)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:to-pink-600 text-white rounded-xl text-xs font-bold shadow-sm hover:shadow-md transition-all active:scale-95 group"
+                            >
+                                <Sparkles size={12} className="text-amber-300 animate-pulse" />
+                                <span>AI Generate</span>
+                            </button>
+                        </div>
 
                         {/* Tabs */}
                         {tabs.length > 1 && (
@@ -1162,6 +1174,23 @@ function ComposerPanel({ pages, editPost, isReusing, onClose, onSaved }: {
                     )}
                 </div>
             </div>
+
+            {/* AI Post Generator Modal */}
+            <AiPostGeneratorModal
+                isOpen={showAiModal}
+                onClose={() => setShowAiModal(false)}
+                currentMediaUrl={mediaUrl}
+                currentMediaType={mediaType}
+                onApply={(newCaption, newHashtags, newMediaUrl) => {
+                    setCaption(newCaption);
+                    setHashtags(newHashtags);
+                    if (newMediaUrl) {
+                        setMediaUrl(newMediaUrl);
+                        setMediaType('photo');
+                        setMediaLoadError(false);
+                    }
+                }}
+            />
         </div>
     );
 }

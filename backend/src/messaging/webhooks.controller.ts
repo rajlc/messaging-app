@@ -9,6 +9,7 @@ import { SettingsService } from '../settings/settings.service';
 import { AutoReplyService } from '../auto-reply/auto-reply.service';
 import { aiContextService } from './ai-context.service';
 import { JwtService } from '@nestjs/jwt';
+import { AiService } from './ai.service';
 import axios from 'axios';
 
 @Controller(['webhooks', 'api/webhooks'])
@@ -51,6 +52,7 @@ export class WebhooksController {
         private settingsService: SettingsService,
         private autoReplyService: AutoReplyService,
         private jwtService: JwtService,
+        private aiService: AiService,
     ) { }
 
     // Meta (Facebook & Instagram) Webhook verification
@@ -242,48 +244,11 @@ export class WebhooksController {
                                                         customerMessage: text
                                                     });
 
-                                                    const messages = [
-                                                        { role: 'system', content: systemPrompt },
-                                                        ...history.map(msg => ({ role: msg.sender === 'customer' ? 'user' : 'assistant', content: msg.text })),
-                                                        { role: 'user', content: text }
-                                                    ];
-
-                                                    const aiProvider = await this.settingsService.getSetting('ai_provider') || 'openai';
-                                                    let replyText = '';
-
-                                                    if (aiProvider === 'openai') {
-                                                        const apiKey = await this.settingsService.getSetting('openai_api_key');
-                                                        const openaiModel = await this.settingsService.getSetting('openai_model') || 'gpt-4o-mini';
-                                                        if (apiKey) {
-                                                            console.log(`[AI] Calling OpenAI with model: ${openaiModel}`);
-                                                            try {
-                                                                const aiResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
-                                                                    model: openaiModel,
-                                                                    messages: messages,
-                                                                    max_tokens: 300
-                                                                }, { headers: { 'Authorization': `Bearer ${apiKey}` } });
-                                                                replyText = aiResponse.data.choices[0]?.message?.content;
-                                                            } catch (openaiErr: any) {
-                                                                console.warn(`[AI] OpenAI model "${openaiModel}" failed (${openaiErr.response?.status || openaiErr.message}). Falling back to gpt-4o-mini...`);
-                                                                const fallbackResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
-                                                                    model: 'gpt-4o-mini',
-                                                                    messages: messages,
-                                                                    max_tokens: 300
-                                                                }, { headers: { 'Authorization': `Bearer ${apiKey}` } });
-                                                                replyText = fallbackResponse.data.choices[0]?.message?.content;
-                                                            }
-                                                        }
-                                                    } else if (aiProvider === 'gemini') {
-                                                        const geminiKey = await this.settingsService.getSetting('gemini_api_key');
-                                                        if (geminiKey) {
-                                                            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiKey}`;
-                                                            const aiResponse = await axios.post(url, {
-                                                                contents: messages.map(msg => ({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] })).filter(msg => msg.role !== 'system'),
-                                                                systemInstruction: { parts: [{ text: systemPrompt }] }
-                                                            });
-                                                            replyText = aiResponse.data.candidates?.[0]?.content?.parts?.[0]?.text;
-                                                        }
-                                                    }
+                                                    const replyText = await this.aiService.generateReply({
+                                                        systemPrompt,
+                                                        history,
+                                                        userMessage: text
+                                                    });
 
                                                     if (replyText) {
                                                         const fbRes = await this.facebookService.sendMessage(customerId, replyText, pageId);
@@ -784,36 +749,11 @@ export class WebhooksController {
                 }
 
                 const systemPrompt = (customPrompt || 'You are a helpful Facebook Marketplace seller assistant.') + productContext + catalogContext + ordersContext;
-                const messages = [
-                    { role: 'system', content: systemPrompt },
-                    ...history.map(msg => ({ role: msg.sender === 'customer' ? 'user' : 'assistant', content: msg.text })),
-                    { role: 'user', content: messageText }
-                ];
-
-                const aiProvider = await this.settingsService.getSetting('ai_provider') || 'openai';
-                let replyText = '';
-
-                if (aiProvider === 'openai') {
-                    const apiKey = await this.settingsService.getSetting('openai_api_key');
-                    if (apiKey) {
-                        const aiResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
-                            model: 'gpt-4o-mini',
-                            messages: messages,
-                            max_tokens: 300
-                        }, { headers: { 'Authorization': `Bearer ${apiKey}` } });
-                        replyText = aiResponse.data.choices[0]?.message?.content;
-                    }
-                } else if (aiProvider === 'gemini') {
-                    const geminiKey = await this.settingsService.getSetting('gemini_api_key');
-                    if (geminiKey) {
-                        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiKey}`;
-                        const aiResponse = await axios.post(url, {
-                            contents: messages.map(msg => ({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] })).filter(msg => msg.role !== 'system'),
-                            systemInstruction: { parts: [{ text: systemPrompt }] }
-                        });
-                        replyText = aiResponse.data.candidates?.[0]?.content?.parts?.[0]?.text;
-                    }
-                }
+                const replyText = await this.aiService.generateReply({
+                    systemPrompt,
+                    history,
+                    userMessage: messageText
+                });
 
                 if (replyText) {
                     // Save Agent Reply

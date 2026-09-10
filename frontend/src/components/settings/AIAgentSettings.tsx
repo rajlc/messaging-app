@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Bot, Save, Shield, RefreshCw, Zap, Check, AlertCircle, Edit2, X, Upload, Trash2, Search, FileText } from 'lucide-react';
+import { Bot, Save, Shield, RefreshCw, Zap, Check, AlertCircle, Edit2, X, Upload, Trash2, Search, FileText, Sparkles, Cpu, ShieldCheck } from 'lucide-react';
 
 type Page = {
     id: string;
@@ -22,9 +22,15 @@ export default function AIAgentSettings() {
     const [isMarketplaceEnabled, setIsMarketplaceEnabled] = useState(false);
     const [apiKey, setApiKey] = useState('');
     const [geminiApiKey, setGeminiApiKey] = useState('');
-    const [aiProvider, setAiProvider] = useState('openai'); // 'openai' | 'gemini'
+    const [aiProvider, setAiProvider] = useState('gemini'); // 'openai' | 'gemini'
     const [openaiModel, setOpenaiModel] = useState('gpt-4o-mini');
+    const [geminiModel, setGeminiModel] = useState('gemini-3.6-flash');
+    const [postGenerationInstructions, setPostGenerationInstructions] = useState('');
+    const [isSavingPostGen, setIsSavingPostGen] = useState(false);
+    const [postGenMessage, setPostGenMessage] = useState('');
     const [isGlobalLoading, setIsGlobalLoading] = useState(false);
+    const [isTestingAi, setIsTestingAi] = useState(false);
+    const [testAiResult, setTestAiResult] = useState<{ success: boolean; message: string; reply?: string } | null>(null);
     const [globalMessage, setGlobalMessage] = useState('');
 
     // Pages State
@@ -184,8 +190,10 @@ export default function AIAgentSettings() {
             setIsMarketplaceEnabled(data.is_ai_marketplace_enabled === 'true');
             setApiKey(data.openai_api_key || '');
             setGeminiApiKey(data.gemini_api_key || '');
-            setAiProvider(data.ai_provider || 'openai');
+            setAiProvider(data.ai_provider || 'gemini');
             setOpenaiModel(data.openai_model || 'gpt-4o-mini');
+            setGeminiModel(data.gemini_model || 'gemini-flash-latest');
+            setPostGenerationInstructions(data.post_generation_instructions || '');
         } catch (err) {
             console.error('Failed to fetch settings:', err);
         }
@@ -214,7 +222,7 @@ export default function AIAgentSettings() {
         try {
             const res = await fetch(`${API_URL}/api/settings`, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
@@ -224,7 +232,9 @@ export default function AIAgentSettings() {
                     openai_api_key: apiKey,
                     gemini_api_key: geminiApiKey,
                     ai_provider: aiProvider,
-                    openai_model: openaiModel
+                    openai_model: openaiModel,
+                    gemini_model: geminiModel,
+                    post_generation_instructions: postGenerationInstructions
                 })
             });
 
@@ -239,6 +249,60 @@ export default function AIAgentSettings() {
             setGlobalMessage('Error saving settings');
         } finally {
             setIsGlobalLoading(false);
+        }
+    };
+
+    const handleTestAi = async () => {
+        setIsTestingAi(true);
+        setTestAiResult(null);
+        try {
+            const activeKey = aiProvider === 'openai' ? apiKey : geminiApiKey;
+            const activeModel = aiProvider === 'openai' ? openaiModel : geminiModel;
+            const res = await fetch(`${API_URL}/api/ai/test`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    provider: aiProvider,
+                    apiKey: activeKey,
+                    model: activeModel
+                })
+            });
+            const data = await res.json();
+            setTestAiResult(data);
+        } catch (err: any) {
+            setTestAiResult({ success: false, message: err.message || 'Connection test failed' });
+        } finally {
+            setIsTestingAi(false);
+        }
+    };
+
+    const handleSavePostGen = async () => {
+        setIsSavingPostGen(true);
+        setPostGenMessage('');
+        try {
+            const res = await fetch(`${API_URL}/api/settings`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    post_generation_instructions: postGenerationInstructions
+                })
+            });
+            if (res.ok) {
+                setPostGenMessage('Post generation instructions saved!');
+                setTimeout(() => setPostGenMessage(''), 3000);
+            } else {
+                setPostGenMessage('Failed to save instructions');
+            }
+        } catch {
+            setPostGenMessage('Error saving instructions');
+        } finally {
+            setIsSavingPostGen(false);
         }
     };
 
@@ -375,7 +439,7 @@ export default function AIAgentSettings() {
         try {
             const res = await fetch(`${API_URL}/api/pages/${editingPage.id}`, {
                 method: 'PATCH',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
@@ -463,45 +527,83 @@ export default function AIAgentSettings() {
                         </label>
                     </div>
 
-                    {/* AI Provider Selection */}
-                    <div>
-                        <label className="block text-xs font-black uppercase tracking-widest mb-3 text-slate-400">AI Provider</label>
-                        <div className="flex gap-6">
-                            <label className="flex items-center gap-3 cursor-pointer group">
-                                <input
-                                    type="radio"
-                                    name="aiProvider"
-                                    value="openai"
-                                    checked={aiProvider === 'openai'}
-                                    onChange={(e) => setAiProvider(e.target.value)}
-                                    className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
-                                />
-                                <span className="text-sm font-bold text-slate-700 dark:text-slate-200 group-hover:text-indigo-600 transition-colors">OpenAI (GPT-4o)</span>
-                            </label>
-                            <label className="flex items-center gap-3 cursor-pointer group">
-                                <input
-                                    type="radio"
-                                    name="aiProvider"
-                                    value="gemini"
-                                    checked={aiProvider === 'gemini'}
-                                    onChange={(e) => setAiProvider(e.target.value)}
-                                    className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
-                                />
-                                <span className="text-sm font-bold text-slate-700 dark:text-slate-200 group-hover:text-indigo-600 transition-colors">Google Gemini</span>
-                            </label>
+                    {/* AI Provider & Model Selection */}
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                            <span className="text-base">⚛️</span>
+                            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">AI Provider & Model</h3>
+                        </div>
+                        <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800/80 p-1 border border-slate-200 dark:border-slate-700/80 w-full max-w-md">
+                            <button
+                                type="button"
+                                onClick={() => setAiProvider('gemini')}
+                                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                                    aiProvider === 'gemini'
+                                        ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-700'
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                }`}
+                            >
+                                <span>✨ Google Gemini (Free Tier)</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAiProvider('openai')}
+                                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                                    aiProvider === 'openai'
+                                        ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200 dark:border-slate-700'
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                }`}
+                            >
+                                <span>OpenAI (GPT-4o)</span>
+                            </button>
                         </div>
                     </div>
 
+                    {/* Gemini Model Selector (if Gemini provider is active) */}
+                    {aiProvider === 'gemini' && (
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                <Cpu size={15} className="text-slate-400" />
+                                <span>Default AI Generation Model</span>
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                Google Gemini models include native image vision for analyzing raw product photos, extracting product details, and generating high-converting marketplace listings for free.
+                            </p>
+                            <div className="relative max-w-xl">
+                                <select
+                                    value={geminiModel}
+                                    onChange={(e) => setGeminiModel(e.target.value)}
+                                    className="w-full bg-white dark:bg-slate-900 border-2 border-orange-400 dark:border-orange-500 rounded-xl p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-orange-500/20 outline-none transition-all font-semibold text-sm appearance-none pr-10 cursor-pointer shadow-sm"
+                                >
+                                    <option value="gemini-3.6-flash">Gemini 3.6 Flash (100% Free Tier — Fast Multimodal Vision)</option>
+                                    <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (100% Free Tier — Ultra-Fast & High Volume)</option>
+                                    <option value="gemini-3.7-flash">Gemini 3.7 Flash (100% Free Tier — Advanced Reasoning & Vision)</option>
+                                    <option value="gemini-flash-latest">Gemini Flash Latest (Auto-Updating Latest Free Flash)</option>
+                                </select>
+                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-700 dark:text-slate-300">
+                                    <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
+                                        <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd" />
+                                    </svg>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold pt-1">
+                                <ShieldCheck size={16} />
+                                <span>Google Gemini is 100% Free (No Credit Card Required)</span>
+                            </div>
+                        </div>
+                    )}
+
                     {/* OpenAI Model Selector (if OpenAI provider is active) */}
                     {aiProvider === 'openai' && (
-                        <div>
-                            <label className="block text-xs font-black uppercase tracking-widest mb-2 text-slate-400">
-                                OpenAI Model
-                            </label>
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                <Cpu size={15} className="text-slate-400" />
+                                <span>Default AI Generation Model</span>
+                            </div>
                             <select
                                 value={openaiModel}
                                 onChange={(e) => setOpenaiModel(e.target.value)}
-                                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-medium text-sm"
+                                className="w-full max-w-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-semibold text-sm cursor-pointer shadow-sm"
                             >
                                 <option value="gpt-4o-mini">gpt-4o-mini (Recommended — Ultra Fast & Low Cost)</option>
                                 <option value="gpt-5.6-luna">gpt-5.6-luna (GPT-5.6 Luna — High Reasoning & $0.20/1M Cost)</option>
@@ -509,9 +611,6 @@ export default function AIAgentSettings() {
                                 <option value="gpt-4o">gpt-4o (GPT-4o — Complex Reasoning)</option>
                                 <option value="gpt-3.5-turbo">gpt-3.5-turbo (Standard Legacy)</option>
                             </select>
-                            <p className="text-xs text-slate-500 mt-1">
-                                Currently active: <span className="font-bold text-indigo-500">{openaiModel}</span>
-                            </p>
                         </div>
                     )}
 
@@ -525,32 +624,61 @@ export default function AIAgentSettings() {
                                 type="password"
                                 value={aiProvider === 'openai' ? apiKey : geminiApiKey}
                                 onChange={(e) => aiProvider === 'openai' ? setApiKey(e.target.value) : setGeminiApiKey(e.target.value)}
-                                placeholder={aiProvider === 'openai' ? "sk-..." : "AIza..."}
+                                placeholder={aiProvider === 'openai' ? "sk-..." : "AIza... or AQ...."}
                                 className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 pl-11 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-mono text-sm"
                             />
                             <Shield className="absolute left-4 top-3.5 text-slate-400" size={18} />
                         </div>
                         <p className="text-xs text-slate-500 mt-1">
-                            Your key is stored securely. Used for {aiProvider === 'openai' ? openaiModel : 'Gemini 1.5 Flash'} access.
+                            Your key is stored securely. Used for <span className="font-semibold text-slate-700 dark:text-slate-300">{aiProvider === 'openai' ? openaiModel : geminiModel}</span> access.
                         </p>
                     </div>
 
-                    {/* Save Button */}
-                    <div className="flex items-center gap-3">
+                    {/* Actions: Save & Test Connection */}
+                    <div className="flex flex-wrap items-center gap-3">
                         <button
                             onClick={handleSaveGlobal}
                             disabled={isGlobalLoading}
-                            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors"
+                            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm shadow-sm hover:shadow"
                         >
                             {isGlobalLoading ? <RefreshCw className="animate-spin" size={18} /> : <Save size={18} />}
                             Save Configuration
                         </button>
+                        <button
+                            type="button"
+                            onClick={handleTestAi}
+                            disabled={isTestingAi}
+                            className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors disabled:opacity-50 text-sm"
+                        >
+                            {isTestingAi ? <RefreshCw className="animate-spin" size={16} /> : <Zap size={16} className="text-amber-500" />}
+                            Test AI Connection
+                        </button>
                         {globalMessage && (
-                            <span className="text-green-400 text-sm flex items-center gap-1">
+                            <span className="text-green-500 text-sm flex items-center gap-1 font-semibold">
                                 <Check size={16} /> {globalMessage}
                             </span>
                         )}
                     </div>
+
+                    {/* Test AI Result Box */}
+                    {testAiResult && (
+                        <div className={`p-4 rounded-xl border text-sm transition-all ${
+                            testAiResult.success
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
+                        }`}>
+                            <div className="flex items-center gap-2 font-bold mb-1">
+                                {testAiResult.success ? <Check size={18} className="text-emerald-500" /> : <AlertCircle size={18} className="text-rose-500" />}
+                                <span>{testAiResult.message}</span>
+                            </div>
+                            {testAiResult.reply && (
+                                <div className="mt-2 pt-2 border-t border-emerald-500/20 text-xs italic">
+                                    <span className="font-semibold not-italic">Sample AI Response: </span>
+                                    "{testAiResult.reply}"
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -608,6 +736,88 @@ export default function AIAgentSettings() {
                         )}
                     </div>
                 )}
+            </div>
+
+            {/* Post Generation Configuration Section */}
+            <div className="bg-white dark:bg-slate-800 rounded-[2rem] border border-gray-200 dark:border-slate-700/50 p-8 shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <Sparkles className="text-indigo-600 dark:text-indigo-400" size={20} />
+                            <h3 className="text-lg font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
+                                Post Generation
+                            </h3>
+                        </div>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+                            Configure AI guidelines for writing social media captions & hashtags when creating new posts in Manage Post.
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={handleSavePostGen}
+                            disabled={isSavingPostGen}
+                            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-sm hover:shadow"
+                        >
+                            {isSavingPostGen ? <RefreshCw className="animate-spin" size={15} /> : <Save size={15} />}
+                            Save Post Instructions
+                        </button>
+                        {postGenMessage && (
+                            <span className="text-green-500 text-xs font-bold flex items-center gap-1">
+                                <Check size={14} /> {postGenMessage}
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Quick Presets:</span>
+                        <button
+                            type="button"
+                            onClick={() => setPostGenerationInstructions(
+                                'Write an engaging, high-converting social media caption for Nepali customers.\n- Highlight key product features with clean bullet points and emojis.\n- State price clearly and mention Cash on Delivery / Home delivery all over Nepal.\n- Include urgent Call to Action (e.g. "Send message to order now or WhatsApp: 98XXXXXXXX").\n- Generate 8-12 trending, high-reach hashtags.'
+                            )}
+                            className="px-3 py-1 bg-slate-100 dark:bg-slate-700/60 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg text-xs font-semibold transition-colors border border-slate-200 dark:border-slate-700"
+                        >
+                            🇳🇵 Nepali E-commerce
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setPostGenerationInstructions(
+                                'Write a high-energy promotional post celebrating a special discount / limited offer.\n- Use exciting hooks with fire/sparkle emojis.\n- Focus on urgency and scarcity (Limited Stock / Special Offer).\n- Include order instructions and delivery terms.\n- Add 10-15 viral product and fashion hashtags.'
+                            )}
+                            className="px-3 py-1 bg-slate-100 dark:bg-slate-700/60 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg text-xs font-semibold transition-colors border border-slate-200 dark:border-slate-700"
+                        >
+                            🔥 Special Offer / Urgency
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setPostGenerationInstructions(
+                                'Write a modern, sleek, and minimalist product caption.\n- Keep sentences concise, punchy, and premium.\n- Focus on lifestyle appeal and customer satisfaction.\n- Add 6-8 curated, brand-style hashtags.'
+                            )}
+                            className="px-3 py-1 bg-slate-100 dark:bg-slate-700/60 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg text-xs font-semibold transition-colors border border-slate-200 dark:border-slate-700"
+                        >
+                            ✨ Minimalist / Premium
+                        </button>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-black uppercase tracking-widest mb-2 text-slate-400">
+                            Post Generation Instructions & Rules
+                        </label>
+                        <textarea
+                            value={postGenerationInstructions}
+                            onChange={(e) => setPostGenerationInstructions(e.target.value)}
+                            placeholder="Write instructions here... E.g. Always write captions with catchy hook, highlight features with emojis, mention COD available all over Nepal, add 8-10 trending hashtags."
+                            rows={6}
+                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-medium text-sm leading-relaxed"
+                        />
+                        <p className="text-xs text-slate-400 mt-2">
+                            When generating a post in Manage Post (either from product specs or by scanning an image), the AI will strictly follow these instructions. Powered by your active model (<span className="font-bold text-indigo-500">{aiProvider === 'gemini' ? `Google Gemini (${geminiModel})` : `OpenAI (${openaiModel})`}</span>).
+                        </p>
+                    </div>
+                </div>
             </div>
 
             {/* Marketplace Product Catalog Section */}
@@ -788,7 +998,7 @@ export default function AIAgentSettings() {
             {editingPage && (
                 <div className="fixed inset-0 bg-slate-900/40 dark:bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-all">
                     <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] max-w-2xl w-full border border-gray-100 dark:border-slate-700 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 max-h-[90vh] flex flex-col">
-                        
+
                         {/* Modal Header & Tabs */}
                         <div className="p-8 border-b border-gray-100 dark:border-slate-700 flex flex-col gap-4 flex-shrink-0">
                             <div className="flex justify-between items-center">
@@ -805,21 +1015,19 @@ export default function AIAgentSettings() {
                             <div className="flex bg-slate-100 dark:bg-slate-900 p-1.5 rounded-2xl gap-1">
                                 <button
                                     onClick={() => setEditTab('page')}
-                                    className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-                                        editTab === 'page'
+                                    className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${editTab === 'page'
                                             ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
                                             : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                                    }`}
+                                        }`}
                                 >
                                     <Zap size={14} /> Page Instructions
                                 </button>
                                 <button
                                     onClick={() => setEditTab('posts')}
-                                    className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-                                        editTab === 'posts'
+                                    className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${editTab === 'posts'
                                             ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
                                             : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-                                    }`}
+                                        }`}
                                 >
                                     <FileText size={14} /> Post & Ad Instructions ({postConfigs.length})
                                 </button>
