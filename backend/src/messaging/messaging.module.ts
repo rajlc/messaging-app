@@ -16,6 +16,7 @@ import { AuthModule } from '../auth/auth.module';
 import { AiService } from './ai.service';
 import { AiController } from './ai.controller';
 import { EcommerceCatalogService } from './ecommerce-catalog.service';
+import { ConversationTriageService } from './conversation-triage.service';
 
 @Module({
     imports: [
@@ -24,7 +25,7 @@ import { EcommerceCatalogService } from './ecommerce-catalog.service';
         forwardRef(() => SocketModule),
         AuthModule
     ],
-    providers: [FacebookService, AutoReplyService, AiService, EcommerceCatalogService],
+    providers: [FacebookService, AutoReplyService, AiService, EcommerceCatalogService, ConversationTriageService],
     controllers: [
         ConversationsController,
         MessagesController,
@@ -36,6 +37,6 @@ import { EcommerceCatalogService } from './ecommerce-catalog.service';
         TikTokAuthController,
         AiController
     ],
-    exports: [FacebookService, AutoReplyService, AiService, EcommerceCatalogService]
+    exports: [FacebookService, AutoReplyService, AiService, EcommerceCatalogService, ConversationTriageService]
 })
 export class MessagingModule { }

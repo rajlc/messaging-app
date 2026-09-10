@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, Suspense, useCallback, Fragment } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
-import { Send, Instagram, Facebook, MessageCircle, ShoppingCart, ShoppingBag, Settings, Eye, Zap, Truck, Package, User, Image as ImageIcon, Paperclip, X, Camera, Reply, Edit2, Calendar, MapPin, Phone, Info, ClipboardList, Tag } from 'lucide-react';
+import { Send, Instagram, Facebook, MessageCircle, ShoppingCart, ShoppingBag, Settings, Eye, Zap, Truck, Package, User, Image as ImageIcon, Paperclip, X, Camera, Reply, Edit2, Calendar, MapPin, Phone, Info, ClipboardList, Tag, AlertTriangle, HelpCircle } from 'lucide-react';
 import OrderModal from '@/components/OrderModal';
 import ViewOrderModal from '@/components/ViewOrderModal';
 import QuickReplyModal from '@/components/QuickReplyModal';
@@ -12,6 +12,7 @@ import CommentReplyModal from '@/components/CommentReplyModal';
 import InventorySettings from '@/components/settings/InventorySettings';
 import QuickReplyTemplates from '@/components/settings/QuickReplyTemplates';
 import LogisticIntegration from '@/components/settings/LogisticIntegration';
+import AiChatIntelligence from '@/components/AiChatIntelligence';
 import Sidebar from '@/components/Sidebar';
 
 import OrdersView from '@/components/OrdersView';
@@ -92,6 +93,8 @@ type Conversation = {
   referralPostId?: string;    // Facebook Post ID or Ad ID
   aiCutoffUntil?: string;
   aiReplyCount?: number;
+  aiTriageStatus?: 'order_confirmed' | 'urgent_issue' | 'item_inquiry' | 'resolved' | 'normal' | null;
+  aiTriage?: any;
 };
 
 // Define PageInfo type based on its usage
@@ -501,6 +504,8 @@ function UnifiedInboxContent() {
             referralPostId: conv.referral_post_id,
             aiCutoffUntil: conv.ai_cutoff_until,
             aiReplyCount: conv.ai_reply_count,
+            aiTriageStatus: conv.aiTriageStatus || conv.aiTriage?.status || null,
+            aiTriage: conv.aiTriage || null,
           };
         });
 
@@ -728,6 +733,21 @@ function UnifiedInboxContent() {
             ];
           }
         });
+      }
+    });
+
+    socketRef.current.on('conversationTriageUpdated', (data: { conversationId: string; triage: any }) => {
+      if (data?.conversationId) {
+        setConversations(prev => prev.map(c => {
+          if (c.id === data.conversationId || c.customerId === data.conversationId) {
+            return {
+              ...c,
+              aiTriage: data.triage,
+              aiTriageStatus: data.triage?.status || null
+            };
+          }
+          return c;
+        }));
       }
     });
 
@@ -1430,6 +1450,31 @@ function UnifiedInboxContent() {
                               N
                             </span>
                           )}
+                          {/* AI Triage Status Badges */}
+                          {conv.aiTriageStatus === 'order_confirmed' && (
+                            <span
+                              className="inline-flex items-center justify-center w-4.5 h-4.5 text-white bg-emerald-600 rounded-full shadow-sm flex-shrink-0"
+                              title="Order Confirmed (Phone / Address given)"
+                            >
+                              <ShoppingBag size={11} className="stroke-[2.5]" />
+                            </span>
+                          )}
+                          {conv.aiTriageStatus === 'urgent_issue' && (
+                            <span
+                              className="inline-flex items-center justify-center w-4.5 h-4.5 text-white bg-rose-600 rounded-full shadow-sm flex-shrink-0 animate-bounce"
+                              title="Urgent Issue: Defect / damage / complaint reported"
+                            >
+                              <AlertTriangle size={11} className="stroke-[2.5]" />
+                            </span>
+                          )}
+                          {conv.aiTriageStatus === 'item_inquiry' && (
+                            <span
+                              className="inline-flex items-center justify-center w-4.5 h-4.5 text-white bg-amber-500 rounded-full shadow-sm flex-shrink-0"
+                              title="Product Inquiry / Price inquiry"
+                            >
+                              <HelpCircle size={11} className="stroke-[2.5]" />
+                            </span>
+                          )}
                         </h3>
                         <span className={`text-[11px] tabular-nums whitespace-nowrap ml-2 ${conv.unreadCount > 0
                           ? 'text-blue-600 dark:text-blue-400 font-bold'
@@ -1725,11 +1770,11 @@ function UnifiedInboxContent() {
         </div>
 
         {/* Right Panel */}
-        <div className="w-[28rem] bg-white dark:bg-slate-800 border-l border-gray-200 dark:border-slate-700 p-6 flex flex-col gap-4 overflow-y-auto">
+        <div className="w-[28rem] bg-white dark:bg-slate-800 border-l border-gray-200 dark:border-slate-700 p-4 flex flex-col gap-2 overflow-y-auto custom-scrollbar">
           {sidebarView === 'details' ? (
             <Fragment>
-              <div className="flex items-center gap-3 mb-4 pb-4 border-b border-gray-100 dark:border-slate-700">
-                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-lg font-bold shadow-inner overflow-hidden">
+              <div className="flex items-center gap-3 pb-2.5 border-b border-gray-100 dark:border-slate-700">
+                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-base font-bold shadow-inner overflow-hidden flex-shrink-0">
                   {activeConversation?.customerProfilePic ? (
                     <img src={activeConversation.customerProfilePic} alt={customerName} className="w-full h-full object-cover" />
                   ) : (
@@ -1737,13 +1782,13 @@ function UnifiedInboxContent() {
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white truncate">{customerName}</h2>
+                  <h2 className="text-[15px] font-bold text-slate-900 dark:text-white truncate">{customerName}</h2>
                   {(activeConversation?.pageName || connectedPages.find(p => p.page_id === activeConversation?.pageId)?.page_name) && (
                     <span className="text-[12px] font-semibold text-indigo-600 dark:text-indigo-400 block truncate">
                       {cleanPageName(activeConversation?.pageName || connectedPages.find(p => p.page_id === activeConversation?.pageId)?.page_name || '')}
                     </span>
                   )}
-                  <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5">Customer Details</span>
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500 block">Customer Details</span>
                 </div>
               </div>
 
@@ -1818,51 +1863,82 @@ function UnifiedInboxContent() {
                 </div>
               )}
 
-              <div className="flex gap-2 mb-4">
-                <button onClick={() => { setOrderModalMode('create'); setIsOrderModalOpen(true); }} className="flex-1 bg-indigo-600 text-white rounded-lg py-2 flex items-center justify-center gap-2 text-[15px] font-semibold hover:bg-indigo-700 transition-colors">
-                  <ShoppingBag size={15} /> Create Order
-                </button>
-                <button onClick={() => setIsQuickReplyModalOpen(true)} className="flex-1 bg-gray-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg py-2 border border-gray-200 dark:border-slate-600 flex items-center justify-center gap-2 text-[15px] font-semibold hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors">
-                  <MessageCircle size={15} /> Quick Reply
-                </button>
-              </div>
+              {/* 1. AI Chat Intelligence & Dynamic Summary Card (Directly Below Profile) */}
+              {activeConversation && (activeConversation.id || activeConversation.customerId) && (
+                <AiChatIntelligence
+                  conversationId={activeConversation.id || activeConversation.customerId}
+                  initialTriage={activeConversation.aiTriage}
+                  customerOrders={customerOrders}
+                  onTriageChange={(newTriage) => {
+                    setConversations(prev => prev.map(c =>
+                      (c.id === activeConversation.id || c.customerId === activeConversation.customerId)
+                        ? { ...c, aiTriage: newTriage, aiTriageStatus: newTriage.status }
+                        : c
+                    ));
+                  }}
+                  onCreateOrderPrefill={({ phone, address }) => {
+                    setSelectedOrder(null);
+                    setOrderModalMode('create');
+                    setIsOrderModalOpen(true);
+                  }}
+                />
+              )}
 
-              <div className="flex-1 overflow-hidden flex flex-col">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[15px] font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <ShoppingBag size={16} className="text-indigo-500" /> Recent Orders
+              {/* 2. Compact Recent Orders Section */}
+              <div className="flex flex-col mt-1">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-[13px] font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <ShoppingBag size={14} className="text-indigo-500" /> Recent Orders
+                    {customerOrders.length > 0 && (
+                      <span className="text-[11px] font-semibold text-slate-400">({customerOrders.length})</span>
+                    )}
                   </h3>
                 </div>
-                <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
+                <div className="max-h-[140px] overflow-y-auto space-y-2 custom-scrollbar pr-1">
                   {customerOrders.length > 0 ? (
                     customerOrders.map(order => (
-                      <div key={order.id} className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex justify-between items-start mb-3">
-                          <span className="text-[14px] text-indigo-600 dark:text-indigo-400 font-extrabold">{order.order_number}</span>
-                          <span className={`text-[11px] px-2.5 py-1 rounded-full font-bold shadow-sm ${getStatusColor(order.order_status)}`}>{order.order_status}</span>
+                      <div key={order.id} className="bg-white dark:bg-slate-900 border border-gray-200/80 dark:border-slate-700/80 rounded-xl p-2.5 shadow-xs hover:shadow-sm transition-shadow">
+                        <div className="flex justify-between items-center mb-1.5">
+                          <span className="text-[12px] text-indigo-600 dark:text-indigo-400 font-extrabold">{order.order_number}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold shadow-xs ${getStatusColor(order.order_status)}`}>{order.order_status}</span>
                         </div>
-                        <div className="flex justify-between items-center text-sm text-slate-900 dark:text-white mb-4">
-                          <span className="text-slate-500 dark:text-slate-400 font-medium">{order.items?.length || 0} Items</span>
-                          <span className="font-black text-[15px]">Rs. {order.total_amount?.toLocaleString()}</span>
+                        <div className="flex justify-between items-center text-xs text-slate-900 dark:text-white">
+                          <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">{order.items?.length || 0} Items • <span className="font-bold text-slate-800 dark:text-slate-200">Rs. {order.total_amount?.toLocaleString()}</span></span>
+                          <button
+                            onClick={() => {
+                              setSelectedSidebarOrder(order);
+                              setSidebarView('order');
+                            }}
+                            className="px-2 py-1 bg-gray-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold rounded-lg border border-gray-100 dark:border-slate-700 transition-all flex items-center gap-1"
+                          >
+                            <Eye size={12} /> Details
+                          </button>
                         </div>
-                        <button
-                          onClick={() => {
-                            setSelectedSidebarOrder(order);
-                            setSidebarView('order');
-                          }}
-                          className="w-full py-2 bg-gray-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 text-sm font-bold rounded-xl border border-gray-100 dark:border-slate-700 transition-all flex items-center justify-center gap-2"
-                        >
-                          <Eye size={16} /> View Details
-                        </button>
                       </div>
                     ))
                   ) : (
-                    <div className="text-center py-12 bg-gray-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-gray-200 dark:border-slate-700">
-                      <ShoppingBag size={32} className="mx-auto text-slate-300 mb-2 opacity-50" />
-                      <p className="text-slate-500 text-sm font-medium">No recent orders found</p>
+                    <div className="text-center py-3 bg-gray-50/70 dark:bg-slate-800/30 rounded-xl border border-dashed border-gray-200 dark:border-slate-700/70 flex items-center justify-center gap-2">
+                      <ShoppingBag size={14} className="text-slate-400 opacity-60" />
+                      <p className="text-slate-400 text-xs font-medium">No recent orders</p>
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* 3. Action Buttons: First Quick Reply, then Create Order (Smaller Sleeker Size) */}
+              <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-slate-800">
+                <button
+                  onClick={() => setIsQuickReplyModalOpen(true)}
+                  className="flex-1 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl py-2 px-3 border border-gray-200/80 dark:border-slate-700 flex items-center justify-center gap-1.5 text-xs font-bold transition-all shadow-xs"
+                >
+                  <MessageCircle size={14} /> Quick Reply
+                </button>
+                <button
+                  onClick={() => { setOrderModalMode('create'); setIsOrderModalOpen(true); }}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-2 px-3 flex items-center justify-center gap-1.5 text-xs font-bold transition-all shadow-sm shadow-indigo-500/20"
+                >
+                  <ShoppingBag size={14} /> Create Order
+                </button>
               </div>
             </Fragment>
           ) : (
@@ -2106,23 +2182,36 @@ function UnifiedInboxContent() {
         {renderMainContent()}
       </div>
 
-      {isOrderModalOpen && (
-        <OrderModal
-          isOpen={isOrderModalOpen}
-          onClose={() => setIsOrderModalOpen(false)}
-          customerName={activeConversation?.customerName}
-          customerId={activeConversation?.customerId}
-          pageName={activeConversation?.pageName || connectedPages.find(p => p.page_id === activeConversation?.pageId)?.page_name}
-          pageId={activeConversation?.pageId || connectedPages.find(p => p.page_name?.toLowerCase() === activeConversation?.pageName?.toLowerCase())?.page_id}
-          platform={activeConversation?.platform || connectedPages.find(p => p.page_id === activeConversation?.pageId || p.page_name?.toLowerCase() === activeConversation?.pageName?.toLowerCase())?.platform}
-          mode={orderModalMode}
-          initialOrder={selectedOrder}
-          onOrderUpdate={() => {
-            if (activeConversation?.customerId) fetchCustomerOrders(activeConversation.customerId);
-            fetchAllOrders();
-          }}
-        />
-      )}
+      {isOrderModalOpen && (() => {
+        const isPlaceholderPhone = (p?: string | null) => {
+          if (!p) return true;
+          const lower = String(p).toLowerCase();
+          return (lower.includes('already') || lower.includes('previous') || lower.includes('record') || lower.includes('available') || lower.includes('on file')) && !/(?:98\d{8}|97\d{8}|01\d{7})/.test(p);
+        };
+        const pastOrderPhone = customerOrders?.find(o => o.phone_number || o.customer_phone)?.phone_number || customerOrders?.find(o => o.phone_number || o.customer_phone)?.customer_phone || '';
+        const modalPhone = (!isPlaceholderPhone(activeConversation?.aiTriage?.order_analysis?.phone) ? activeConversation?.aiTriage?.order_analysis?.phone : '') || extractedPhone || pastOrderPhone || '';
+        const modalAddress = activeConversation?.aiTriage?.order_analysis?.address || extractedAddress || customerOrders?.find(o => o.address || o.delivery_address)?.address || customerOrders?.find(o => o.address || o.delivery_address)?.delivery_address || '';
+
+        return (
+          <OrderModal
+            isOpen={isOrderModalOpen}
+            onClose={() => setIsOrderModalOpen(false)}
+            customerName={activeConversation?.customerName}
+            customerId={activeConversation?.customerId}
+            pageName={activeConversation?.pageName || connectedPages.find(p => p.page_id === activeConversation?.pageId)?.page_name}
+            pageId={activeConversation?.pageId || connectedPages.find(p => p.page_name?.toLowerCase() === activeConversation?.pageName?.toLowerCase())?.page_id}
+            platform={activeConversation?.platform || connectedPages.find(p => p.page_id === activeConversation?.pageId || p.page_name?.toLowerCase() === activeConversation?.pageName?.toLowerCase())?.platform}
+            phone={modalPhone}
+            address={modalAddress}
+            mode={orderModalMode}
+            initialOrder={selectedOrder}
+            onOrderUpdate={() => {
+              if (activeConversation?.customerId) fetchCustomerOrders(activeConversation.customerId);
+              fetchAllOrders();
+            }}
+          />
+        );
+      })()}
       {isViewOrderModalOpen && (
         <ViewOrderModal
           isOpen={isViewOrderModalOpen}

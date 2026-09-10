@@ -10,6 +10,7 @@ import { AutoReplyService } from '../auto-reply/auto-reply.service';
 import { aiContextService } from './ai-context.service';
 import { JwtService } from '@nestjs/jwt';
 import { AiService } from './ai.service';
+import { ConversationTriageService } from './conversation-triage.service';
 import axios from 'axios';
 
 @Controller(['webhooks', 'api/webhooks'])
@@ -53,6 +54,7 @@ export class WebhooksController {
         private autoReplyService: AutoReplyService,
         private jwtService: JwtService,
         private aiService: AiService,
+        private conversationTriageService: ConversationTriageService,
     ) { }
 
     // Meta (Facebook & Instagram) Webhook verification
@@ -304,6 +306,18 @@ export class WebhooksController {
                                         referralSource: referralSource,
                                         referralPostId: referralEntryId,
                                     });
+
+                                    // Run conversation intelligence / triage asynchronously
+                                    this.conversationTriageService.analyzeConversation(conversation.id)
+                                        .then(triage => {
+                                            this.messagingGateway.server.emit('conversationTriageUpdated', {
+                                                conversationId: conversation.id,
+                                                triage
+                                            });
+                                        })
+                                        .catch(err => {
+                                            console.warn(`[Triage] Async analysis error for conv ${conversation.id}:`, err.message);
+                                        });
                                 } catch (error) {
                                     console.error('❌ Error saving message to Supabase:', error);
                                 }
@@ -565,6 +579,18 @@ export class WebhooksController {
                 productPrice: conversation.product_price,
             });
 
+            // Trigger triage analysis asynchronously
+            this.conversationTriageService.analyzeConversation(conversation.id)
+                .then(triage => {
+                    this.messagingGateway.server.emit('conversationTriageUpdated', {
+                        conversationId: conversation.id,
+                        triage
+                    });
+                })
+                .catch(err => {
+                    console.warn(`[Triage] Async analysis error for conv ${conversation.id}:`, err.message);
+                });
+
             // 7. Check templates (Auto-Reply Rules)
             const textsArray: string[] = (Array.isArray(messageTexts) && messageTexts.length > 0)
                 ? messageTexts
@@ -781,6 +807,18 @@ export class WebhooksController {
                         productName: conversation.product_name,
                         productPrice: conversation.product_price,
                     });
+
+                    // Trigger triage analysis asynchronously
+                    this.conversationTriageService.analyzeConversation(conversation.id)
+                        .then(triage => {
+                            this.messagingGateway.server.emit('conversationTriageUpdated', {
+                                conversationId: conversation.id,
+                                triage
+                            });
+                        })
+                        .catch(err => {
+                            console.warn(`[Triage] Async analysis error for conv ${conversation.id}:`, err.message);
+                        });
 
                     return res.status(HttpStatus.OK).json({ replyText });
                 }

@@ -21,6 +21,7 @@ export default function AIAgentSettings() {
     // Global Settings State
     const [isGlobalEnabled, setIsGlobalEnabled] = useState(false);
     const [isMarketplaceEnabled, setIsMarketplaceEnabled] = useState(false);
+    const [isChatSummaryEnabled, setIsChatSummaryEnabled] = useState(true);
     const [apiKey, setApiKey] = useState('');
     const [geminiApiKey, setGeminiApiKey] = useState('');
     const [aiProvider, setAiProvider] = useState('gemini'); // 'openai' | 'gemini'
@@ -190,6 +191,7 @@ export default function AIAgentSettings() {
             const data = await res.json();
             setIsGlobalEnabled(data.is_ai_global_enabled === 'true');
             setIsMarketplaceEnabled(data.is_ai_marketplace_enabled === 'true');
+            setIsChatSummaryEnabled(data.is_chat_summary_enabled !== 'false');
             setApiKey(data.openai_api_key || '');
             setGeminiApiKey(data.gemini_api_key || '');
             setAiProvider(data.ai_provider || 'gemini');
@@ -198,6 +200,24 @@ export default function AIAgentSettings() {
             setPostGenerationInstructions(data.post_generation_instructions || '');
         } catch (err) {
             console.error('Failed to fetch settings:', err);
+        }
+    };
+
+    const handleToggleChatSummary = async (checked: boolean) => {
+        setIsChatSummaryEnabled(checked);
+        try {
+            await fetch(`${API_URL}/api/settings`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: JSON.stringify({
+                    is_chat_summary_enabled: String(checked)
+                })
+            });
+        } catch (err) {
+            console.error('Failed to auto-save chat summary setting:', err);
         }
     };
 
@@ -231,6 +251,7 @@ export default function AIAgentSettings() {
                 body: JSON.stringify({
                     is_ai_global_enabled: String(isGlobalEnabled),
                     is_ai_marketplace_enabled: String(isMarketplaceEnabled),
+                    is_chat_summary_enabled: String(isChatSummaryEnabled),
                     openai_api_key: apiKey,
                     gemini_api_key: geminiApiKey,
                     ai_provider: aiProvider,
@@ -527,6 +548,34 @@ export default function AIAgentSettings() {
                                 className="sr-only peer"
                                 checked={isMarketplaceEnabled}
                                 onChange={(e) => setIsMarketplaceEnabled(e.target.checked)}
+                            />
+                            <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
+
+                    {/* Message Chat Summary Switch */}
+                    <div className="flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700/50">
+                        <div className="pr-4">
+                            <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-bold text-slate-900 dark:text-white">Message Chat Summary</h4>
+                                <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
+                                    isChatSummaryEnabled
+                                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                                        : 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800'
+                                }`}>
+                                    {isChatSummaryEnabled ? 'AI Active' : 'Tokens Saved'}
+                                </span>
+                            </div>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+                                Generate AI chat summaries & dialogue intelligence. Turn off to completely cut off AI provider calls to save tokens and budget (contact & order detection will continue to work for free).
+                            </p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                            <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={isChatSummaryEnabled}
+                                onChange={(e) => handleToggleChatSummary(e.target.checked)}
                             />
                             <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                         </label>

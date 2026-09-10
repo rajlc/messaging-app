@@ -2,10 +2,14 @@ import { Controller, Get, Param, Query, UseGuards, Request, Post, Body } from '@
 import { supabaseService } from '../supabase/supabase.service';
 import { AuthGuard } from '@nestjs/passport';
 import { MessagingGateway } from '../socket/messaging.gateway';
+import { ConversationTriageService } from './conversation-triage.service';
 
 @Controller('api/conversations')
 export class ConversationsController {
-    constructor(private messagingGateway: MessagingGateway) {}
+    constructor(
+        private messagingGateway: MessagingGateway,
+        private conversationTriageService: ConversationTriageService
+    ) {}
 
     /**
      * Get all conversations
@@ -23,7 +27,73 @@ export class ConversationsController {
 
         console.log('GET /api/conversations - User:', req.user ? `${req.user.username} (${req.user.role})` : 'No User');
         const conversations = await supabaseService.getConversations(limitNum, offsetNum, customerId, req.user);
-        return conversations;
+
+        // Fetch all active triage statuses from settings
+        let triageMap = new Map<string, any>();
+        try {
+            const { data: triageSettings } = await supabaseService.getClient()
+                .from('settings')
+                .select('key, value')
+                .like('key', 'conv_triage_%');
+
+            if (triageSettings) {
+                for (const item of triageSettings) {
+                    try {
+                        const convId = item.key.replace('conv_triage_', '');
+                        triageMap.set(convId, JSON.parse(item.value));
+                    } catch { }
+                }
+            }
+        } catch (err: any) {
+            console.error('[ConversationsController] Failed to fetch triage cache:', err.message);
+        }
+
+        return conversations.map((conv: any) => {
+            const triage = triageMap.get(conv.id) || null;
+            return {
+                ...conv,
+                aiTriage: triage,
+                aiTriageStatus: triage?.status || null
+            };
+        });
+    }
+
+    /**
+     * Get or compute triage intelligence for a conversation
+     */
+    @Get(':id/triage')
+    async getTriage(@Param('id') id: string) {
+        let triage = await this.conversationTriageService.getConversationTriage(id);
+        if (!triage) {
+            triage = await this.conversationTriageService.analyzeConversation(id);
+        }
+        return { success: true, data: triage };
+    }
+
+    /**
+     * Force refresh triage summary and analysis
+     */
+    @Post(':id/triage/summary')
+    async refreshTriage(@Param('id') id: string) {
+        const triage = await this.conversationTriageService.analyzeConversation(id);
+        this.messagingGateway.server.emit('conversationTriageUpdated', {
+            conversationId: id,
+            triage
+        });
+        return { success: true, data: triage };
+    }
+
+    /**
+     * Mark conversation inquiry or issue as resolved / done
+     */
+    @Post(':id/triage/resolve')
+    async resolveTriage(@Param('id') id: string) {
+        const triage = await this.conversationTriageService.resolveConversation(id);
+        this.messagingGateway.server.emit('conversationTriageUpdated', {
+            conversationId: id,
+            triage
+        });
+        return { success: true, data: triage };
     }
 
     /**
