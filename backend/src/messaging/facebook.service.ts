@@ -240,6 +240,9 @@ export class FacebookService {
         // 2. Inspect token granular_scopes via /debug_token to discover any pages selected in Login for Business
         const appId = this.configService.get<string>('META_APP_ID');
         const appSecret = this.configService.get<string>('META_APP_SECRET');
+        let hasGranularRestrictions = false;
+        const allowedPageIds = new Set<string>();
+        const allowedInstagramIds = new Set<string>();
 
         if (appId && appSecret) {
             try {
@@ -252,98 +255,108 @@ export class FacebookService {
                 });
 
                 const granularScopes = debugRes.data?.data?.granular_scopes || [];
-                const targetPageIds = new Set<string>();
 
                 for (const gs of granularScopes) {
-                    if (Array.isArray(gs.target_ids)) {
+                    if (gs.scope?.startsWith('pages_') && Array.isArray(gs.target_ids)) {
+                        hasGranularRestrictions = true;
                         for (const tid of gs.target_ids) {
-                            if (tid && !pagesMap.has(tid)) {
-                                targetPageIds.add(tid);
-                            }
+                            if (tid) allowedPageIds.add(tid);
+                        }
+                    }
+                    if (gs.scope?.startsWith('instagram_') && Array.isArray(gs.target_ids)) {
+                        hasGranularRestrictions = true;
+                        for (const tid of gs.target_ids) {
+                            if (tid) allowedInstagramIds.add(tid);
                         }
                     }
                 }
 
-                if (targetPageIds.size > 0) {
-                    console.log(`[FacebookService] Found ${targetPageIds.size} additional pages from granular_scopes:`, Array.from(targetPageIds));
-                    await Promise.all(Array.from(targetPageIds).map(async (pageId) => {
-                        try {
-                            const pageUrl = `https://graph.facebook.com/${this.apiVersion}/${pageId}`;
-                            const pageRes = await axios.get(pageUrl, {
-                                params: {
-                                    access_token: userAccessToken,
-                                    fields: 'id,name,access_token,category,tasks',
-                                },
-                            });
-                            if (pageRes.data?.id) {
-                                pagesMap.set(pageRes.data.id, pageRes.data);
+                // If granular selection exists, fetch missing pages from allowedPageIds
+                if (allowedPageIds.size > 0) {
+                    const missingPageIds = Array.from(allowedPageIds).filter(id => !pagesMap.has(id));
+                    if (missingPageIds.length > 0) {
+                        console.log(`[FacebookService] Fetching ${missingPageIds.length} missing pages from granular_scopes:`, missingPageIds);
+                        await Promise.all(missingPageIds.map(async (pageId) => {
+                            try {
+                                const pageUrl = `https://graph.facebook.com/${this.apiVersion}/${pageId}`;
+                                const pageRes = await axios.get(pageUrl, {
+                                    params: {
+                                        access_token: userAccessToken,
+                                        fields: 'id,name,access_token,category,tasks',
+                                    },
+                                });
+                                if (pageRes.data?.id) {
+                                    pagesMap.set(pageRes.data.id, pageRes.data);
+                                }
+                            } catch (err: any) {
+                                console.warn(`[FacebookService] Could not fetch details for granular page ${pageId}:`, err.response?.data || err.message);
                             }
-                        } catch (err: any) {
-                            console.warn(`[FacebookService] Could not fetch details for granular page ${pageId}:`, err.response?.data || err.message);
-                        }
-                    }));
+                        }));
+                    }
                 }
             } catch (error: any) {
                 console.warn('[FacebookService] Error inspecting debug_token:', error.response?.data || error.message);
             }
         }
 
-        // 3. Check /me/businesses for any pages owned or assigned via Business Portfolios
-        try {
-            const bizUrl = `https://graph.facebook.com/${this.apiVersion}/me/businesses`;
-            const bizRes = await axios.get(bizUrl, {
-                params: {
-                    access_token: userAccessToken,
-                    fields: 'id,name',
-                    limit: 50,
-                },
-            });
+        // 3. Check /me/businesses only if the user did NOT restrict selection to specific pages
+        if (!hasGranularRestrictions) {
+            try {
+                const bizUrl = `https://graph.facebook.com/${this.apiVersion}/me/businesses`;
+                const bizRes = await axios.get(bizUrl, {
+                    params: {
+                        access_token: userAccessToken,
+                        fields: 'id,name',
+                        limit: 50,
+                    },
+                });
 
-            const businesses = bizRes.data?.data || [];
-            if (businesses.length > 0) {
-                console.log(`[FacebookService] Found ${businesses.length} businesses for user:`, businesses.map((b: any) => b.name));
-                await Promise.all(businesses.map(async (biz: any) => {
-                    // Try owned_pages
-                    try {
-                        const ownedUrl = `https://graph.facebook.com/${this.apiVersion}/${biz.id}/owned_pages`;
-                        const ownedRes = await axios.get(ownedUrl, {
-                            params: {
-                                access_token: userAccessToken,
-                                fields: 'id,name,access_token,category,tasks',
-                                limit: 100,
-                            },
-                        });
-                        for (const p of ownedRes.data?.data || []) {
-                            if (p.id && !pagesMap.has(p.id)) {
-                                pagesMap.set(p.id, p);
+                const businesses = bizRes.data?.data || [];
+                if (businesses.length > 0) {
+                    console.log(`[FacebookService] Found ${businesses.length} businesses for user:`, businesses.map((b: any) => b.name));
+                    await Promise.all(businesses.map(async (biz: any) => {
+                        // Try owned_pages
+                        try {
+                            const ownedUrl = `https://graph.facebook.com/${this.apiVersion}/${biz.id}/owned_pages`;
+                            const ownedRes = await axios.get(ownedUrl, {
+                                params: {
+                                    access_token: userAccessToken,
+                                    fields: 'id,name,access_token,category,tasks',
+                                    limit: 100,
+                                },
+                            });
+                            for (const p of ownedRes.data?.data || []) {
+                                if (p.id && !pagesMap.has(p.id)) {
+                                    pagesMap.set(p.id, p);
+                                }
                             }
+                        } catch (err: any) {
+                            // Silently handle if permission restricted
                         }
-                    } catch (err: any) {
-                        // Silently handle if permission restricted
-                    }
 
-                    // Try client_pages
-                    try {
-                        const clientUrl = `https://graph.facebook.com/${this.apiVersion}/${biz.id}/client_pages`;
-                        const clientRes = await axios.get(clientUrl, {
-                            params: {
-                                access_token: userAccessToken,
-                                fields: 'id,name,access_token,category,tasks',
-                                limit: 100,
-                            },
-                        });
-                        for (const p of clientRes.data?.data || []) {
-                            if (p.id && !pagesMap.has(p.id)) {
-                                pagesMap.set(p.id, p);
+                        // Try client_pages
+                        try {
+                            const clientUrl = `https://graph.facebook.com/${this.apiVersion}/${biz.id}/client_pages`;
+                            const clientRes = await axios.get(clientUrl, {
+                                params: {
+                                    access_token: userAccessToken,
+                                    fields: 'id,name,access_token,category,tasks',
+                                    limit: 100,
+                                },
+                            });
+                            for (const p of clientRes.data?.data || []) {
+                                if (p.id && !pagesMap.has(p.id)) {
+                                    pagesMap.set(p.id, p);
+                                }
                             }
+                        } catch (err: any) {
+                            // Silently handle if permission restricted
                         }
-                    } catch (err: any) {
-                        // Silently handle if permission restricted
-                    }
-                }));
+                    }));
+                }
+            } catch (error: any) {
+                // Silently handle
             }
-        } catch (error: any) {
-            // Silently handle
         }
 
         // 4. Ensure each page has a valid page access_token
@@ -366,8 +379,6 @@ export class FacebookService {
                 }
             }
         }));
-
-        console.log(`[FacebookService] Final resolved unique pages (${allPages.length}):`, allPages.map(p => `${p.name} (${p.id}) [token: ${p.access_token ? 'YES' : 'NO'}]`));
 
         // 5. Query Instagram business account details if connected
         const accountsWithIg = await Promise.all(allPages.map(async (acc: any) => {
@@ -392,6 +403,19 @@ export class FacebookService {
             return acc;
         }));
 
+        // 6. If user explicitly restricted pages during Facebook Login, strictly return ONLY the chosen pages
+        if (hasGranularRestrictions) {
+            console.log(`[FacebookService] Enforcing granular selection filter. Allowed page IDs:`, Array.from(allowedPageIds), `Allowed IG IDs:`, Array.from(allowedInstagramIds));
+            const filtered = accountsWithIg.filter((acc: any) => {
+                const pageMatches = allowedPageIds.has(acc.id);
+                const igMatches = acc.instagram_business_account && allowedInstagramIds.has(acc.instagram_business_account.id);
+                return pageMatches || igMatches;
+            });
+            console.log(`[FacebookService] Filtered down to ${filtered.length} user-selected pages:`, filtered.map((p: any) => `${p.name} (${p.id})`));
+            return filtered;
+        }
+
+        console.log(`[FacebookService] Final resolved unique pages (${accountsWithIg.length}):`, accountsWithIg.map(p => `${p.name} (${p.id}) [token: ${p.access_token ? 'YES' : 'NO'}]`));
         return accountsWithIg;
     }
 }
