@@ -212,43 +212,186 @@ export class FacebookService {
     }
 
     async getUserAccounts(userAccessToken: string): Promise<any[]> {
-        const url = `https://graph.facebook.com/${this.apiVersion}/me/accounts`;
-        const response = await axios.get(url, {
-            params: {
-                access_token: userAccessToken,
-                fields: 'id,name,access_token,category,tasks',
-                limit: 100,
-            },
-        });
+        const pagesMap = new Map<string, any>();
 
-        console.log(`[FacebookService] /me/accounts raw count: ${response.data?.data?.length || 0}`);
-        if (response.data && response.data.data) {
-            console.log(`[FacebookService] Pages found:`, response.data.data.map((p: any) => `${p.name} (${p.id})`));
-            const accounts = response.data.data;
-            
-            const accountsWithIg = await Promise.all(accounts.map(async (acc: any) => {
+        // 1. Standard /me/accounts call (Personal & standard managed pages)
+        try {
+            const url = `https://graph.facebook.com/${this.apiVersion}/me/accounts`;
+            const response = await axios.get(url, {
+                params: {
+                    access_token: userAccessToken,
+                    fields: 'id,name,access_token,category,tasks',
+                    limit: 100,
+                },
+            });
+
+            console.log(`[FacebookService] /me/accounts raw count: ${response.data?.data?.length || 0}`);
+            if (response.data?.data && Array.isArray(response.data.data)) {
+                for (const p of response.data.data) {
+                    if (p.id) {
+                        pagesMap.set(p.id, p);
+                    }
+                }
+            }
+        } catch (error: any) {
+            console.warn('[FacebookService] Error calling /me/accounts:', error.response?.data || error.message);
+        }
+
+        // 2. Inspect token granular_scopes via /debug_token to discover any pages selected in Login for Business
+        const appId = this.configService.get<string>('META_APP_ID');
+        const appSecret = this.configService.get<string>('META_APP_SECRET');
+
+        if (appId && appSecret) {
+            try {
+                const debugUrl = `https://graph.facebook.com/${this.apiVersion}/debug_token`;
+                const debugRes = await axios.get(debugUrl, {
+                    params: {
+                        input_token: userAccessToken,
+                        access_token: `${appId}|${appSecret}`,
+                    },
+                });
+
+                const granularScopes = debugRes.data?.data?.granular_scopes || [];
+                const targetPageIds = new Set<string>();
+
+                for (const gs of granularScopes) {
+                    if (Array.isArray(gs.target_ids)) {
+                        for (const tid of gs.target_ids) {
+                            if (tid && !pagesMap.has(tid)) {
+                                targetPageIds.add(tid);
+                            }
+                        }
+                    }
+                }
+
+                if (targetPageIds.size > 0) {
+                    console.log(`[FacebookService] Found ${targetPageIds.size} additional pages from granular_scopes:`, Array.from(targetPageIds));
+                    await Promise.all(Array.from(targetPageIds).map(async (pageId) => {
+                        try {
+                            const pageUrl = `https://graph.facebook.com/${this.apiVersion}/${pageId}`;
+                            const pageRes = await axios.get(pageUrl, {
+                                params: {
+                                    access_token: userAccessToken,
+                                    fields: 'id,name,access_token,category,tasks',
+                                },
+                            });
+                            if (pageRes.data?.id) {
+                                pagesMap.set(pageRes.data.id, pageRes.data);
+                            }
+                        } catch (err: any) {
+                            console.warn(`[FacebookService] Could not fetch details for granular page ${pageId}:`, err.response?.data || err.message);
+                        }
+                    }));
+                }
+            } catch (error: any) {
+                console.warn('[FacebookService] Error inspecting debug_token:', error.response?.data || error.message);
+            }
+        }
+
+        // 3. Check /me/businesses for any pages owned or assigned via Business Portfolios
+        try {
+            const bizUrl = `https://graph.facebook.com/${this.apiVersion}/me/businesses`;
+            const bizRes = await axios.get(bizUrl, {
+                params: {
+                    access_token: userAccessToken,
+                    fields: 'id,name',
+                    limit: 50,
+                },
+            });
+
+            const businesses = bizRes.data?.data || [];
+            if (businesses.length > 0) {
+                console.log(`[FacebookService] Found ${businesses.length} businesses for user:`, businesses.map((b: any) => b.name));
+                await Promise.all(businesses.map(async (biz: any) => {
+                    // Try owned_pages
+                    try {
+                        const ownedUrl = `https://graph.facebook.com/${this.apiVersion}/${biz.id}/owned_pages`;
+                        const ownedRes = await axios.get(ownedUrl, {
+                            params: {
+                                access_token: userAccessToken,
+                                fields: 'id,name,access_token,category,tasks',
+                                limit: 100,
+                            },
+                        });
+                        for (const p of ownedRes.data?.data || []) {
+                            if (p.id && !pagesMap.has(p.id)) {
+                                pagesMap.set(p.id, p);
+                            }
+                        }
+                    } catch (err: any) {
+                        // Silently handle if permission restricted
+                    }
+
+                    // Try client_pages
+                    try {
+                        const clientUrl = `https://graph.facebook.com/${this.apiVersion}/${biz.id}/client_pages`;
+                        const clientRes = await axios.get(clientUrl, {
+                            params: {
+                                access_token: userAccessToken,
+                                fields: 'id,name,access_token,category,tasks',
+                                limit: 100,
+                            },
+                        });
+                        for (const p of clientRes.data?.data || []) {
+                            if (p.id && !pagesMap.has(p.id)) {
+                                pagesMap.set(p.id, p);
+                            }
+                        }
+                    } catch (err: any) {
+                        // Silently handle if permission restricted
+                    }
+                }));
+            }
+        } catch (error: any) {
+            // Silently handle
+        }
+
+        // 4. Ensure each page has a valid page access_token
+        const allPages = Array.from(pagesMap.values());
+        await Promise.all(allPages.map(async (p) => {
+            if (!p.access_token) {
                 try {
-                    const pageUrl = `https://graph.facebook.com/${this.apiVersion}/${acc.id}`;
-                    const pageRes = await axios.get(pageUrl, {
+                    const tokenUrl = `https://graph.facebook.com/${this.apiVersion}/${p.id}`;
+                    const tokenRes = await axios.get(tokenUrl, {
                         params: {
-                            access_token: acc.access_token,
-                            fields: 'instagram_business_account{id,name,username,profile_picture_url}',
+                            access_token: userAccessToken,
+                            fields: 'access_token',
                         },
                     });
-                    if (pageRes.data && pageRes.data.instagram_business_account) {
-                        return {
-                            ...acc,
-                            instagram_business_account: pageRes.data.instagram_business_account
-                        };
+                    if (tokenRes.data?.access_token) {
+                        p.access_token = tokenRes.data.access_token;
                     }
-                } catch (err: any) {
-                    console.warn(`Could not fetch instagram account for page ${acc.id}:`, err.message);
+                } catch (e: any) {
+                    console.warn(`[FacebookService] Could not resolve page access token for ${p.id}:`, e.message);
                 }
-                return acc;
-            }));
-            
-            return accountsWithIg;
-        }
-        return [];
+            }
+        }));
+
+        console.log(`[FacebookService] Final resolved unique pages (${allPages.length}):`, allPages.map(p => `${p.name} (${p.id}) [token: ${p.access_token ? 'YES' : 'NO'}]`));
+
+        // 5. Query Instagram business account details if connected
+        const accountsWithIg = await Promise.all(allPages.map(async (acc: any) => {
+            const tokenToUse = acc.access_token || userAccessToken;
+            try {
+                const pageUrl = `https://graph.facebook.com/${this.apiVersion}/${acc.id}`;
+                const pageRes = await axios.get(pageUrl, {
+                    params: {
+                        access_token: tokenToUse,
+                        fields: 'instagram_business_account{id,name,username,profile_picture_url}',
+                    },
+                });
+                if (pageRes.data && pageRes.data.instagram_business_account) {
+                    return {
+                        ...acc,
+                        instagram_business_account: pageRes.data.instagram_business_account,
+                    };
+                }
+            } catch (err: any) {
+                // Not every page has an Instagram business account
+            }
+            return acc;
+        }));
+
+        return accountsWithIg;
     }
 }
