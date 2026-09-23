@@ -27,6 +27,7 @@ import { RiderInventoryModule } from './rider-inventory/rider-inventory.module';
 import { PublishingModule } from './publishing/publishing.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
 import { KeepAliveModule } from './keep-alive/keep-alive.module';
+import { GrowthModule } from './growth/growth.module';
 
 import { AppService } from './app.service';
 
@@ -50,6 +51,7 @@ import { AppService } from './app.service';
     PublishingModule,
     MarketplaceModule,
     KeepAliveModule,
+    GrowthModule,
   ],
   controllers: [
     AppController,

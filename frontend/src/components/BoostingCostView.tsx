@@ -315,7 +315,7 @@ export default function BoostingCostView({ onBack }: BoostingCostViewProps) {
                 )}
             </header>
 
-            <main className="flex-1 overflow-y-auto pl-4 pr-8 py-6 custom-scrollbar">
+            <main className="flex-1 overflow-y-auto p-4 md:p-5 custom-scrollbar">
                 <div className="max-w-full ml-0">
                     {mainTab === 'ads' && viewingCampaign ? (
                         <div className="space-y-6">

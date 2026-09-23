@@ -169,8 +169,8 @@ export default function HomeView({
     };
 
     return (
-        <div className="flex-1 bg-gray-50 dark:bg-slate-900 overflow-y-auto p-4 md:p-6 custom-scrollbar transition-colors duration-200">
-            <div className="max-w-7xl mx-auto space-y-6">
+        <div className="flex-1 bg-gray-50 dark:bg-slate-900 overflow-y-auto p-4 md:p-5 custom-scrollbar transition-colors duration-200">
+            <div className="w-full space-y-5">
                 {/* 1. Header Card */}
                 <motion.div
                     initial={{ opacity: 0, y: -10 }}

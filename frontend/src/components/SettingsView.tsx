@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { Settings, MessageSquare, CreditCard, Users, Bell, Database, Package, Zap, Truck, Globe, Bot, ArrowLeft, ShoppingBag } from 'lucide-react';
+import { Settings, MessageSquare, CreditCard, Users, Bell, Database, Package, Zap, Truck, Globe, Bot, ArrowLeft, ShoppingBag, Clock } from 'lucide-react';
 import MessageTemplates from './settings/MessageTemplates';
+import FollowUpTemplatesSettings from './settings/FollowUpTemplatesSettings';
 import QuickReplyTemplates from './settings/QuickReplyTemplates';
 import InventorySettings from './settings/InventorySettings';
 import InventoryProducts from './settings/InventoryProducts';
@@ -117,7 +118,8 @@ export default function SettingsView() {
                                     { id: 'ai-agent', label: 'AI Agent', icon: Bot },
                                     { id: 'quick-reply', label: 'Quick Reply Templates', icon: Zap },
                                     { id: 'auto-reply', label: 'Auto Reply', icon: MessageSquare },
-                                    { id: 'templates', label: 'Message Templates', icon: MessageSquare }
+                                    { id: 'templates', label: 'Message Templates', icon: MessageSquare },
+                                    { id: 'follow-up-templates', label: 'Follow up Templates', icon: Clock }
                                 ].map((sub) => {
                                     const subActive = (searchParams.get('sub') || 'ai-agent') === sub.id;
                                     return (
@@ -150,6 +152,7 @@ export default function SettingsView() {
                                             case 'quick-reply': return <QuickReplyTemplates />;
                                             case 'auto-reply': return <AutoReplySettings />;
                                             case 'templates': return <MessageTemplates />;
+                                            case 'follow-up-templates': return <FollowUpTemplatesSettings />;
                                             default: return <AIAgentSettings />;
                                         }
                                     })()}

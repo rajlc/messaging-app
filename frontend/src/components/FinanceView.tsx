@@ -262,7 +262,7 @@ export default function FinanceView({ orders }: FinanceViewProps) {
     return (
         <div className="font-sans flex-1 flex flex-col bg-gray-50 dark:bg-slate-900 overflow-hidden">
             {/* Header */}
-            <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-8 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
+            <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 md:px-5 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl">
                         <BarChart3 className="text-indigo-600 dark:text-indigo-400" size={24} />
@@ -289,8 +289,8 @@ export default function FinanceView({ orders }: FinanceViewProps) {
                 </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-                <div className="max-w-[1600px] mx-auto space-y-8">
+            <main className="flex-1 overflow-y-auto p-4 md:p-5 custom-scrollbar">
+                <div className="w-full space-y-6">
 
                     <section>
                         <div className="flex items-center justify-between mb-4">
@@ -989,7 +989,7 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
 
     return (
         <div className="flex-1 flex flex-col bg-gray-50 dark:bg-slate-900 overflow-hidden" style={{ fontFamily: 'Inter, sans-serif' }}>
-            <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-8 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
+            <header className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-4 md:px-5 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
                 <div className="flex items-center gap-4">
                     <button onClick={onBack} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-all text-slate-500">
                         <ArrowLeft size={20} />
@@ -1001,8 +1001,8 @@ function LogisticDetailView({ logistic, orders, settlements, onBack, onSettlemen
                 </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-                <div className="max-w-[1600px] mx-auto space-y-8">
+            <main className="flex-1 overflow-y-auto p-4 md:p-5 custom-scrollbar">
+                <div className="w-full space-y-6">
                     <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                         {/* Value Compartment */}
                         <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">

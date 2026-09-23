@@ -12,11 +12,20 @@ interface Template {
 
 const TEMPLATE_STATUSES = [
     'New Order',
+    'Confirmed Order',
+    'Packed',
     'Ready to Ship',
+    'Shipped',
+    'Arrived at Branch',
+    'Delivery Process',
     'Delivered',
+    'Delivery Failed',
+    'Hold',
     'Cancel',
+    'Cancelled',
     'Follow up again',
-    'Returned'
+    'Return Process',
+    'Returned Delivered'
 ];
 
 export default function MessageTemplates() {

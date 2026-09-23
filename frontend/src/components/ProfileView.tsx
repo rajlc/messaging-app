@@ -1,13 +1,19 @@
 "use client";
 
 import { useState, FormEvent } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { User, Lock, Save, Loader2, CheckCircle, AlertCircle, Sun, Moon, Monitor, LogOut } from 'lucide-react';
+import { User, Lock, Save, Loader2, CheckCircle, AlertCircle, Sun, Moon, Monitor, LogOut, TrendingUp, Flame, Sparkles } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { GrowthHubView } from './growth/GrowthHubView';
 
 export default function ProfileView() {
     const { user, login, logout } = useAuth();
     const { theme, setTheme } = useTheme();
+    const searchParams = useSearchParams();
+    const [mainTab, setMainTab] = useState<'account' | 'growth'>(() => {
+        return searchParams?.get('tab') === 'growth' ? 'growth' : 'account';
+    });
     const [formData, setFormData] = useState({
         fullName: user?.full_name || '',
         phone: user?.phone || '',
@@ -101,10 +107,42 @@ export default function ProfileView() {
         <div className="flex-1 flex flex-col bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 h-full overflow-hidden transition-colors duration-200">
             {/* Header */}
             <div className="h-16 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-6 flex-shrink-0 shadow-sm">
-                <h2 className="text-page-title flex items-center gap-2 text-slate-900 dark:text-white">
-                    <User className="text-indigo-500" size={22} />
-                    Profile
-                </h2>
+                <div className="flex items-center gap-6">
+                    <h2 className="text-page-title flex items-center gap-2 text-slate-900 dark:text-white">
+                        <User className="text-indigo-500" size={22} />
+                        Profile
+                    </h2>
+
+                    {/* Top Level Tabs */}
+                    <div className="flex items-center bg-gray-100 dark:bg-slate-700/60 p-1 rounded-xl border border-gray-200 dark:border-slate-700">
+                        <button
+                            onClick={() => setMainTab('account')}
+                            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                                mainTab === 'account'
+                                    ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                        >
+                            <User size={14} />
+                            Account Settings
+                        </button>
+                        <button
+                            onClick={() => setMainTab('growth')}
+                            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer relative ${
+                                mainTab === 'growth'
+                                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs'
+                                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                        >
+                            <Flame size={14} className={mainTab === 'growth' ? 'text-amber-300 fill-amber-300' : 'text-amber-500'} />
+                            Growth Hub
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-extrabold bg-amber-400 text-slate-950 uppercase tracking-wider">
+                                NEW
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
                 <div className="flex items-center gap-3">
                     {/* Quick theme toggle */}
                     <button
@@ -127,9 +165,14 @@ export default function ProfileView() {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {/* Profile Info Card */}
-                <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
+            {mainTab === 'growth' ? (
+                <div className="flex-1 overflow-y-auto p-6 max-w-7xl mx-auto w-full">
+                    <GrowthHubView />
+                </div>
+            ) : (
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                    {/* Profile Info Card */}
+                    <div className="max-w-4xl mx-auto bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
                     {/* Card Header */}
                     <div className="px-6 py-4 border-b border-gray-100 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/80">
                         <h3 className="text-card-title text-slate-800 dark:text-white flex items-center gap-2">
@@ -325,6 +368,7 @@ export default function ProfileView() {
                     </div>
                 </div>
             </div>
+            )}
         </div>
     );
 }

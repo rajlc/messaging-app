@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import {
     Package, Plus, Search, Filter, Check, X, Truck, List, Clock, CheckCircle2, FileText, ChevronDown, RefreshCw,
-    ArrowLeftRight, ArrowLeft, User, UserMinus, Hash, Printer
+    ArrowLeftRight, ArrowLeft, User, UserMinus, Hash, Printer, Eye, MessageSquare, ShieldAlert, Bot
 } from 'lucide-react';
 import OrderModal from './OrderModal';
 import RiderAssignmentModal from './RiderAssignmentModal';
@@ -61,12 +61,14 @@ export default function OrdersView() {
 
     // -- Logic from help.md --
     // -- Logic from help.md --
-    const [activeTab, setActiveTab] = useState<'todayOrder' | 'orderList' | 'orderSummary' | 'selfDelivery'>(() => {
+    const [activeTab, setActiveTab] = useState<'todayOrder' | 'orderList' | 'orderSummary' | 'selfDelivery' | 'deliveryAtRisk'>(() => {
         if (typeof window !== 'undefined') {
             return (localStorage.getItem('ordersActiveTab') as any) || 'todayOrder';
         }
         return 'todayOrder';
     });
+    const [expandedRiskComments, setExpandedRiskComments] = useState<Set<string>>(new Set());
+
     const [todaySubTab, setTodaySubTab] = useState<'pending' | 'confirmed' | 'packed' | 'shipped' | 'delivered'>(() => {
         if (typeof window !== 'undefined') {
             return (localStorage.getItem('ordersTodaySubTab') as any) || 'pending';
@@ -136,6 +138,67 @@ export default function OrdersView() {
         });
         return Array.from(branches).sort();
     }, [orders]);
+
+    // Delivery At Risk Count
+    const deliveryAtRiskCount = useMemo(() => {
+        return orders.filter(o => ['Delivery Failed', 'Hold', 'Return Process'].includes(o.order_status)).length;
+    }, [orders]);
+
+    // Extract logistics comments sorted descending (latest on top)
+    const getLogisticsComments = (order: any) => {
+        const list: { text: string; date?: string; by?: string }[] = [];
+
+        if (Array.isArray(order.status_history)) {
+            order.status_history.forEach((h: any) => {
+                if (h.remarks && h.remarks.trim()) {
+                    list.push({
+                        text: h.remarks.trim(),
+                        date: h.changed_at,
+                        by: h.changed_by
+                    });
+                }
+            });
+        }
+
+        if (order.remarks && order.remarks.trim() && !list.some(l => l.text.includes(order.remarks.trim()))) {
+            list.push({
+                text: order.remarks.trim(),
+                date: order.updated_at
+            });
+        }
+
+        list.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+        return list;
+    };
+
+    // Check if AI follow-up was sent
+    const getAiFollowUpInfo = (order: any) => {
+        if (!Array.isArray(order.status_history)) return null;
+        const aiEntry = order.status_history.find((h: any) => 
+            h.changed_by === 'AI Recovery Agent' || 
+            (h.remarks && (h.remarks.includes('AI Follow-up Sent') || h.remarks.includes('Sent message:')))
+        );
+        if (!aiEntry) return null;
+        return {
+            sentAt: aiEntry.changed_at,
+            message: aiEntry.remarks
+        };
+    };
+
+    const formatRelativeTime = (dateStr: string) => {
+        if (!dateStr) return '';
+        const diffMs = Date.now() - new Date(dateStr).getTime();
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        if (diffHours < 1) {
+            const diffMins = Math.max(1, Math.floor(diffMs / (1000 * 60)));
+            return `${diffMins}m ago`;
+        }
+        if (diffHours < 24) {
+            return `${diffHours} hrs ago`;
+        }
+        const diffDays = Math.floor(diffHours / 24);
+        return `${diffDays}d ago`;
+    };
 
     // Create Order Modal State
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -542,6 +605,53 @@ export default function OrdersView() {
 
     const getDisplayOrders = () => {
         const today = new Date();
+
+        if (activeTab === 'deliveryAtRisk') {
+            return orders.filter(order => {
+                const isRisk = ['Delivery Failed', 'Hold', 'Return Process'].includes(order.order_status);
+                if (!isRisk) return false;
+
+                if (statusFilter !== 'all' && order.order_status !== statusFilter) return false;
+                if (branchFilter !== 'all' && order.delivery_branch !== branchFilter) return false;
+
+                if (logisticsFilter !== 'all') {
+                    if (logisticsFilter === 'local') return order.courier_provider === 'local';
+                    if (logisticsFilter === 'pathao') return order.courier_provider === 'pathao';
+                    if (logisticsFilter === 'pickdrop') return order.courier_provider === 'pickdrop';
+                    if (logisticsFilter === 'ncm') return order.courier_provider === 'ncm';
+                    if (logisticsFilter === 'self') return order.courier_provider === 'self';
+                }
+
+                if (startDate) {
+                    const orderDate = new Date(order.created_at || order.order_date);
+                    const checkDate = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate());
+                    const start = new Date(startDate);
+                    const startLocal = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                    if (checkDate < startLocal) return false;
+                }
+                if (endDate) {
+                    const orderDate = new Date(order.created_at || order.order_date);
+                    const checkDate = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate());
+                    const end = new Date(endDate);
+                    const endLocal = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+                    if (checkDate > endLocal) return false;
+                }
+
+                if (searchQuery) {
+                    const query = searchQuery.toLowerCase();
+                    return (
+                        (order.customer_name && order.customer_name.toLowerCase().includes(query)) ||
+                        (order.address && order.address.toLowerCase().includes(query)) ||
+                        (order.order_number && String(order.order_number).toLowerCase().includes(query)) ||
+                        (order.delivery_branch && order.delivery_branch.toLowerCase().includes(query)) ||
+                        (order.ncm_to_branch && order.ncm_to_branch.toLowerCase().includes(query)) ||
+                        (order.items && order.items.some((item: any) => (item.product_name || item.name || '').toLowerCase().includes(query)))
+                    );
+                }
+
+                return true;
+            }).sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime());
+        }
 
         if (activeTab === 'todayOrder') {
             return orders.filter(order => {
@@ -1010,6 +1120,16 @@ export default function OrdersView() {
                                 >
                                     Self Delivery List
                                 </button>
+                                <button
+                                    onClick={() => setActiveTab('deliveryAtRisk')}
+                                    className={`px-4 py-1.5 rounded-md text-[16px] font-bold transition-all flex items-center gap-1.5 ${activeTab === 'deliveryAtRisk'
+                                        ? 'bg-rose-600 text-white shadow-sm dark:shadow-lg'
+                                        : 'text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/20'
+                                        }`}
+                                >
+                                    <ShieldAlert size={16} />
+                                    <span>Delivery At Risk ({deliveryAtRiskCount})</span>
+                                </button>
                             </div>
                         </div>
 
@@ -1330,10 +1450,63 @@ export default function OrdersView() {
                                         </button>
                                     </div>
                                 )}
+
+                                {/* Delivery At Risk Sub Buttons */}
+                                {activeTab === 'deliveryAtRisk' && (
+                                    <div className="flex gap-2 items-center flex-wrap">
+                                        <button
+                                            onClick={() => setStatusFilter('all')}
+                                            className={`px-4 py-1.5 rounded-full text-[14px] font-semibold transition-colors flex items-center gap-1.5 border ${statusFilter === 'all'
+                                                ? 'bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-500/30'
+                                                : 'bg-white dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                                                }`}
+                                        >
+                                            <ShieldAlert size={12} />
+                                            All Risk
+                                            <span className="bg-white dark:bg-slate-900/50 px-2 py-0.5 rounded text-[11px] ml-1 shadow-sm font-bold opacity-80">{deliveryAtRiskCount}</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setStatusFilter(statusFilter === 'Delivery Failed' ? 'all' : 'Delivery Failed')}
+                                            className={`px-4 py-1.5 rounded-full text-[14px] font-semibold transition-colors flex items-center gap-1.5 border ${statusFilter === 'Delivery Failed'
+                                                ? 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/30'
+                                                : 'bg-white dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                                                }`}
+                                        >
+                                            Delivery Failed
+                                            <span className="bg-white dark:bg-slate-900/50 px-2 py-0.5 rounded text-[11px] ml-1 shadow-sm font-bold opacity-80">
+                                                {orders.filter(o => o.order_status === 'Delivery Failed').length}
+                                            </span>
+                                        </button>
+                                        <button
+                                            onClick={() => setStatusFilter(statusFilter === 'Hold' ? 'all' : 'Hold')}
+                                            className={`px-4 py-1.5 rounded-full text-[14px] font-semibold transition-colors flex items-center gap-1.5 border ${statusFilter === 'Hold'
+                                                ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30'
+                                                : 'bg-white dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                                                }`}
+                                        >
+                                            Hold
+                                            <span className="bg-white dark:bg-slate-900/50 px-2 py-0.5 rounded text-[11px] ml-1 shadow-sm font-bold opacity-80">
+                                                {orders.filter(o => o.order_status === 'Hold').length}
+                                            </span>
+                                        </button>
+                                        <button
+                                            onClick={() => setStatusFilter(statusFilter === 'Return Process' ? 'all' : 'Return Process')}
+                                            className={`px-4 py-1.5 rounded-full text-[14px] font-semibold transition-colors flex items-center gap-1.5 border ${statusFilter === 'Return Process'
+                                                ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-500/30'
+                                                : 'bg-white dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                                                }`}
+                                        >
+                                            Return Process
+                                            <span className="bg-white dark:bg-slate-900/50 px-2 py-0.5 rounded text-[11px] ml-1 shadow-sm font-bold opacity-80">
+                                                {orders.filter(o => o.order_status === 'Return Process').length}
+                                            </span>
+                                        </button>
+                                    </div>
+                                )}
                             </div>
 
-                            {/* Today Orders Filters (Simple Local/Pathao/All)  */}
-                            {activeTab === 'todayOrder' && (
+                            {/* Filters (Simple Local/Pathao/All)  */}
+                            {(activeTab === 'todayOrder' || activeTab === 'deliveryAtRisk') && (
                                 <div className="flex items-center gap-2">
                                     <div className="relative">
                                         <select
@@ -1543,13 +1716,13 @@ export default function OrdersView() {
                                     {displayOrders.map((order, index) => (
                                         <div 
                                             key={order.id} 
-                                            className="relative bg-white dark:bg-slate-800 rounded-[16px] min-h-[180px] p-[16px_18px] flex flex-col md:flex-row md:items-start gap-4 transition-all duration-200 ease-in hover:-translate-y-[1px] hover:shadow-[0_6px_18px_rgba(0,0,0,0.05)] border border-gray-100 dark:border-slate-700/50"
+                                            className={`relative bg-white dark:bg-slate-800 rounded-[16px] min-h-[180px] p-[16px_18px] flex flex-col md:flex-row md:items-start transition-all duration-200 ease-in hover:-translate-y-[1px] hover:shadow-[0_6px_18px_rgba(0,0,0,0.05)] border border-gray-100 dark:border-slate-700/50 ${activeTab === 'deliveryAtRisk' ? 'gap-2.5 md:gap-3.5' : 'gap-4'}`}
                                         >
                                             {/* Status Line Indicator */}
                                             <div className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-full ${getStatusLeftBarColor(order.order_status)}`}></div>
 
-                                            {/* Section 1: LEFT SIDE (26%) - Customer Identity */}
-                                            <div className="flex flex-col w-full md:w-[26%] pl-2 shrink-0 border-b md:border-b-0 border-gray-100 pb-3 md:pb-0">
+                                            {/* Section 1: LEFT SIDE - Customer Identity */}
+                                            <div className={`flex flex-col w-full ${activeTab === 'deliveryAtRisk' ? 'md:w-[210px] lg:w-[220px]' : 'md:w-[26%]'} pl-2 shrink-0 border-b md:border-b-0 border-gray-100 dark:border-slate-700/50 pb-3 md:pb-0`}>
                                                 <div className="flex flex-wrap items-center gap-2 mb-2">
                                                     <input
                                                         type="checkbox"
@@ -1573,9 +1746,28 @@ export default function OrdersView() {
                                                     <div className="text-[13px] text-[#667085] dark:text-slate-400">
                                                         {new Date(order.created_at || order.order_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                                                     </div>
-                                                    <div className="text-[14px] font-[500] text-slate-800 dark:text-slate-200">
-                                                        {order.customer_name}
-                                                    </div>
+                                                    {activeTab === 'deliveryAtRisk' ? (
+                                                        <div className="flex items-center gap-2 my-0.5">
+                                                            {order.conversation_id || order.customer_id ? (
+                                                                <button
+                                                                    onClick={() => router.push(`/messages?conversationId=${order.conversation_id || ''}`)}
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/40 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-lg transition-all shadow-xs group cursor-pointer"
+                                                                    title="View Customer Messages"
+                                                                >
+                                                                    <Eye size={13} className="text-indigo-500 group-hover:scale-110 transition-transform" />
+                                                                    <span>View Message</span>
+                                                                </button>
+                                                            ) : (
+                                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 text-xs font-semibold rounded-md border border-slate-200 dark:border-slate-700">
+                                                                    No Message
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-[14px] font-[500] text-slate-800 dark:text-slate-200">
+                                                            {order.customer_name}
+                                                        </div>
+                                                    )}
                                                     <div className="text-[18px] font-[700] text-[#111827] dark:text-white mt-0.5 tracking-tight">
                                                         {order.phone_number}
                                                         {order.alternative_phone && (
@@ -1588,8 +1780,8 @@ export default function OrdersView() {
                                                 </div>
                                             </div>
 
-                                            {/* Section 2: PRODUCT SECTION (34%) */}
-                                            <div className="flex flex-col w-full md:w-[34%] shrink-0 pr-0 md:pr-4">
+                                            {/* Section 2: PRODUCT SECTION */}
+                                            <div className={`flex flex-col w-full ${activeTab === 'deliveryAtRisk' ? 'md:w-[280px] lg:w-[320px] md:pr-2' : 'md:w-[34%] md:pr-4'} shrink-0 pr-0`}>
                                                 {/* Header Row */}
                                                 <div className="grid grid-cols-[1fr_50px_80px] gap-2 mb-2 text-[12px] font-[600] text-[#667085] dark:text-slate-400 uppercase tracking-wide">
                                                     <div>Product Name</div>
@@ -1660,8 +1852,8 @@ export default function OrdersView() {
                                                 )}
                                             </div>
 
-                                            {/* Section 3: TOTAL + SHIPPING (17%) */}
-                                            <div className="flex flex-col w-full md:w-[17%] shrink-0 border-t md:border-t-0 md:border-l border-gray-100 dark:border-slate-700/50 pt-3 md:pt-0 md:pl-4 justify-center md:justify-start">
+                                            {/* Section 3: TOTAL + SHIPPING */}
+                                            <div className={`flex flex-col w-full ${activeTab === 'deliveryAtRisk' ? 'md:w-[155px] lg:w-[170px] md:pl-3' : 'md:w-[17%] md:pl-4'} shrink-0 border-t md:border-t-0 md:border-l border-gray-100 dark:border-slate-700/50 pt-3 md:pt-0 justify-center md:justify-start`}>
                                                 <div className="text-[12px] text-[#667085] dark:text-slate-400 uppercase font-semibold">Grand Total</div>
                                                 <div className={`${order.payment_status === 'Prepayment' && order.prepayment_amount > 0 ? 'text-[26px]' : 'text-[34px]'} font-[800] tracking-[-0.02em] text-[#111827] dark:text-white leading-none mt-1`}>
                                                     Rs. {order.total_amount}
@@ -1752,8 +1944,108 @@ export default function OrdersView() {
                                                 </div>
                                             </div>
 
-                                            {/* Section 4: ACTIONS (17%) */}
-                                            <div className="flex flex-col w-full md:w-[17%] shrink-0 pt-3 md:pt-0 items-start md:items-end justify-between min-h-[148px] md:pr-2">
+                                            {/* Section 4: ACTIONS / LOGISTICS COMMENTS FOR DELIVERY AT RISK */}
+                                            {activeTab === 'deliveryAtRisk' ? (
+                                                <div className="flex flex-col w-full md:flex-1 shrink-0 border-t md:border-t-0 md:border-l border-gray-100 dark:border-slate-700/50 pt-3 md:pt-0 md:pl-3.5 min-h-[148px]">
+                                                    {/* Top Row: Print & Status Badge on right */}
+                                                    <div className="flex items-center justify-end gap-2 mb-2">
+                                                        <Printer 
+                                                            size={16} 
+                                                            className={order.invoice_printed ? "text-green-500" : "text-slate-400 dark:text-slate-500"} 
+                                                        />
+                                                        <div className={`h-[30px] px-3.5 rounded-full text-[12px] font-black flex items-center justify-center whitespace-nowrap shadow-xs ${getStatusBadgeStyle(order.order_status)}`}>
+                                                            {order.order_status}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* AI Follow-up Message Sent Alert Banner (if any) */}
+                                                    {(() => {
+                                                        const aiInfo = getAiFollowUpInfo(order);
+                                                        if (!aiInfo) return null;
+                                                        const relativeTime = formatRelativeTime(aiInfo.sentAt);
+                                                        return (
+                                                            <div 
+                                                                className="flex items-center gap-1.5 px-2.5 py-1 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 rounded-lg text-[11px] font-bold border border-violet-200 dark:border-violet-800/40 shadow-xs self-start md:self-end mb-2"
+                                                                title={aiInfo.message}
+                                                            >
+                                                                <Bot size={13} className="text-violet-600 dark:text-violet-400" />
+                                                                <span>Sent message {relativeTime}</span>
+                                                            </div>
+                                                        );
+                                                    })()}
+
+                                                    {/* Logistics Remarks Card (Same design, font & text size as Package Description) */}
+                                                    <div className="bg-[#F8FAFC] dark:bg-slate-700/50 border border-[#E2E8F0] dark:border-slate-600 p-[10px_12px] rounded-[10px]">
+                                                        <div className="text-[11px] font-bold text-slate-500 uppercase mb-1 flex items-center justify-between">
+                                                            <span>Logistics Remarks</span>
+                                                            {order.courier_provider && (
+                                                                <span className="text-[10px] text-slate-400 font-semibold uppercase">
+                                                                    {order.courier_provider === 'self' ? 'Self Delivery' : (order.logistic_name || order.courier_provider)}
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        {(() => {
+                                                            const comments = getLogisticsComments(order);
+                                                            if (comments.length === 0) {
+                                                                return (
+                                                                    <div className="text-[13px] text-slate-400 italic">
+                                                                        No remarks from courier yet
+                                                                    </div>
+                                                                );
+                                                            }
+
+                                                            const isExpanded = expandedRiskComments.has(order.id);
+                                                            const displayList = isExpanded ? comments : comments.slice(0, 3);
+
+                                                            return (
+                                                                <div className="flex flex-col">
+                                                                    {displayList.map((c, i) => (
+                                                                        <div key={i} className={i > 0 ? "pt-2 mt-2 border-t border-[#E2E8F0] dark:border-slate-600" : ""}>
+                                                                            <div className="text-[13px] text-[#475467] dark:text-slate-300 leading-snug">
+                                                                                {c.text}
+                                                                            </div>
+                                                                            {(c.date || c.by) && (
+                                                                                <div className="text-[11px] text-slate-400 dark:text-slate-400 mt-1 flex items-center justify-between">
+                                                                                    {c.date ? (
+                                                                                        <span className="flex items-center gap-1">
+                                                                                            <Clock size={11} className="text-slate-400" />
+                                                                                            {new Date(c.date).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                                                        </span>
+                                                                                    ) : <span />}
+                                                                                    {c.by && (
+                                                                                        <span className="text-slate-400 dark:text-slate-400 font-mono text-[10.5px]">
+                                                                                            by {c.by}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+
+                                                                    {comments.length > 3 && (
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                setExpandedRiskComments(prev => {
+                                                                                    const next = new Set(prev);
+                                                                                    if (next.has(order.id)) next.delete(order.id);
+                                                                                    else next.add(order.id);
+                                                                                    return next;
+                                                                                });
+                                                                            }}
+                                                                            className="text-[11px] font-bold text-blue-600 hover:text-blue-700 mt-2 uppercase w-fit"
+                                                                        >
+                                                                            {isExpanded ? 'View Less' : `View More (${comments.length - 3})`}
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col w-full md:w-[17%] shrink-0 pt-3 md:pt-0 items-start md:items-end justify-between min-h-[148px] md:pr-2">
                                                 {/* Status Badge & Print Icon Row */}
                                                 <div className="flex items-center gap-2 self-start md:self-end">
                                                     <Printer 
@@ -1934,6 +2226,7 @@ export default function OrdersView() {
                                                     </div>
                                                 </div>
                                             </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>

@@ -5,6 +5,7 @@ import { supabaseService } from '../supabase/supabase.service';
 import { FacebookService } from '../messaging/facebook.service';
 import { TemplatesService } from '../templates/templates.service';
 import { MessagingGateway } from '../socket/messaging.gateway';
+import { FollowUpService } from '../messaging/follow-up/follow-up.service';
 
 import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
@@ -25,7 +26,8 @@ export class OrdersService {
         private templatesService: TemplatesService,
         private messagingGateway: MessagingGateway,
         private settingsService: SettingsService,
-        private usersService: UsersService
+        private usersService: UsersService,
+        private followUpService: FollowUpService
     ) { }
 
     private async getInventoryConfig() {
@@ -963,39 +965,34 @@ export class OrdersService {
                 return;
             }
 
-            // 1.1 Special Case: Skip for "Follow up again"
-            if (order.order_status === 'Follow up again') {
-                this.logger.log(`Skipping auto-message for status: ${order.order_status}`);
-                return;
-            }
-
             // Fetch all templates
             const templates = await this.templatesService.getAllTemplates();
             if (!templates) return;
 
-            // Find matching template
-            const templateObj = templates.find((t: any) => t.status === order.order_status);
+            // Find matching template (support Cancel / Cancelled equivalence)
+            const templateObj = templates.find((t: any) => 
+                t.status === order.order_status || 
+                (t.status === 'Cancel' && order.order_status === 'Cancelled') ||
+                (t.status === 'Cancelled' && order.order_status === 'Cancel')
+            );
 
             if (!templateObj || !templateObj.template) {
                 this.logger.log(`No template found for status: ${order.order_status}`);
-                return;
-            }
-
-            // 2. Check Template Activation
-            if (templateObj.is_active === false || templateObj.is_active === 'false') {
+            } else if (templateObj.is_active === false || templateObj.is_active === 'false') {
+                // 2. Check Template Activation - only send if active
                 this.logger.log(`Template for status "${order.order_status}" is DEACTIVATED. Skipping message.`);
-                return;
-            }
+            } else if (!order.customer_id) {
+                // Skip if no message thread or placed by call
+                this.logger.log(`Order ${order.order_number} has no customer_id (placed via call or website guest). Skipping message.`);
+            } else {
+                let message = templateObj.template;
 
-            let message = templateObj.template;
+                // Replace variables
+                message = message.replace(/{{customer_name}}/g, order.customer_name || 'Customer');
+                message = message.replace(/{{order_number}}/g, order.order_number || '');
+                message = message.replace(/{{total_amount}}/g, String(order.total_amount || '0'));
+                message = message.replace(/{{order_status}}/g, order.order_status || '');
 
-            // Replace variables
-            message = message.replace(/{{customer_name}}/g, order.customer_name || 'Customer');
-            message = message.replace(/{{order_number}}/g, order.order_number || '');
-            message = message.replace(/{{total_amount}}/g, order.total_amount || '0');
-            message = message.replace(/{{order_status}}/g, order.order_status || '');
-
-            if (order.customer_id) {
                 this.logger.log(`Sending auto-message to ${order.customer_id}: ${message}`);
                 await this.facebookService.sendMessage(order.customer_id, message);
 
@@ -1016,11 +1013,11 @@ export class OrdersService {
                         conversationId: conversationId,
                         text: message,
                         sender: 'agent',
-                        platform: 'facebook',
+                        platform: order.platform || 'facebook',
                     });
                     this.logger.log(`✅ Auto-message saved to database for conversation ${conversationId}`);
 
-                    this.messagingGateway.broadcastIncomingMessage('facebook', {
+                    this.messagingGateway.broadcastIncomingMessage(order.platform || 'facebook', {
                         text: message,
                         senderId: order.customer_id,
                         pageId: order.page_id,
@@ -1028,15 +1025,32 @@ export class OrdersService {
                         sender: 'agent'
                     });
 
+                    // Record history log of template message
+                    await this.recordStatusHistory(
+                        order.id, 
+                        order.order_status, 
+                        'System Template', 
+                        `Sent message: ${message.substring(0, 120)}`
+                    );
                 } else {
                     this.logger.warn(`Could not save auto-message to DB: No conversation found for customer ${order.customer_id}`);
                 }
-
-            } else {
-                this.logger.warn(`Cannot send auto-message: Order ${order.order_number} has no customer_id`);
             }
 
-        } catch (error) {
+            // 3. Check for Delivery At Risk AI Follow-up (immediate 0-hr delay)
+            const riskStatuses = ['Delivery Failed', 'Hold', 'Return Process'];
+            if (riskStatuses.includes(order.order_status)) {
+                const futTemplates = await this.followUpService.getTemplates();
+                const fut = futTemplates.find(t => t.status === order.order_status);
+                if (fut && fut.is_active && Number(fut.delay_hours) === 0) {
+                    this.logger.log(`Order ${order.order_number} entered risk status ${order.order_status} with immediate follow-up. Triggering AI follow-up agent...`);
+                    this.followUpService.triggerFollowUpForOrder(order.id).catch(err =>
+                        this.logger.error(`Failed to trigger immediate risk follow up: ${err.message}`)
+                    );
+                }
+            }
+
+        } catch (error: any) {
             this.logger.error(`Failed to handle status change auto-message: ${error.message}`);
         }
     }
